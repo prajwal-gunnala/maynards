@@ -25,7 +25,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{env, fs, thread};
 
-const API_PORT: u16 = 8080;
+pub const API_PORT: u16 = 8080;
 const FILES_PORT: u16 = 8088;
 const RPC_PORTS: [u16; 5] = [50052, 50062, 50070, 50080, 50100];
 

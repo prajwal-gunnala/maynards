@@ -213,6 +213,7 @@
   <section data-p="4" class="hide">
     <div class="box" id="runbox"></div>
     <div class="box" id="apibox" style="background:var(--blue)"></div>
+    <div id="scores"></div>
     <div id="live"></div>
     <div id="log"></div>
   </section>
@@ -451,12 +452,18 @@ function renderRun() {
   } else {
     $('runbox').innerHTML = `<div class="row between"><div><div class="name">${esc(r.model || 'Nothing running')}</div>
         <div class="mono" style="color:var(--ink)">${esc(r.step || '')}${busy && r.seconds != null ? ' · ' + r.seconds + ' s' : ''}</div></div>
-       <div class="row">${r.status === 'idle' || r.status === 'failed' ? (S.last_run ? `<button id="again">${ic('redo')}Start again</button>` : '') + '<button class="plain" data-go2="2">Pick a model</button>' : `<button class="plain" id="stopbtn">${ic('stop')}Stop</button>`}</div></div>
+       <div class="row">${r.status === 'idle' || r.status === 'failed' ? (S.last_run ? `<button id="again">${ic('redo')}Start again</button>` : '') + '<button class="plain" data-go2="2">Pick a model</button>' : `<button class="plain" id="stopbtn">${ic('stop')}Stop</button>`}${r.status === 'ready' ? `<button class="plain" id="benchbtn" title="Ask this setup the same coding problems every time, and run the answers against their tests">${ic('chart')}Measure this setup</button>` : ''}</div></div>
        ${r.status !== 'idle' ? track(r) : ''}
        ${r.plan && r.plan.slices ? '<div style="margin-top:12px">' + layerBar(r.plan) + '</div>' : ''}`;
   }
   const sb = $('stopbtn'); if (sb) sb.onclick = () => fetch('/api/stop', {method: 'POST'}).then(poll);
   const ag = $('again'); if (ag) ag.onclick = () => fetch('/api/again', {method: 'POST'}).then(poll);
+  const bb = $('benchbtn');
+  if (bb) bb.onclick = () => {
+    bb.disabled = true; bb.textContent = 'measuring, watch the feed…';
+    fetch('/api/bench', {method: 'POST', headers: {'content-type': 'application/json'}, body: '{}'});
+  };
+  scores();
   document.querySelectorAll('[data-go2]').forEach(b => b.onclick = () => go(2));
   $('apibox').innerHTML = `<div class="row between"><div><b>${ic('key')} Use it from other tools</b>
       <div class="mono" style="color:var(--ink)">on this laptop: <code>http://localhost:8080/v1</code> · other devices: ${S.api.urls.map(u => '<code>' + u + '</code>').join(' ')}</div></div>
@@ -492,6 +499,21 @@ function renderStats() {
   $('chart').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>`;
   $('hist').innerHTML = c.slice().reverse().map(x => `<tr><td class="mono">${x.t}</td><td>${esc((x.q || '').slice(0, 90))}</td><td><b>${x.tps.toFixed(1)}</b></td>
     <td>${sec(x.first_ms)}</td><td>${sec(x.total_ms)}</td><td>${x.tokens || '–'}</td><td class="mono">${x.from === 'page' ? 'this page' : 'a tool'}</td></tr>`).join('');
+}
+
+// ---------- what each setup is worth
+async function scores() {
+  const rows = await (await fetch('/api/bench/results')).json().catch(() => []);
+  const box = $('scores');
+  if (!box) return;
+  if (!rows.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="box"><div class="name">What each setup is worth</div>
+    <div class="mono" style="color:var(--ink); margin-bottom:8px">Same coding problems, answers run against their tests.</div>
+    <table style="width:100%; border-collapse:collapse" class="mono">
+      <tr style="text-align:left"><th>setup</th><th>passed</th><th>accuracy</th><th>speed</th><th>measured</th></tr>
+      ${rows.map(r => `<tr><td>${r.label}</td><td>${r.passed}/${r.tasks}</td>
+        <td><b>${r.accuracy}%</b></td><td>${r.median_tps} tok/s</td><td>${r.when}</td></tr>`).join('')}
+    </table></div>`;
 }
 
 // ---------- chat

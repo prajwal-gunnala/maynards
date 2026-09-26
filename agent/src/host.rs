@@ -56,6 +56,7 @@ pub struct Hub {
     caps: Mutex<HashMap<String, f64>>, // per-device memory cap in bytes, set on the page ("laptop" = this laptop)
     api_key: String,                  // other machines on the link use the API with this key
     last_run: Mutex<Option<String>>,  // model file of the last run that got ready, kept across restarts
+    api_port: u16,          // the port this panel serves on, which is what the benchmark asks
 }
 
 fn config() -> std::path::PathBuf {
@@ -464,6 +465,62 @@ fn stop(hub: &Hub, why: &str) {
     if !why.is_empty() { hub.say(why.to_string()); }
 }
 
+/// Runs the benchmark against whatever is serving now, streaming progress into the activity feed.
+fn bench(hub: Arc<Hub>, label: String) {
+    {
+        let r = hub.run.lock().unwrap();
+        if r.status != "ready" {
+            hub.say(format!("cannot measure: {} ({})", r.status, r.step));
+            return;
+        }
+    }
+    let label = if label.is_empty() {
+        let r = hub.run.lock().unwrap();
+        let n = r.plan["slices"].as_array().map(|s| s.len()).unwrap_or(1);
+        format!("{} on {} device{}", r.model, n, if n == 1 { "" } else { "s" })
+    } else { label };
+
+    thread::spawn(move || {
+        hub.say(format!("measuring {label} …"));
+        let root = std::env::current_dir().unwrap_or_default();
+        let mut child = match Command::new("python3")
+            .arg(root.join("scripts/bench.py"))
+            .args(["--label", &label, "--url", &format!("http://127.0.0.1:{}/v1", hub.api_port)])
+            .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
+        {
+            Ok(c) => c,
+            Err(e) => { hub.say(format!("failed: cannot run the benchmark: {e}")); return; }
+        };
+        if let Some(out) = child.stdout.take() {
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
+                let t = line.trim();
+                // one line per task, plus the summary; skip the header
+                if t.contains("pass") || t.contains("FAIL") || t.contains("passed (") {
+                    hub.say(t.to_string());
+                }
+            }
+        }
+        match child.wait() {
+            Ok(st) if st.success() => hub.say(format!("✓ measured {label}")),
+            _ => hub.say("failed: the benchmark did not finish".into()),
+        }
+    });
+}
+
+/// Every measurement taken so far, newest first.
+fn bench_results() -> Vec<Value> {
+    let dir = std::env::current_dir().unwrap_or_default().join("results");
+    let mut out: Vec<Value> = fs::read_dir(&dir).into_iter().flatten().flatten()
+        .filter(|e| e.path().extension().map(|x| x == "json").unwrap_or(false))
+        .filter_map(|e| fs::read_to_string(e.path()).ok())
+        .filter_map(|t| serde_json::from_str::<Value>(&t).ok())
+        .map(|mut v| { if let Some(o) = v.as_object_mut() { o.remove("results"); } v })
+        .collect();
+    out.sort_by_key(|v| v["when"].as_str().unwrap_or("").to_string());
+    out.reverse();
+    out
+}
+
 fn start(hub: Arc<Hub>, file: String) {
     stop(&hub, "");
     let gen = *hub.run_gen.lock().unwrap();
@@ -739,6 +796,7 @@ pub fn host(port: u16) -> Result<(), String> {
         replies: Default::default(), activity: Default::default(), run: Mutex::new(Run { status: "idle".into(), ..Default::default() }),
         engine: Default::default(), usb_ports: Default::default(), models: Default::default(), run_gen: Default::default(),
         chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
+        api_port: port,
     });
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
@@ -816,6 +874,10 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         "/api/state" => ok(&mut s, state(&hub)),
         "/api/run" => { start(hub.clone(), req["model"].as_str().unwrap_or("").into()); ok(&mut s, json!({"ok": true})) }
         "/api/stop" => { stop(&hub, "stopped"); ok(&mut s, json!({"ok": true})) }
+        // Measure what the setup that is running right now is actually worth: the same coding
+        // problems every time, scored by running each answer against its tests.
+        "/api/bench" => { bench(hub.clone(), req["label"].as_str().unwrap_or("").to_string()); ok(&mut s, json!({"ok": true})) }
+        "/api/bench/results" => ok(&mut s, Value::Array(bench_results())),
         "/api/forget" => {
             let id = req["id"].as_str().unwrap_or("");
             hub.secrets.lock().unwrap().remove(id);
