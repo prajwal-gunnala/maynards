@@ -177,8 +177,12 @@ async function poll() {
 async function pollUsb() { try { usb = await (await fetch('/api/usb/devices')).json(); if (step === 2) renderUsb(); } catch (e) {} }
 setInterval(poll, 2000); poll(); setInterval(pollUsb, 5000); pollUsb();
 
+let followed = null;
 function render() {
   if (!S) return;
+  // when a run starts (from here or elsewhere), show it on Use
+  const key = S.run.status !== 'idle' ? S.run.model + S.run.status.replace(/starting|loading|ready/, 'on') : null;
+  if (key && key !== followed) { followed = key; if (step !== 4) { go(4); return; } }
   $('meshid').textContent = 'mesh-' + S.mesh;
   const n = S.peers.length + 1, run = S.run;
   $('now').textContent = run.status === 'ready' ? `Running ${run.model} — ask on Use`

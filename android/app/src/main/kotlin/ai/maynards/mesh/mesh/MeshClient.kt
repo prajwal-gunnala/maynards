@@ -72,7 +72,7 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     private suspend fun session(invite: Invite) {
         val sock = connectAny(invite) ?: throw IllegalStateException("cannot reach the Host")
         sock.tcpNoDelay = true
-        sock.soTimeout = 15_000
+        sock.soTimeout = 60_000     // the Host pings every 2 s; allow for busy moments during a run
         val w = Wire(sock).also { wire = it }
         val me = Specs.read(ctx)
         val secretKey = "secret:${invite.mesh}"
@@ -105,9 +105,10 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 }
             }
         } finally {
+            // keep the engine (and the layers it holds) through a blip: the run survives while we reconnect.
+            // It stops on the Host's "stop", a new "run", or Leave.
             reporter.cancel()
             w.close()
-            engine.stop()
         }
     }
 

@@ -346,7 +346,9 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     let hello: Value = match lines.next() { Some(Ok(l)) => serde_json::from_str(&l).unwrap_or(Value::Null), _ => return Ok(()) };
     if hello["t"] != "hello" { return Ok(()); }
     let id = hello["id"].as_str().unwrap_or("").to_string();
-    let name = hello["specs"]["name"].as_str().unwrap_or("phone").to_string();
+    // two identical phones would look the same: add the end of the device id ("Vivo I2501 ·a3f9")
+    let tag: String = id.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+    let name = format!("{} ·{tag}", hello["specs"]["name"].as_str().unwrap_or("phone"));
     let known = hub.secrets.lock().unwrap().get(&id).cloned();
     let secret = if known.is_some() && hello["secret"].as_str() == known.as_deref() {
         known.unwrap()
@@ -364,7 +366,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     send(&wire, json!({"t": "welcome", "secret": secret, "host": "laptop", "mesh": hub.mesh}))?;
     hub.say(format!("✓ {name} joined over {} ({peer_ip})", link_kind(&my_ip)));
     hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone() });
-    sock.set_read_timeout(Some(Duration::from_secs(15)))?;
+    sock.set_read_timeout(Some(Duration::from_secs(60)))?;
 
     let alive = Arc::new(Mutex::new(true));
     { let (w, a) = (wire.clone(), alive.clone());
@@ -386,9 +388,10 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     *alive.lock().unwrap() = false;
     hub.peers.lock().unwrap().remove(&id);
     hub.replies.lock().unwrap().insert(id.clone(), json!({"t": "gone"}));
-    hub.say(format!("✗ {name} left"));
+    // the model keeps running while the phone reconnects; if its layers are really gone the engine fails and the
+    // watchdog below reports it
     let in_run = hub.run.lock().unwrap().plan["slices"].as_array().map(|s| s.iter().any(|x| x["id"] == id.as_str())).unwrap_or(false);
-    if in_run { stop(&hub, "stopped: a helper left"); }
+    hub.say(format!("✗ {name} control link lost{}", if in_run { " (model keeps running; it will reconnect)" } else { "" }));
     Ok(())
 }
 
@@ -456,7 +459,9 @@ fn start(hub: Arc<Hub>, file: String) {
         let mut args: Vec<String> = vec!["-m".into(), crate::models_dir().join(&m.file).to_string_lossy().into(), "-c".into(), "4096".into(),
             "-t".into(), threads.to_string(), "--host".into(), "127.0.0.1".into(), "--port".into(), ENGINE_PORT.to_string(),
             "--jinja".into(), "--fit".into(), "off".into(), "--reasoning".into(), "off".into(), "-np".into(), "1".into(),
-            "-ctk".into(), "q8_0".into(), "-ctv".into(), "q8_0".into(), "-fa".into(), "on".into()];
+            "-ctk".into(), "q8_0".into(), "-ctv".into(), "q8_0".into(), "-fa".into(), "on".into(),
+            // read the file once, front to back: with mmap, sending layers to phones reads it in scattered pieces
+            "--load-mode".into(), "none".into()];
         if helpers.is_empty() {
             args.extend(["-ngl".into(), "0".into()]);
         } else {
@@ -486,6 +491,13 @@ fn start(hub: Arc<Hub>, file: String) {
         let secs = hub.run.lock().unwrap().started.map(|t| t.elapsed().as_secs()).unwrap_or(0);
         set_run(&hub, "ready", &format!("Ready in {secs} s"));
         hub.say(format!("✓ {} ready in {secs} s", m.name));
+        // watchdog: report if the engine itself stops (e.g. a phone's layers disappeared)
+        loop {
+            thread::sleep(Duration::from_secs(2));
+            if cancelled() { return; }
+            let exited = hub.engine.lock().unwrap().as_mut().map(|c| c.try_wait().ok().flatten().is_some()).unwrap_or(true);
+            if exited { stop(&hub, "failed: the engine stopped (log: /tmp/mesh-host-engine.log)"); return; }
+        }
     });
 }
 
