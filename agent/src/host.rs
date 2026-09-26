@@ -88,11 +88,13 @@ impl Hub {
     }
 
     fn invite(&self) -> Value {
-        // mesh traffic goes over the USB tethering cables only; Wi-Fi stays for this laptop's internet.
-        // Before any cable is up, the Wi-Fi address is the only way in, so it is offered then.
+        // Mesh traffic should go over the USB tethering cables, so cable addresses come first and the app
+        // tries the first one for several seconds before moving on. The other addresses still follow: a phone
+        // that is not tethered yet has no route to a cable subnet, and leaving them out locks it out entirely.
         let ips = laptop_ips();
-        let cables: Vec<&String> = ips.iter().filter(|(_, i)| i.starts_with("enx") || i.starts_with("usb") || i.starts_with("rndis")).map(|(ip, _)| ip).collect();
-        let hosts: Vec<&String> = if cables.is_empty() { ips.iter().map(|(ip, _)| ip).collect() } else { cables };
+        let cable = |i: &str| i.starts_with("enx") || i.starts_with("usb") || i.starts_with("rndis");
+        let mut hosts: Vec<&String> = ips.iter().filter(|(_, i)| cable(i)).map(|(ip, _)| ip).collect();
+        hosts.extend(ips.iter().filter(|(_, i)| !cable(i)).map(|(ip, _)| ip));
         json!({"mesh": self.mesh, "hosts": hosts,
                "port": CONTROL_PORT, "token": *self.token.lock().unwrap()})
     }

@@ -12,7 +12,9 @@ HOST=$1 HELPER=$2 MODEL=${3:-Qwen3-Coder-30B} WAIT=${4:-2}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 APK=$ROOT/android/app/build/outputs/apk/debug/app-debug.apk
 MODELS=${MESH_MODELS:-/mnt/storage/meshai/models}
-SSID=${MESH_SSID:-iQOO 15} PASS=${MESH_PASS:-m8xjcfyb85wpknx}
+SSID=${MESH_SSID:-iQOO 15} PASS=${MESH_PASS:-}
+# the hotspot password is never stored here: export MESH_PASS before running, or pass it on the line
+if [[ -z $PASS ]]; then echo "set MESH_PASS to the Host phone's hotspot password (export MESH_PASS=...)" >&2; exit 1; fi
 PKG=ai.maynards.mesh
 DIR=/sdcard/Android/data/$PKG/files/models
 
