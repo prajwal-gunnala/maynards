@@ -343,6 +343,7 @@ function card(o) {
     <div class="dash"></div>
     ${meter('chip', 'Memory', `${gb(s.freeBytes / 1e9)} / ${gb(total / 1e9)} GB free`, s.freeBytes / total, '#b8f0c6')}
     ${meter('bolt', 'For models', `${gb(o.usable)} GB${cap ? ' (cap ' + gb(cap) + ')' : ''}`, o.usable * 1e9 / total, '#ffd60a')}
+    ${o.store && o.store.total ? meter('layers', 'Stored layers', `${o.store.done}/${o.store.total} · ${gb(o.store.bytes / 1e9)} GB${o.store.working ? ' · saving' : o.store.done == o.store.total ? ' · ready' : ''}`, o.store.done / o.store.total, '#c9b8ff') : ''}
     <div class="mini">
       <div class="${heatFill(s.heat, s.temp_c)}"><div class="k">${ic('temp')}Heat</div><div class="v">${heatText(s.heat, s.temp_c)}</div></div>
       <div class="${!s.charging && s.battery < 30 ? 'bad' : s.charging ? 'host' : ''}"><div class="k">${ic('battery')}Battery</div><div class="v">${s.battery >= 0 ? s.battery + '%' : '–'}${s.charging ? ' ⚡' : ''}</div></div>
@@ -361,7 +362,7 @@ function renderDevices() {
   $('feed').innerHTML = S.activity.map(a => `<div class="${/^✓/.test(a.line) ? 'ok' : /^(✗|refused|failed)/.test(a.line) ? 'no' : ''}">${a.t}  ${esc(a.line)}</div>`).join('') || '<div class="mono">Waiting for phones…</div>';
   if (document.activeElement && document.activeElement.classList.contains('cap')) return;   // don't redraw while typing a cap
   $('devices').innerHTML = [card({laptop: true, id: 'laptop', specs: S.laptop.specs, usable: S.laptop.usable_gb})]
-    .concat(S.peers.map(p => card({id: p.id, specs: p.specs, usable: p.usable_gb, rtt: p.rtt_ms, worst: p.rtt_worst_ms, addr: p.addr}))).join('');
+    .concat(S.peers.map(p => card({id: p.id, specs: p.specs, usable: p.usable_gb, rtt: p.rtt_ms, worst: p.rtt_worst_ms, addr: p.addr, store: p.store}))).join('');
   document.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => fetch('/api/forget', {method: 'POST', body: JSON.stringify({id: b.dataset.forget})}).then(poll));
   document.querySelectorAll('[data-cap]').forEach(i => i.onchange = () => fetch('/api/cap', {method: 'POST', body: JSON.stringify({id: i.dataset.cap, gb: parseFloat(i.value) || 0})}).then(poll));
 }

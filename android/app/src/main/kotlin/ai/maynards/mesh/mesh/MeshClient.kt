@@ -1,5 +1,6 @@
 package ai.maynards.mesh.mesh
 
+import ai.maynards.mesh.brain.LayerStore
 import ai.maynards.mesh.engine.Engine
 import ai.maynards.mesh.engine.EngineState
 import ai.maynards.mesh.engine.Specs
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
 
@@ -49,6 +51,9 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
 
     private val _mesh = MutableStateFlow(MeshView())
     val mesh: StateFlow<MeshView> = _mesh
+
+    /** Layers kept on this phone, so the Host does not send them again. */
+    val store = LayerStore(ctx)
 
     /** The last invite, so the app can rejoin after a restart. */
     val savedInvite: Invite? get() = prefs.getString("invite", null)?.let(Invite::parse)
@@ -99,7 +104,7 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
             while (isActive) {
                 delay(2_000)
                 val running = engine.state.value.let { if (it.status == EngineState.Status.RUNNING) it.address else "" }
-                runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson(), "engine" to running)) }.onFailure { w.close() }
+                runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson(), "engine" to running, "store" to store.state.value.json())) }.onFailure { w.close() }
             }
         }
         try {
@@ -108,6 +113,10 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 when (m.optString("t")) {
                     "ping" -> w.send(msg("pong", "at" to m.optLong("at")))
                     "run" -> run(w, bind = sock.localAddress.hostAddress ?: "", layers = m.optString("layers"), model = m.optString("model"))
+                    // the Host names the models that need helpers: keep their layers on this phone, once
+                    "store" -> m.optJSONArray("models")?.let { a ->
+                        store.fill(File(ctx.getExternalFilesDir(null), "models"), List(a.length()) { a.getString(it) })
+                    }
                     "stop" -> { engine.stop(); _link.value = _link.value.copy(layers = "", model = "") }
                     "mesh" -> _mesh.value = MeshView(
                         devices = m.optJSONArray("devices")?.let { a ->

@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +50,7 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
     val link by client.link.collectAsState()
     val mesh by client.mesh.collectAsState()
     val eng by engine.state.collectAsState()
+    val store by client.store.state.collectAsState()
     var scanError by remember { mutableStateOf("") }
     var held by remember { mutableLongStateOf(0L) }
     // a phone that joined before rejoins by itself (its secret is saved), no rescan needed
@@ -142,6 +144,18 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         } else {
             NBox(pad = 8.dp) {
                 MeshWeb(listOf(WebNode("This phone", HelperPurple, isHost = true)), Modifier.fillMaxWidth().aspectRatio(1.6f))
+            }
+        }
+        if (store.total > 0 || store.bytes > 0) {
+            // layers kept on this phone: the Host sends only a hash for these, so starts are fast
+            NBox(fill = Cream) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Meter(Icons.Outlined.Save, "Stored layers", "${gb(store.bytes)} GB",
+                        if (store.total > 0) store.done.toFloat() / store.total else 1f, HostGreen)
+                    if (store.total > 0) Mono("${store.model.removeSuffix(".gguf").take(34)} · ${store.done}/${store.total}" +
+                        if (store.working) " · saving…" else if (store.done == store.total) " · ready" else "", 11, Ink)
+                    NButton("Clear", fill = Paper) { client.store.clear() }
+                }
             }
         }
         SpecsCard(rememberSpecs())

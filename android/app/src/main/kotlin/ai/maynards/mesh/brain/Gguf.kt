@@ -29,7 +29,29 @@ object Gguf {
     fun read(file: File, fileBytes: Long = file.length()): ModelInfo =
         file.inputStream().use { read(it, file.name, fileBytes) }
 
-    fun read(input: InputStream, fileName: String, fileBytes: Long): ModelInfo {
+    /** Where each tensor's bytes are in the file: absolute offset and size. */
+    fun tensors(file: File): List<Tensor> = file.inputStream().use { i ->
+        val h = header(i, file.length())
+        h.names.indices.map { Tensor(h.names[it], h.dataStart + h.offsets[it], exactSize(h.types[it], h.elements[it]) ?: h.sizes[it]) }
+    }
+
+    /** Bytes of a tensor from its type: elements per block and bytes per block (ggml's type table). */
+    private val blocks = mapOf(
+        0 to (1 to 4), 1 to (1 to 2), 2 to (32 to 18), 3 to (32 to 20), 6 to (32 to 22), 7 to (32 to 24), 8 to (32 to 34),
+        9 to (32 to 36), 10 to (256 to 84), 11 to (256 to 110), 12 to (256 to 144), 13 to (256 to 176), 14 to (256 to 210),
+        15 to (256 to 292), 16 to (256 to 66), 17 to (256 to 74), 18 to (256 to 98), 19 to (256 to 50), 20 to (32 to 18),
+        21 to (256 to 110), 22 to (256 to 82), 23 to (256 to 136), 24 to (1 to 1), 25 to (1 to 2), 26 to (1 to 4),
+        27 to (1 to 8), 28 to (1 to 8), 29 to (256 to 56), 30 to (1 to 2), 34 to (256 to 54), 35 to (256 to 66), 39 to (32 to 17),
+    )
+
+    private fun exactSize(type: Int, elements: Long): Long? = blocks[type]?.let { (n, b) -> elements / n * b }
+
+    data class Tensor(val name: String, val offset: Long, val size: Long)
+
+    private class Header(val meta: Map<String, Any>, val names: List<String>, val offsets: List<Long>, val sizes: LongArray, val dataStart: Long,
+                         val types: List<Int>, val elements: List<Long>)
+
+    private fun header(input: InputStream, fileBytes: Long): Header {
         val r = Reader(input)
         check(r.u32() == 0x46554747L) { "not a GGUF file" }          // "GGUF", little-endian
         val version = r.u32()
@@ -45,11 +67,15 @@ object Gguf {
 
         val names = ArrayList<String>()
         val offsets = ArrayList<Long>()
+        val types = ArrayList<Int>()
+        val elements = ArrayList<Long>()
         repeat(tensorCount.toInt()) {
             names += r.str()
             val dims = r.u32().toInt()
-            repeat(dims) { r.u64() }
-            r.u32()                                                   // type
+            var n = 1L
+            repeat(dims) { n *= r.u64() }
+            elements += n
+            types += r.u32().toInt()
             offsets += r.u64()
         }
         val align = (meta["general.alignment"] as? Number)?.toLong() ?: 32L
@@ -61,6 +87,12 @@ object Gguf {
             val end = if (k + 1 < order.size) offsets[order[k + 1]] else fileBytes - dataStart
             sizes[i] = end - offsets[i]
         }
+        return Header(meta, names, offsets, sizes, dataStart, types, elements)
+    }
+
+    fun read(input: InputStream, fileName: String, fileBytes: Long): ModelInfo {
+        val h = header(input, fileBytes)
+        val (meta, names, sizes) = Triple(h.meta, h.names, h.sizes)
 
         val arch = meta["general.architecture"] as? String ?: "unknown"
         fun num(key: String): Long? = when (val v = meta["$arch.$key"]) {

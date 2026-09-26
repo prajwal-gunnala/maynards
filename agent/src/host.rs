@@ -28,6 +28,7 @@ struct Peer {
     rtts: VecDeque<f64>,
     wire: Arc<Mutex<TcpStream>>,
     engine: Option<String>,   // the phone's report: its engine address, "" when not running, None if never said
+    store: Value,             // layers the phone keeps on its own storage: {model, done, total, working, bytes}
 }
 
 #[derive(Clone, Default)]
@@ -389,8 +390,13 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     };
     send(&wire, json!({"t": "welcome", "secret": secret, "host": "laptop", "mesh": hub.mesh}))?;
     hub.say(format!("✓ {name} joined over {} ({peer_ip})", link_kind(&my_ip)));
-    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None });
+    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null });
     sock.set_read_timeout(Some(Duration::from_secs(60)))?;
+    // models this laptop cannot hold alone will need helpers: each phone keeps their layers from its own copy,
+    // so the engine asks for a layer by hash and nothing crosses the cable
+    let host_only = devices(&hub).into_iter().take(1).collect::<Vec<_>>();
+    let need: Vec<String> = scan_models(&hub).iter().filter(|m| plan(m, &host_only, 4096)["verdict"] == "not_possible").map(|m| m.file.clone()).collect();
+    if !need.is_empty() { let _ = send(&wire, json!({"t": "store", "models": need})); }
 
     let alive = Arc::new(Mutex::new(true));
     { let (w, a) = (wire.clone(), alive.clone());
@@ -404,6 +410,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
                 if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) {
                     p.specs = m["specs"].clone();
                     p.engine = m.get("engine").and_then(|e| e.as_str()).map(String::from);
+                    p.store = m["store"].clone();
                 }
                 lost_layers(&hub, &id, &name, &m);
             }
@@ -714,7 +721,7 @@ fn state(hub: &Hub) -> Value {
     let peers: Vec<Value> = hub.peers.lock().unwrap().iter().map(|(id, p)| {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine,
+        json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine, "store": p.store,
                "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last()})
     }).collect();
     let devs = devices(hub);

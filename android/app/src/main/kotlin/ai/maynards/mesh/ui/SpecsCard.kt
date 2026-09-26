@@ -90,7 +90,7 @@ private fun heatLabel(h: Float) = when {
 }
 
 @Composable
-private fun Meter(icon: ImageVector, label: String, value: String, frac: Float, color: Color) {
+fun Meter(icon: ImageVector, label: String, value: String, frac: Float, color: Color) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { IconLabel(icon, label) }
