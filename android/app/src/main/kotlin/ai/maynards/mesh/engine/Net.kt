@@ -6,7 +6,8 @@ import java.net.NetworkInterface
 /** A local IPv4 address and the kind of link it sits on. */
 data class LinkAddr(val ip: String, val iface: String) {
     val kind: String get() = when {
-        iface.startsWith("ap") || iface.startsWith("swlan") -> "hotspot"
+        // wlan0 is the Wi-Fi client; phones name their hotspot ap0, swlan0, or a second wlan (wlan1, wlan2)
+        iface.startsWith("ap") || iface.startsWith("swlan") || (iface.startsWith("wlan") && iface != "wlan0") -> "hotspot"
         iface.startsWith("rndis") || iface.startsWith("usb") || iface.startsWith("ncm") -> "usb"
         iface.startsWith("wlan") -> "wifi"
         else -> "other"
