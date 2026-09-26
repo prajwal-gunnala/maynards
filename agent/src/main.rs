@@ -152,9 +152,12 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
             }
             // the Host (a phone) asking this laptop what it has changed and not committed
             "diff" => {
-                let d = working_diff();
-                println!("sent {} characters of diff to the Host", d.len());
-                send(&out, json!({"t": "diff", "text": d, "repo": repo_name(), "dir": env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()}))?;
+                // 6 000 characters, because the phone's engine runs with a 4096 token context and the
+                // answer needs room too. If we cut the patch, say so rather than review half of it silently.
+                let (d, cut) = working_diff(6_000);
+                println!("sent {} characters of diff to the Host{}", d.len(), if cut { " (truncated)" } else { "" });
+                send(&out, json!({"t": "diff", "text": d, "cut": cut, "repo": repo_name(),
+                                  "dir": env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()}))?;
             }
             "stop" => { stop(&mut engine); println!("stopped"); }
             "bye" => break Err(format!("refused: {}", m["reason"].as_str().unwrap_or("?"))),
@@ -643,13 +646,19 @@ fn tests(host: &str, file: &str, out: Option<String>) -> Res<()> {
 }
 
 /// What this machine has changed and not committed: staged if there is anything staged, otherwise the
-/// working tree. Truncated so the prompt stays inside the context window. Empty means nothing to review.
-pub fn working_diff() -> String {
+/// working tree. Empty means nothing to review.
+///
+/// `limit` is in characters and exists because the prompt has to fit the context the engine was started
+/// with. At about four characters to the token, 6 000 characters is roughly 1 500 tokens, which leaves
+/// room in a 4096 context for the review itself. The terminal asks for more because it is usually
+/// talking to a host that has a bigger context to spend.
+pub fn working_diff(limit: usize) -> (String, bool) {
     let git = |args: &[&str]| Command::new("git").args(args).output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
     let mut d = git(&["diff", "--cached"]);
     if d.trim().is_empty() { d = git(&["diff"]); }
-    d.chars().take(24_000).collect()
+    let cut = d.chars().count() > limit;
+    (d.chars().take(limit).collect(), cut)
 }
 
 /// The repository this agent is sitting in, by name, so the phone can say what it is reviewing.
@@ -661,8 +670,9 @@ pub fn repo_name() -> String {
 }
 
 fn diff(host: &str) -> Res<()> {
-    let d = working_diff();
+    let (d, cut) = working_diff(24_000);
     if d.trim().is_empty() { eprintln!("nothing to review"); return Ok(()); }
+    if cut { eprintln!("note: the change is large, so only the first 24000 characters are reviewed"); }
     ask(host, &format!("{REVIEW_PROMPT}\n\n```diff\n{d}\n```")).map(|_| ())
 }
 

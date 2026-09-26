@@ -229,12 +229,17 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
             val text = reply?.optString("text").orEmpty()
             when {
                 reply == null -> bubbles += Bubble(false, "${laptop.specs.name} did not answer in time.")
+                // an empty patch means one of two very different things, and the difference matters at 4am
+                text.isBlank() && reply.optString("repo").isBlank() ->
+                    bubbles += Bubble(false, "${laptop.specs.name} is not in a git repository. Run `mesh join` from your project folder.")
                 text.isBlank() -> bubbles += Bubble(false, "Nothing to review: ${laptop.specs.name} has no uncommitted change.")
                 else -> {
                     val repo = reply.optString("repo").ifBlank { "the repository" }
                     val lines = text.count { it == '\n' } + 1
+                    // the laptop trims a large patch to fit the context: never review half of it silently
+                    val cut = if (reply.optBoolean("cut")) ", first part only" else ""
                     ask("$REVIEW_PROMPT\n\n```diff\n$text\n```",
-                        "Review my changes in $repo ($lines lines, from ${laptop.specs.name})")
+                        "Review my changes in $repo ($lines lines$cut, from ${laptop.specs.name})")
                 }
             }
         }
