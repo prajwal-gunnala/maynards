@@ -227,11 +227,16 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
             }
             busy = false
             val text = reply?.optString("text").orEmpty()
+            // git cannot see a file it is not tracking, so a brand new file looks like no change at all
+            val newFiles = reply?.optJSONArray("untracked")?.length() ?: 0
+            val alsoNew = if (newFiles > 0) " ($newFiles new file(s) not tracked yet: git add them to include them)" else ""
             when {
                 reply == null -> bubbles += Bubble(false, "${laptop.specs.name} did not answer in time.")
                 // an empty patch means one of two very different things, and the difference matters at 4am
                 text.isBlank() && reply.optString("repo").isBlank() ->
                     bubbles += Bubble(false, "${laptop.specs.name} is not in a git repository. Run `mesh join` from your project folder.")
+                text.isBlank() && newFiles > 0 ->
+                    bubbles += Bubble(false, "Nothing tracked has changed, but git is not tracking $newFiles new file(s) yet. Run git add on them and tap again.")
                 text.isBlank() -> bubbles += Bubble(false, "Nothing to review: ${laptop.specs.name} has no uncommitted change.")
                 else -> {
                     val repo = reply.optString("repo").ifBlank { "the repository" }
@@ -239,7 +244,7 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                     // the laptop trims a large patch to fit the context: never review half of it silently
                     val cut = if (reply.optBoolean("cut")) ", first part only" else ""
                     ask("$REVIEW_PROMPT\n\n```diff\n$text\n```",
-                        "Review my changes in $repo ($lines lines$cut, from ${laptop.specs.name})")
+                        "Review my changes in $repo ($lines lines$cut, from ${laptop.specs.name})$alsoNew")
                 }
             }
         }

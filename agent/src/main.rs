@@ -156,7 +156,8 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
                 // answer needs room too. If we cut the patch, say so rather than review half of it silently.
                 let (d, cut) = working_diff(6_000);
                 println!("sent {} characters of diff to the Host{}", d.len(), if cut { " (truncated)" } else { "" });
-                send(&out, json!({"t": "diff", "text": d, "cut": cut, "repo": repo_name(),
+                let new = untracked();
+                send(&out, json!({"t": "diff", "text": d, "cut": cut, "repo": repo_name(), "untracked": new,
                                   "dir": env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()}))?;
             }
             "stop" => { stop(&mut engine); println!("stopped"); }
@@ -661,6 +662,14 @@ pub fn working_diff(limit: usize) -> (String, bool) {
     (d.chars().take(limit).collect(), cut)
 }
 
+/// Files git is not tracking yet. `git diff` cannot see them, so a brand new file would otherwise come
+/// back as "nothing to review", which is a confusing thing to discover in front of a judge.
+pub fn untracked() -> Vec<String> {
+    Command::new("git").args(["ls-files", "--others", "--exclude-standard"]).output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(String::from).collect())
+        .unwrap_or_default()
+}
+
 /// The repository this agent is sitting in, by name, so the phone can say what it is reviewing.
 pub fn repo_name() -> String {
     Command::new("git").args(["rev-parse", "--show-toplevel"]).output().ok()
@@ -671,7 +680,13 @@ pub fn repo_name() -> String {
 
 fn diff(host: &str) -> Res<()> {
     let (d, cut) = working_diff(24_000);
-    if d.trim().is_empty() { eprintln!("nothing to review"); return Ok(()); }
+    if d.trim().is_empty() {
+        let new = untracked();
+        if new.is_empty() { eprintln!("nothing to review"); }
+        else { eprintln!("nothing staged or changed, but git is not tracking {} file(s) yet: {}",
+                         new.len(), new.join(", ")); }
+        return Ok(());
+    }
     if cut { eprintln!("note: the change is large, so only the first 24000 characters are reviewed"); }
     ask(host, &format!("{REVIEW_PROMPT}\n\n```diff\n{d}\n```")).map(|_| ())
 }
