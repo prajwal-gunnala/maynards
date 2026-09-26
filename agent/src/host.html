@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MeshAI</title>
 <style>
-  :root { --ink:#0a0a0a; --paper:#fff; --cream:#f3f1ea; --yellow:#ffd60a; --green:#b8f0c6; --purple:#cfc3ff; --red:#ff8a80;
-          --tight:#ffe08a; --blue:#bfe3ff; --muted:#55555c; }
+  :root { --ink:#d3dbd7; --paper:#11171a; --cream:#0a0e10; --yellow:#ffd60a; --green:#12321f; --purple:#201c3a; --red:#3c1618;
+          --tight:#33280d; --blue:#102a36; --muted:#7c8b86; --term:#8ee6a8; --line:#243029; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--cream); color:var(--ink); font:16px/1.45 system-ui, sans-serif; }
   .wrap { max-width:1080px; margin:0 auto; padding:18px 16px 160px; }
@@ -95,6 +95,47 @@
   #preview { max-width:1080px; margin:0 auto 8px; font:600 12px ui-monospace, monospace; }
   .web { width:100%; height:auto; display:block; }
   .chart { width:100%; height:180px; display:block; }
+
+  /* ------------------------------------------------ a developer's console, not a poster.
+     Everything above keeps its layout; this changes type, weight and depth only. */
+  body { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  h1, h2, h3, .name, .tile .v, .mini .v, .banner .v, button, .step, th, .sticker, .pill { font-family:inherit; }
+  h1 { letter-spacing:0; }
+  h1::after { content:"_"; color:var(--term); animation:blink 1.1s step-end infinite; }
+  h2 { color:var(--muted); letter-spacing:1.5px; }
+  .box, .tile, .step, .banner, .pill, .qr, .badge, .sticker, .mini > div, .bar, .layers, .layers div, .advice,
+  .chip, .track div, .msg, button, label.btn, input.cap, select, textarea, .msg img, .stats span, form {
+    box-shadow:none; border-width:1px; border-radius:4px; border-color:var(--line);
+  }
+  .box { border-radius:5px; }
+  .sticker { transform:none; }
+  .step.on { background:#152219; color:var(--term); border-color:var(--term); transform:none; }
+  .logo { background:transparent; color:var(--term); border:1px solid var(--term); border-radius:4px; box-shadow:none; font-size:22px; }
+  .banner { background:var(--paper); border-left:3px solid var(--term); }
+  .banner .v, .tile .v, .mini .v, .name { font-weight:700; }
+  button, label.btn { background:#16211c; color:var(--term); border-color:#2f4a3a; text-transform:none; letter-spacing:.5px; }
+  button:hover:not(:disabled), label.btn:hover { background:#1d2c25; }
+  button:active { transform:none; }
+  button.plain { background:var(--paper); color:var(--ink); }
+  button:disabled { background:#0e1316; color:var(--muted); }
+  input.cap, select, textarea { background:#0b1013; color:var(--ink); }
+  th { background:#0d1316; color:var(--term); border-bottom:1px solid var(--line); }
+  td { border-bottom:1px solid #182022; }
+  pre { background:#0a0e10; color:var(--term); border:1px solid var(--line); }
+  code { background:#182024; color:#e8cf8c; font-weight:400; }
+  .me { background:#15262e; }
+  .dash { border-top:1px dashed var(--line); }
+  .feed { max-height:320px; font-size:12.5px; }
+  .feed div { border-bottom:1px dashed #171f21; }
+  .ok { color:#56d364; } .no { color:#ff7b72; }
+  .mono { color:var(--muted); }
+  .layers div { font-family:inherit; font-weight:700; }
+  svg text { fill:var(--ink); }
+  a { color:var(--term); }
+  ::selection { background:#2b4a38; }
+  ::-webkit-scrollbar { width:10px; height:10px; }
+  ::-webkit-scrollbar-thumb { background:#1f292c; border-radius:5px; }
+  ::-webkit-scrollbar-track { background:transparent; }
 </style>
 </head>
 <body>
@@ -223,7 +264,7 @@
     <div class="box">
       <h3><svg class="i"><use href="#i-gauge"/></svg>Speed per answer</h3>
       <div id="chart"></div>
-      <div class="row mono" style="margin-top:6px"><span>■ generating (tok/s)</span><span style="color:#7a5cff">■ time to first word (s)</span></div>
+      <div class="row mono" style="margin-top:6px"><span>■ generating (tok/s)</span><span style="color:#a78bfa">■ time to first word (s)</span></div>
     </div>
     <div class="box">
       <h3><svg class="i"><use href="#i-clock"/></svg>History</h3>
@@ -299,7 +340,7 @@ function layersOf(id) {
 function web() {
   const W = 420, H = 300, cx = W / 2, cy = H / 2, R = 128;
   let g = '';
-  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; g += `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * R}" y2="${cy + Math.sin(a) * R}" stroke="#bbb" stroke-width="1.5"/>`; }
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; g += `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * R}" y2="${cy + Math.sin(a) * R}" stroke="#2c3b35" stroke-width="1.5"/>`; }
   for (let r = 1; r <= 5; r++) {
     const rr = R * r / 5; let d = '';
     for (let k = 0; k <= 12; k++) {
@@ -307,24 +348,24 @@ function web() {
       if (!k) { d = `M${p[0]},${p[1]}`; continue; }
       const m = (k - .5) * Math.PI / 6, s = rr * .9; d += ` Q${cx + Math.cos(m) * s},${cy + Math.sin(m) * s} ${p[0]},${p[1]}`;
     }
-    g += `<path d="${d}" fill="none" stroke="#bbb" stroke-width="1.5"/>`;
+    g += `<path d="${d}" fill="none" stroke="#1e2a26" stroke-width="1.5"/>`;
   }
-  const label = (x, y, t) => { const w = t.length * 6.6 + 14; return `<rect x="${x - w / 2 + 3}" y="${y + 3}" width="${w}" height="20" rx="5" fill="#0a0a0a"/><rect x="${x - w / 2}" y="${y}" width="${w}" height="20" rx="5" fill="#fff" stroke="#0a0a0a" stroke-width="2.5"/><text x="${x}" y="${y + 14}" font-size="11" font-weight="900" text-anchor="middle" font-family="system-ui">${esc(t)}</text>`; };
-  const node = (x, y, r, fill) => `<circle cx="${x + 4}" cy="${y + 4}" r="${r}" fill="#0a0a0a"/><circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#0a0a0a" stroke-width="3.5"/>`;
+  const label = (x, y, t) => { const w = t.length * 6.6 + 14; return `<rect x="${x - w / 2 + 3}" y="${y + 3}" width="${w}" height="20" rx="5" fill="#000"/><rect x="${x - w / 2}" y="${y}" width="${w}" height="20" rx="5" fill="#0d1316" stroke="#3a4a44" stroke-width="1.5"/><text x="${x}" y="${y + 14}" font-size="11" font-weight="900" text-anchor="middle" font-family="system-ui">${esc(t)}</text>`; };
+  const node = (x, y, r, fill) => `<circle cx="${x + 4}" cy="${y + 4}" r="${r}" fill="#000"/><circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#3f5a4e" stroke-width="2"/>`;
   S.peers.forEach((p, i) => {
     const a = -Math.PI / 2 + i * 2 * Math.PI / Math.max(S.peers.length, 1) + (S.peers.length === 2 ? Math.PI / 2 : 0);
     const x = cx + Math.cos(a) * R * .78, y = cy + Math.sin(a) * R * .78;
     const slow = p.rtt_ms > 60;
-    g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${slow ? '#e74c3c' : '#0a0a0a'}" stroke-width="4" ${slow ? 'stroke-dasharray="6 5"' : ''}/>`;
-    g += `<circle r="6" fill="#ffd60a" stroke="#0a0a0a" stroke-width="2"><animateMotion dur="1.6s" repeatCount="indefinite" path="M${cx},${cy} L${x},${y}"/></circle>`;
-    g += node(x, y, 20, '#cfc3ff');
+    g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${slow ? '#ff7b72' : '#3f6a55'}" stroke-width="2.5" ${slow ? 'stroke-dasharray="6 5"' : ''}/>`;
+    g += `<circle r="5" fill="#ffd60a" stroke="#0a0e10" stroke-width="1.5"><animateMotion dur="1.6s" repeatCount="indefinite" path="M${cx},${cy} L${x},${y}"/></circle>`;
+    g += node(x, y, 20, '#2b2758');
     const l = [p.name.split(' ·')[1] ? '·' + p.name.split(' ·')[1] : p.name, p.rtt_ms != null ? Math.round(p.rtt_ms) + ' ms' : '', layersOf(p.id)].filter(Boolean).join(' · ');
     g += label(x, y + 24, l);
   });
-  g += node(cx, cy, 26, '#b8f0c6');
-  g += `<g transform="translate(${cx},${cy})" stroke="#0a0a0a" stroke-width="2.5" stroke-linecap="round">` +
+  g += node(cx, cy, 26, '#16402a');
+  g += `<g transform="translate(${cx},${cy})" stroke="#8ee6a8" stroke-width="2" stroke-linecap="round">` +
     [-1, 1].map(sd => [-.9, -.3, .3, .9].map(a => `<path d="M0,0 L${sd * 17 * Math.cos(a)},${13 * Math.sin(a) - 6} L${sd * 28 * Math.cos(a)},${21 * Math.sin(a) + 4}" fill="none"/>`).join('')).join('') +
-    `<circle r="9" cy="3" fill="#0a0a0a"/><circle r="5.5" cy="-8" fill="#0a0a0a"/><circle r="1.6" cx="-2" cy="-9" fill="#ffd60a" stroke="none"/><circle r="1.6" cx="2" cy="-9" fill="#ffd60a" stroke="none"/></g>`;
+    `<circle r="9" cy="3" fill="#8ee6a8"/><circle r="5.5" cy="-8" fill="#8ee6a8"/><circle r="1.6" cx="-2" cy="-9" fill="#0a0e10" stroke="none"/><circle r="1.6" cx="2" cy="-9" fill="#0a0e10" stroke="none"/></g>`;
   g += label(cx, cy + 32, 'this laptop' + (layersOf('laptop') ? ' · ' + layersOf('laptop') : ''));
   return `<svg class="web" viewBox="0 0 ${W} ${H}">${g}</svg>`;
 }
@@ -491,10 +532,10 @@ function renderStats() {
   let g = '';
   c.forEach((x, i) => {
     const h = (H - 30) * x.tps / top, fx = i * w + w * .15, bw = w * .7;
-    g += `<rect x="${fx + 4}" y="${H - 20 - h + 4}" width="${bw}" height="${h}" fill="#0a0a0a" rx="4"/><rect x="${fx}" y="${H - 20 - h}" width="${bw}" height="${h}" fill="${x.devices > 1 ? '#cfc3ff' : '#b8f0c6'}" stroke="#0a0a0a" stroke-width="3" rx="4"/>`;
+    g += `<rect x="${fx + 4}" y="${H - 20 - h + 4}" width="${bw}" height="${h}" fill="#000" rx="3"/><rect x="${fx}" y="${H - 20 - h}" width="${bw}" height="${h}" fill="${x.devices > 1 ? '#3d3a7a' : '#1c5236'}" stroke="#4a6b5b" stroke-width="1.5" rx="3"/>`;
     g += `<text x="${fx + bw / 2}" y="${H - 24 - h}" font-size="12" font-weight="900" text-anchor="middle">${x.tps.toFixed(1)}</text>`;
     const fy = H - 20 - (H - 30) * ((x.first_ms || 0) / 1000) / ftop;
-    g += `<circle cx="${fx + bw / 2}" cy="${fy}" r="5" fill="#7a5cff" stroke="#0a0a0a" stroke-width="2"/>`;
+    g += `<circle cx="${fx + bw / 2}" cy="${fy}" r="4" fill="#a78bfa" stroke="#0a0e10" stroke-width="1.5"/>`;
   });
   $('chart').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>`;
   $('hist').innerHTML = c.slice().reverse().map(x => `<tr><td class="mono">${x.t}</td><td>${esc((x.q || '').slice(0, 90))}</td><td><b>${x.tps.toFixed(1)}</b></td>
