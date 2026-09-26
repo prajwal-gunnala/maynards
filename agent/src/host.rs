@@ -497,6 +497,8 @@ fn bench(hub: Arc<Hub>, label: String) {
         hub.say(format!("measuring {label} …"));
         let root = std::env::current_dir().unwrap_or_default();
         let mut child = match Command::new("python3")
+            // unbuffered, or python holds every line until it exits and the feed stays silent
+            .arg("-u")
             .arg(root.join("scripts/bench.py"))
             .args(["--label", &label, "--url", &format!("http://127.0.0.1:{}/v1", hub.api_port)])
             .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
@@ -508,7 +510,7 @@ fn bench(hub: Arc<Hub>, label: String) {
             for line in BufReader::new(out).lines().map_while(Result::ok) {
                 let t = line.trim();
                 // one line per task, plus the summary; skip the header
-                if t.contains("pass") || t.contains("FAIL") || t.contains("passed (") {
+                if t.contains("pass") || t.contains("FAIL") || t.contains("passed (") || t.contains("request failed") {
                     hub.say(t.to_string());
                 }
             }
@@ -810,6 +812,79 @@ fn advice(hub: &Hub) -> Vec<String> {
     a
 }
 
+/// Everything a person would otherwise check from a terminal before a demo, in one press: the engine and its
+/// flags, the helper binary, the models, the ports, adb, and the room left on this machine. Each line says
+/// what it looked at and what it found, so a failure names its own fix.
+fn checks(hub: &Hub) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut add = |ok: bool, what: &str, detail: String| out.push(json!({"ok": ok, "what": what, "detail": detail}));
+
+    // the engine, and which of the flags we like this build actually has
+    let bin = std::env::var("MESH_LLAMA_BIN").unwrap_or_else(|_| "/mnt/storage/meshai/build/v3/host/bin".into());
+    let engine = format!("{bin}/llama-server");
+    if std::path::Path::new(&engine).exists() {
+        let help = engine_help(&bin);
+        let missing: Vec<&str> = ["--jinja", "--fit", "--reasoning", "-np", "-ctk", "-fa", "--load-mode"]
+            .into_iter().filter(|f| !help.contains(f)).collect();
+        add(true, "engine", if missing.is_empty() { format!("{engine}, every flag we use") }
+                            else { format!("{engine}, without {}", missing.join(" ")) });
+    } else {
+        add(false, "engine", format!("nothing at {engine} - set MESH_LLAMA_BIN to the folder holding llama-server"));
+    }
+
+    // the helper binary this laptop would run if it joined another mesh
+    let rpc = std::env::var("MESH_RPC_SERVER").unwrap_or_else(|_| "ggml-rpc-server".into());
+    let rpc_ok = std::path::Path::new(&rpc).exists() || Command::new(&rpc).arg("--help").output().is_ok();
+    add(rpc_ok, "helper binary", if rpc_ok { rpc.clone() } else { format!("cannot run {rpc} - set MESH_RPC_SERVER") });
+
+    // the models: how many, how big, and whether their headers actually read
+    let dir = crate::models_dir();
+    let models = scan_models(hub);
+    let files = fs::read_dir(&dir).into_iter().flatten().flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".gguf")).count();
+    let gb: f64 = models.iter().map(|m| m.bytes as f64).sum::<f64>() / GB;
+    add(files > 0 && models.len() == files,
+        "models",
+        if files == 0 { format!("no .gguf in {}", dir.display()) }
+        else if models.len() < files { format!("{} of {files} files in {} could not be read", files - models.len(), dir.display()) }
+        else { format!("{files} in {}, {gb:.1} GB", dir.display()) });
+
+    // the ports. The engine's port is the one that catches a stuck llama-server from an earlier run.
+    let running = hub.run.lock().unwrap().status == "ready";
+    let free = |p: u16| TcpListener::bind(("127.0.0.1", p)).is_ok();
+    let engine_free = free(ENGINE_PORT);
+    add(running != engine_free, "engine port",
+        match (running, engine_free) {
+            (true, false) => format!("{ENGINE_PORT} held by the model that is running"),
+            (false, true) => format!("{ENGINE_PORT} free"),
+            (false, false) => format!("{ENGINE_PORT} is held by something else: an engine from an earlier run is probably still alive"),
+            (true, true) => format!("{ENGINE_PORT} is free although a model says it is ready"),
+        });
+    add(!free(CONTROL_PORT), "phones' port", if free(CONTROL_PORT) { format!("{CONTROL_PORT} is not being listened on") } else { format!("{CONTROL_PORT} listening") });
+
+    // adb, which is how the phones are driven from here
+    match Command::new("adb").args(["devices"]).output() {
+        Ok(o) => {
+            let list = String::from_utf8_lossy(&o.stdout).to_string();
+            let ok: Vec<&str> = list.lines().skip(1).filter(|l| l.ends_with("\tdevice")).collect();
+            let bad: Vec<&str> = list.lines().skip(1).filter(|l| l.contains("unauthorized") || l.contains("no permissions")).collect();
+            add(bad.is_empty(), "adb",
+                if !bad.is_empty() { format!("{} device(s) not usable: {}", bad.len(), bad.join(", ").trim().to_string()) }
+                else { format!("{} phone(s) attached", ok.len()) });
+        }
+        Err(_) => add(false, "adb", "not installed, so the phones cannot be driven from here".into()),
+    }
+
+    // room to work in
+    let me = laptop_specs();
+    let free_gb = me["freeBytes"].as_f64().unwrap_or(0.0) / GB;
+    add(free_gb > 2.0, "memory", format!("{free_gb:.1} GB free on this laptop"));
+    let disk = Command::new("df").args(["-BG", "--output=avail"]).arg(&dir).output()
+        .ok().and_then(|o| String::from_utf8_lossy(&o.stdout).lines().nth(1).map(|l| l.trim().to_string()));
+    if let Some(d) = disk { add(true, "disk", format!("{d} free where the models live")); }
+    out
+}
+
 // ---------------------------------------------------------------- web page and API
 
 pub fn host(port: u16) -> Result<(), String> {
@@ -918,6 +993,15 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         // problems every time, scored by running each answer against its tests.
         "/api/bench" => { bench(hub.clone(), req["label"].as_str().unwrap_or("").to_string()); ok(&mut s, json!({"ok": true})) }
         "/api/bench/results" => ok(&mut s, Value::Array(bench_results())),
+        // everything a person would otherwise check from a terminal, in one press
+        "/api/check" => {
+            let r = checks(&hub);
+            for c in &r {
+                hub.say(format!("{} {}: {}", if c["ok"].as_bool().unwrap_or(false) { "\u{2713}" } else { "\u{2717}" },
+                                c["what"].as_str().unwrap_or(""), c["detail"].as_str().unwrap_or("")));
+            }
+            ok(&mut s, Value::Array(r))
+        }
         "/api/forget" => {
             let id = req["id"].as_str().unwrap_or("");
             hub.secrets.lock().unwrap().remove(id);

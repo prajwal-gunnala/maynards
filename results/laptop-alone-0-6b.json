@@ -1,0 +1,134 @@
+{
+  "label": "laptop alone, 0.6B",
+  "note": "",
+  "url": "http://127.0.0.1:8099/v1",
+  "when": "2026-09-27 03:45",
+  "tasks": 15,
+  "passed": 2,
+  "accuracy": 13.3,
+  "median_tps": 20.9,
+  "median_seconds": 5.3,
+  "total_seconds": 89.5,
+  "results": [
+    {
+      "id": "running_max",
+      "ok": false,
+      "why": "IndexError: list index out of range",
+      "seconds": 4.6,
+      "tokens": 34,
+      "tps": 16.9
+    },
+    {
+      "id": "balanced_brackets",
+      "ok": false,
+      "why": "SyntaxError: unterminated string literal (detected at line 3)",
+      "seconds": 7.2,
+      "tokens": 137,
+      "tps": 20.9
+    },
+    {
+      "id": "word_frequencies",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 5.4,
+      "tokens": 97,
+      "tps": 21.0
+    },
+    {
+      "id": "merge_intervals",
+      "ok": true,
+      "why": "",
+      "seconds": 7.2,
+      "tokens": 122,
+      "tps": 20.7
+    },
+    {
+      "id": "roman_to_int",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 12.5,
+      "tokens": 240,
+      "tps": 20.3
+    },
+    {
+      "id": "flatten_nested",
+      "ok": false,
+      "why": "TypeError: 'int' object is not iterable",
+      "seconds": 3.2,
+      "tokens": 53,
+      "tps": 21.8
+    },
+    {
+      "id": "group_anagrams",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 4.7,
+      "tokens": 87,
+      "tps": 21.6
+    },
+    {
+      "id": "binary_search_insert",
+      "ok": true,
+      "why": "",
+      "seconds": 4.9,
+      "tokens": 88,
+      "tps": 21.5
+    },
+    {
+      "id": "parse_duration",
+      "ok": false,
+      "why": "ValueError: invalid literal for int() with base 10: '1h30'",
+      "seconds": 5.3,
+      "tokens": 90,
+      "tps": 21.4
+    },
+    {
+      "id": "matrix_spiral",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 10.8,
+      "tokens": 203,
+      "tps": 20.0
+    },
+    {
+      "id": "longest_common_prefix",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 5.6,
+      "tokens": 96,
+      "tps": 19.2
+    },
+    {
+      "id": "csv_column_sum",
+      "ok": false,
+      "why": "TypeError: string indices must be integers, not 'str'",
+      "seconds": 3.8,
+      "tokens": 50,
+      "tps": 19.9
+    },
+    {
+      "id": "retry_backoff",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 3.3,
+      "tokens": 46,
+      "tps": 20.3
+    },
+    {
+      "id": "semver_compare",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 7.2,
+      "tokens": 132,
+      "tps": 21.0
+    },
+    {
+      "id": "chunk_text",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 3.8,
+      "tokens": 65,
+      "tps": 20.9
+    }
+  ]
+}

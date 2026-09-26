@@ -1,0 +1,134 @@
+{
+  "label": "laptop alone, 1.7B",
+  "note": "",
+  "url": "http://127.0.0.1:8099/v1",
+  "when": "2026-09-27 03:43",
+  "tasks": 15,
+  "passed": 7,
+  "accuracy": 46.7,
+  "median_tps": 8.6,
+  "median_seconds": 13.8,
+  "total_seconds": 216.0,
+  "results": [
+    {
+      "id": "running_max",
+      "ok": true,
+      "why": "",
+      "seconds": 16.0,
+      "tokens": 71,
+      "tps": 7.7
+    },
+    {
+      "id": "balanced_brackets",
+      "ok": true,
+      "why": "",
+      "seconds": 13.8,
+      "tokens": 102,
+      "tps": 8.6
+    },
+    {
+      "id": "word_frequencies",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 10.6,
+      "tokens": 74,
+      "tps": 8.8
+    },
+    {
+      "id": "merge_intervals",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 16.9,
+      "tokens": 115,
+      "tps": 8.6
+    },
+    {
+      "id": "roman_to_int",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 16.6,
+      "tokens": 132,
+      "tps": 8.8
+    },
+    {
+      "id": "flatten_nested",
+      "ok": true,
+      "why": "",
+      "seconds": 6.9,
+      "tokens": 45,
+      "tps": 8.9
+    },
+    {
+      "id": "group_anagrams",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 10.5,
+      "tokens": 76,
+      "tps": 8.8
+    },
+    {
+      "id": "binary_search_insert",
+      "ok": true,
+      "why": "",
+      "seconds": 10.1,
+      "tokens": 69,
+      "tps": 8.6
+    },
+    {
+      "id": "parse_duration",
+      "ok": false,
+      "why": "ValueError: Invalid unit: 1",
+      "seconds": 19.0,
+      "tokens": 141,
+      "tps": 8.7
+    },
+    {
+      "id": "matrix_spiral",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 30.6,
+      "tokens": 248,
+      "tps": 8.6
+    },
+    {
+      "id": "longest_common_prefix",
+      "ok": true,
+      "why": "",
+      "seconds": 14.1,
+      "tokens": 99,
+      "tps": 7.9
+    },
+    {
+      "id": "csv_column_sum",
+      "ok": false,
+      "why": "ValueError: could not convert string to float: 'x'",
+      "seconds": 13.5,
+      "tokens": 92,
+      "tps": 8.5
+    },
+    {
+      "id": "retry_backoff",
+      "ok": true,
+      "why": "",
+      "seconds": 10.7,
+      "tokens": 70,
+      "tps": 8.7
+    },
+    {
+      "id": "semver_compare",
+      "ok": true,
+      "why": "",
+      "seconds": 20.5,
+      "tokens": 142,
+      "tps": 8.5
+    },
+    {
+      "id": "chunk_text",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 6.2,
+      "tokens": 32,
+      "tps": 8.5
+    }
+  ]
+}

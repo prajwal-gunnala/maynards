@@ -205,6 +205,12 @@
         </ol>
         <div class="mono">Each QR works once · <a href="#" id="newqr">new QR</a></div>
         <div class="mono" id="links" style="margin-top:4px"></div>
+        <div class="dash"></div>
+        <div class="mono">Another laptop joins with this, pasted into its terminal:</div>
+        <div class="row" style="margin-top:6px; flex-wrap:nowrap">
+          <code id="joincmd" style="flex:1; overflow:auto; white-space:nowrap"></code>
+          <button class="plain" id="copyjoin">copy</button>
+        </div>
       </div>
       <div class="box">
         <h3><svg class="i"><use href="#i-hub"/></svg>The mesh</h3>
@@ -213,6 +219,16 @@
         <h3 style="border:0; margin-bottom:4px"><svg class="i"><use href="#i-clock"/></svg>Activity</h3>
         <div class="feed" id="feed"></div>
       </div>
+    </div>
+    <h2><svg class="i"><use href="#i-check"/></svg>Before the demo</h2>
+    <div class="box">
+      <div class="row between">
+        <div><div class="name">Check this machine</div>
+          <div class="mono">The engine and its flags, the models, the ports, adb, and the room left. Everything
+            you would otherwise type in a terminal.</div></div>
+        <button id="checkbtn"><svg class="i"><use href="#i-check"/></svg>Run the checks</button>
+      </div>
+      <div id="checks"></div>
     </div>
     <h2><svg class="i"><use href="#i-hub"/></svg>Your devices</h2>
     <div class="grid" id="devices"></div>
@@ -400,6 +416,7 @@ function card(o) {
 function renderDevices() {
   $('qr').innerHTML = S.qr;
   $('links').textContent = 'reach this laptop at ' + S.invite.hosts.join(' · ');
+  $('joincmd').textContent = "mesh join '" + JSON.stringify(S.invite) + "'";
   $('webbox').innerHTML = web();
   $('feed').innerHTML = S.activity.map(a => `<div class="${/^✓/.test(a.line) ? 'ok' : /^(✗|refused|failed)/.test(a.line) ? 'no' : ''}">${a.t}  ${esc(a.line)}</div>`).join('') || '<div class="mono">Waiting for phones…</div>';
   if (document.activeElement && document.activeElement.classList.contains('cap')) return;   // don't redraw while typing a cap
@@ -614,6 +631,28 @@ $('f').onsubmit = async e => {
   $('send').disabled = false; $('q').focus();
 };
 $('q').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } });
+$('copyjoin').onclick = e => {
+  e.preventDefault();
+  const t = $('joincmd').textContent;
+  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(
+    () => { $('copyjoin').textContent = 'copied'; setTimeout(() => $('copyjoin').textContent = 'copy', 1200); },
+    () => { const r = document.createRange(); r.selectNode($('joincmd')); getSelection().removeAllRanges(); getSelection().addRange(r); });
+};
+$('checkbtn').onclick = async () => {
+  const b = $('checkbtn');
+  b.disabled = true; b.textContent = 'checking…';
+  try {
+    const r = await (await fetch('/api/check', {method: 'POST'})).json();
+    $('checks').innerHTML = '<div class="dash"></div>' + r.map(c =>
+      `<div class="row" style="flex-wrap:nowrap; align-items:flex-start; padding:3px 0">
+         <span class="${c.ok ? 'ok' : 'no'}" style="width:16px">${c.ok ? '\u2713' : '\u2717'}</span>
+         <b style="width:120px">${esc(c.what)}</b><span class="mono" style="flex:1">${esc(c.detail)}</span></div>`).join('');
+  } catch (e) {
+    $('checks').innerHTML = `<div class="no">could not run the checks: ${esc(String(e))}</div>`;
+  }
+  b.disabled = false; b.innerHTML = ic('check') + 'Run the checks';
+  poll();
+};
 $('newqr').onclick = e => { e.preventDefault(); fetch('/api/newqr', {method: 'POST'}).then(poll); };
 </script>
 </body>

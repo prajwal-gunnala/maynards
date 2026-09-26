@@ -1,0 +1,134 @@
+{
+  "label": "laptop + laptop helper, 1.7B (split)",
+  "note": "",
+  "url": "http://127.0.0.1:8099/v1",
+  "when": "2026-09-27 03:36",
+  "tasks": 15,
+  "passed": 7,
+  "accuracy": 46.7,
+  "median_tps": 7.4,
+  "median_seconds": 14.3,
+  "total_seconds": 251.0,
+  "results": [
+    {
+      "id": "running_max",
+      "ok": true,
+      "why": "",
+      "seconds": 14.3,
+      "tokens": 71,
+      "tps": 7.7
+    },
+    {
+      "id": "balanced_brackets",
+      "ok": true,
+      "why": "",
+      "seconds": 14.9,
+      "tokens": 102,
+      "tps": 7.9
+    },
+    {
+      "id": "word_frequencies",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 13.9,
+      "tokens": 74,
+      "tps": 6.5
+    },
+    {
+      "id": "merge_intervals",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 23.1,
+      "tokens": 115,
+      "tps": 6.2
+    },
+    {
+      "id": "roman_to_int",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 21.9,
+      "tokens": 132,
+      "tps": 6.7
+    },
+    {
+      "id": "flatten_nested",
+      "ok": true,
+      "why": "",
+      "seconds": 10.1,
+      "tokens": 45,
+      "tps": 6.5
+    },
+    {
+      "id": "group_anagrams",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 12.4,
+      "tokens": 76,
+      "tps": 7.4
+    },
+    {
+      "id": "binary_search_insert",
+      "ok": true,
+      "why": "",
+      "seconds": 10.8,
+      "tokens": 69,
+      "tps": 7.9
+    },
+    {
+      "id": "parse_duration",
+      "ok": false,
+      "why": "ValueError: Invalid unit: 1",
+      "seconds": 22.0,
+      "tokens": 141,
+      "tps": 7.3
+    },
+    {
+      "id": "matrix_spiral",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 37.2,
+      "tokens": 248,
+      "tps": 7.0
+    },
+    {
+      "id": "longest_common_prefix",
+      "ok": true,
+      "why": "",
+      "seconds": 14.3,
+      "tokens": 99,
+      "tps": 7.8
+    },
+    {
+      "id": "csv_column_sum",
+      "ok": false,
+      "why": "ValueError: could not convert string to float: 'x'",
+      "seconds": 14.8,
+      "tokens": 92,
+      "tps": 7.5
+    },
+    {
+      "id": "retry_backoff",
+      "ok": true,
+      "why": "",
+      "seconds": 13.1,
+      "tokens": 70,
+      "tps": 6.7
+    },
+    {
+      "id": "semver_compare",
+      "ok": true,
+      "why": "",
+      "seconds": 22.2,
+      "tokens": 142,
+      "tps": 7.5
+    },
+    {
+      "id": "chunk_text",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 6.0,
+      "tokens": 32,
+      "tps": 7.8
+    }
+  ]
+}

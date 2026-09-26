@@ -1,22 +1,20 @@
 # What each configuration is worth
 
-The same 8 coding problems, asked of every setup, scored by running the
+The same 15 coding problems, asked of every setup, scored by running the
 answers against their tests. No partial credit, no human judgement.
 
 | setup | accuracy | passed | median speed | median per task | total | measured |
 |---|---|---|---|---|---|---|
-| phone-class model, 0.6B | **25.0%** | 2/8 | 22.1 tok/s | 5.8 s | 44.4 s | 2026-09-27 00:39 |
-| bigger model, 1.7B | **62.5%** | 5/8 | 9.0 tok/s | 12.6 s | 96.4 s | 2026-09-27 00:52 |
+| laptop alone, 0.6B | **13.3%** | 2/15 | 20.9 tok/s | 5.3 s | 89.5 s | 2026-09-27 03:45 |
+| laptop alone, 1.7B | **46.7%** | 7/15 | 8.6 tok/s | 13.8 s | 216.0 s | 2026-09-27 03:43 |
+| laptop + laptop helper, 1.7B (split) | **46.7%** | 7/15 | 7.4 tok/s | 14.3 s | 251.0 s | 2026-09-27 03:36 |
 
 ![accuracy](accuracy.svg)
 
-## Conditions
-
-- **phone-class model, 0.6B**: Qwen3-0.6B Q8_0 on an i3 laptop, stands in for what a phone holds alone
-- **bigger model, 1.7B**: Qwen3-1.7B Q8_0, same laptop, same tasks
-
 ## Failures
 
-**phone-class model, 0.6B** failed 6: running_max (IndexError: list index out of range), balanced_brackets (SyntaxError: unterminated string literal (detected at line 3)), word_frequencies (AssertionError), roman_to_int (AssertionError), flatten_nested (TypeError: 'int' object is not iterable), group_anagrams (AssertionError)
+**laptop alone, 0.6B** failed 13: running_max (IndexError: list index out of range), balanced_brackets (SyntaxError: unterminated string literal (detected at line 3)), word_frequencies (AssertionError), roman_to_int (AssertionError), flatten_nested (TypeError: 'int' object is not iterable), group_anagrams (AssertionError), parse_duration (ValueError: invalid literal for int() with base 10: '1h30'), matrix_spiral (AssertionError), longest_common_prefix (AssertionError), csv_column_sum (TypeError: string indices must be integers, not 'str'), retry_backoff (AssertionError), semver_compare (AssertionError), chunk_text (AssertionError)
 
-**bigger model, 1.7B** failed 3: word_frequencies (AssertionError), merge_intervals (AssertionError), group_anagrams (AssertionError)
+**laptop alone, 1.7B** failed 8: word_frequencies (AssertionError), merge_intervals (AssertionError), roman_to_int (AssertionError), group_anagrams (AssertionError), parse_duration (ValueError: Invalid unit: 1), matrix_spiral (AssertionError), csv_column_sum (ValueError: could not convert string to float: 'x'), chunk_text (AssertionError)
+
+**laptop + laptop helper, 1.7B (split)** failed 8: word_frequencies (AssertionError), merge_intervals (AssertionError), roman_to_int (AssertionError), group_anagrams (AssertionError), parse_duration (ValueError: Invalid unit: 1), matrix_spiral (AssertionError), csv_column_sum (ValueError: could not convert string to float: 'x'), chunk_text (AssertionError)
