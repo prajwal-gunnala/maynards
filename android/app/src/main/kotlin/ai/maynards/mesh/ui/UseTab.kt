@@ -204,11 +204,11 @@ private fun BubbleView(b: Bubble) {
     val shape = RoundedCornerShape(12.dp)
     Box(Modifier.fillMaxWidth(), contentAlignment = if (b.mine) Alignment.CenterEnd else Alignment.CenterStart) {
         Column(
-            Modifier.widthIn(max = 320.dp).background(if (b.mine) Yellow else Paper, shape).border(2.dp, Ink, shape).padding(12.dp),
+            Modifier.widthIn(max = 340.dp).background(if (b.mine) Yellow else Paper, shape).border(2.dp, Ink, shape).padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             b.photo?.let { androidx.compose.foundation.Image(it.asImageBitmap(), null, Modifier.size(160.dp).border(2.dp, Ink, RoundedCornerShape(8.dp))) }
-            Text(b.text.ifEmpty { "…" }, fontSize = 15.sp, color = Ink)
+            if (b.mine || b.text.isEmpty()) Text(b.text.ifEmpty { "…" }, fontSize = 15.sp, color = Ink) else Markdown(b.text)
             b.stats?.let { s ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Speed, null, Modifier.size(14.dp), tint = Muted)
