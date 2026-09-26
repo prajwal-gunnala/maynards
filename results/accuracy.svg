@@ -23,11 +23,14 @@
 <text x="596.0" y="292.0" text-anchor="middle" fill="#5b6475">(split)</text>
 <polyline fill="none" stroke="#3d6bff" stroke-width="2" stroke-dasharray="5 4" points="164.0,67.2 380.0,172.4 596.0,182.7"/>
 <circle cx="164.0" cy="67.2" r="4" fill="#3d6bff"/>
+<rect x="134.4" y="45.2" width="59.2" height="15" fill="#fff"/>
 <text x="164.0" y="56.2" text-anchor="middle" fill="#3d6bff">21 tok/s</text>
 <circle cx="380.0" cy="172.4" r="4" fill="#3d6bff"/>
-<text x="380.0" y="161.4" text-anchor="middle" fill="#3d6bff">9 tok/s</text>
+<rect x="386.0" y="165.4" width="52.8" height="15" fill="#fff"/>
+<text x="390.0" y="176.4" text-anchor="start" fill="#3d6bff">9 tok/s</text>
 <circle cx="596.0" cy="182.7" r="4" fill="#3d6bff"/>
-<text x="596.0" y="171.7" text-anchor="middle" fill="#3d6bff">7 tok/s</text>
+<rect x="602.0" y="175.7" width="52.8" height="15" fill="#fff"/>
+<text x="606.0" y="186.7" text-anchor="start" fill="#3d6bff">7 tok/s</text>
 <text x="56" y="16" fill="#111418" font-weight="bold">accuracy (bars) and speed (dots) as devices join</text>
 <text x="56" y="312" fill="#5b6475">same 15 coding tasks, same scoring, executed against their tests</text>
 </svg>

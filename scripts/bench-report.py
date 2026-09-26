@@ -20,6 +20,7 @@ import pathlib
 RESULTS = pathlib.Path(__file__).resolve().parent.parent / "results"
 
 INK, MUTED, BAR, BAR2, GRID = "#111418", "#5b6475", "#f26b1d", "#3d6bff", "#d8dde6"
+PAPER = "#fff"   # what the chart sits on, used to keep a label readable where it crosses a bar
 
 
 def bars(runs, width=760, height=320):
@@ -34,7 +35,7 @@ def bars(runs, width=760, height=320):
 
     out = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" '
            f'font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="12">',
-           f'<rect width="{width}" height="{height}" fill="#fff"/>']
+           f'<rect width="{width}" height="{height}" fill="{PAPER}"/>']
 
     for pct in (0, 25, 50, 75, 100):
         y = pad_t + h - h * pct / 100
@@ -62,10 +63,19 @@ def bars(runs, width=760, height=320):
                    .format(BAR2, " ".join(f"{x:.1f},{y:.1f}" for x, y, _, _ in pts)))
     for x, y, tps, bar_top in pts:
         out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="{BAR2}"/>')
-        # above the dot unless that would hit the title or the bar's own label
-        below = y - 12 < pad_t + 6 or abs(y - bar_top) < 26
-        ly = y + 18 if below else y - 11
-        out.append(f'<text x="{x:.1f}" y="{ly:.1f}" text-anchor="middle" fill="{BAR2}">{tps:.0f} tok/s</text>')
+        # above the dot normally; beside it when that would land on the bar or the title
+        # a label centred above the dot lands on the bar whenever the dot sits below the bar's top,
+        # so it moves beside the dot and carries the paper behind it to stay readable over a bar
+        label = f"{tps:.0f} tok/s"
+        w = len(label) * 6.4 + 8
+        if y - 12 < pad_t + 6 or y > bar_top - 14:
+            lx, ly, anchor = x + 10, y + 4, "start"
+            rx = lx - 4
+        else:
+            lx, ly, anchor = x, y - 11, "middle"
+            rx = lx - w / 2
+        out.append(f'<rect x="{rx:.1f}" y="{ly - 11:.1f}" width="{w:.1f}" height="15" fill="{PAPER}"/>')
+        out.append(f'<text x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}" fill="{BAR2}">{label}</text>')
 
     out.append(f'<text x="{pad_l}" y="16" fill="{INK}" font-weight="bold">'
                f'accuracy (bars) and speed (dots) as devices join</text>')
