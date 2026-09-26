@@ -85,7 +85,8 @@ class Engine(private val ctx: Context) {
             val p = pb.start()
             proc = p
             scope.launch {
-                p.inputStream.bufferedReader().forEachLine { log(it) }
+                // reading stops with an exception when the process is destroyed; that is expected
+                runCatching { p.inputStream.bufferedReader().forEachLine { log(it) } }
                 val code = runCatching { p.waitFor() }.getOrDefault(-1)
                 if (proc === p) {
                     log("exited with $code")

@@ -113,7 +113,15 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
                 stop(&mut engine);
                 println!("holding layers {}", m["layers"].as_str().unwrap_or("?"));
                 match start_helper(&my_ip) {
-                    Ok((child, addr)) => { engine = Some(child); send(&out, json!({"t": "ready", "addr": addr}))?; }
+                    Ok((child, addr)) => {
+                        engine = Some(child);
+                        // behind NAT (an emulator Host) the Host must be told a different address
+                        let addr = match env::var("MESH_ADVERTISE") {
+                            Ok(ip) => format!("{ip}:{}", addr.rsplit(':').next().unwrap_or("50052")),
+                            Err(_) => addr,
+                        };
+                        send(&out, json!({"t": "ready", "addr": addr}))?;
+                    }
                     Err(e) => { send(&out, json!({"t": "failed", "reason": e}))?; }
                 }
             }
@@ -144,9 +152,15 @@ fn start_helper(bind: &str) -> Res<(Child, String)> {
     let bin = env::var("MESH_RPC_SERVER").unwrap_or_else(|_| "ggml-rpc-server".into());
     let threads = thread::available_parallelism().map(|n| n.get()).unwrap_or(4).saturating_sub(2).max(2);
     for port in RPC_PORTS {
-        let mut child = Command::new(&bin)
-            .args(["-H", bind, "-p", &port.to_string(), "-t", &threads.to_string(), "-c"])
-            .stdout(Stdio::null()).stderr(Stdio::null())
+        let mut cmd = Command::new(&bin);
+        cmd.args(["-H", bind, "-p", &port.to_string(), "-t", &threads.to_string(), "-c"])
+            .stdout(Stdio::null()).stderr(Stdio::null());
+        // if this agent dies, the kernel stops the engine too, so no layers are left behind
+        unsafe {
+            use std::os::unix::process::CommandExt;
+            cmd.pre_exec(|| { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM); Ok(()) });
+        }
+        let mut child = cmd
             .spawn().map_err(|e| format!("cannot start {bin}: {e} (set MESH_RPC_SERVER)"))?;
         let addr = format!("{bind}:{port}");
         for _ in 0..30 {
