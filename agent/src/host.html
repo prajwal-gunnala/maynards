@@ -5,140 +5,180 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MeshAI</title>
 <style>
-  :root { --ink:#d3dbd7; --paper:#11171a; --cream:#0a0e10; --yellow:#ffd60a; --green:#12321f; --purple:#201c3a; --red:#3c1618;
-          --tight:#33280d; --blue:#102a36; --muted:#7c8b86; --term:#8ee6a8; --line:#243029; }
-  * { box-sizing:border-box; }
-  body { margin:0; background:var(--cream); color:var(--ink); font:16px/1.45 system-ui, sans-serif; }
-  .wrap { max-width:1080px; margin:0 auto; padding:18px 16px 160px; }
-  svg.i { width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; vertical-align:-3px; }
-  svg.i.big { width:26px; height:26px; }
-  header { display:flex; gap:14px; align-items:center; margin-bottom:14px; }
-  .logo { width:52px; height:52px; background:var(--yellow); border:3px solid var(--ink); border-radius:12px; box-shadow:4px 4px 0 var(--ink); display:grid; place-items:center; font-weight:900; font-size:26px; }
-  h1 { margin:0; font-size:26px; font-weight:900; letter-spacing:-.5px; }
-  h2 { font-size:12px; letter-spacing:2px; text-transform:uppercase; font-weight:900; margin:22px 0 10px; display:flex; gap:8px; align-items:center; }
-  .mono { font:600 12px ui-monospace, monospace; color:var(--muted); }
-  .pill { margin-left:auto; border:3px solid var(--ink); border-radius:999px; padding:6px 14px; font:900 12px system-ui; letter-spacing:1.5px; text-transform:uppercase;
-          box-shadow:3px 3px 0 var(--ink); display:flex; gap:8px; align-items:center; background:var(--paper); }
-  .dot { width:10px; height:10px; border-radius:50%; background:#999; border:2px solid var(--ink); }
-  .pill.ready .dot { background:#2ecc71; } .pill.loading .dot { background:var(--yellow); animation:blink 1s infinite; } .pill.failed .dot { background:#e74c3c; }
-  @keyframes blink { 50% { opacity:.2; } }
-  .banner { background:var(--yellow); border:3px solid var(--ink); border-radius:12px; box-shadow:6px 6px 0 var(--ink); padding:12px 16px; margin-bottom:14px; }
-  .banner .k { font:900 11px system-ui; letter-spacing:2px; text-transform:uppercase; }
-  .banner .v { font-size:20px; font-weight:900; }
-  .advice { background:var(--tight); border:3px solid var(--ink); border-radius:10px; padding:8px 12px; margin-bottom:8px; font-weight:700; display:flex; gap:8px; align-items:center; }
-  .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
-  .tile { background:var(--paper); border:3px solid var(--ink); border-radius:10px; box-shadow:4px 4px 0 var(--ink); padding:10px 12px; }
-  .tile .k { font:900 10px system-ui; letter-spacing:1.5px; text-transform:uppercase; display:flex; gap:6px; align-items:center; }
-  .tile .v { font-size:22px; font-weight:900; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .steps { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
-  .step { border:3px solid var(--ink); border-radius:10px; padding:9px 14px; font-weight:900; letter-spacing:1px; text-transform:uppercase; background:var(--paper);
-          box-shadow:4px 4px 0 var(--ink); cursor:pointer; user-select:none; display:flex; gap:8px; align-items:center; font-size:14px; }
-  .step.on { background:var(--ink); color:var(--yellow); box-shadow:none; transform:translate(4px,4px); }
-  .step.locked { opacity:.45; cursor:not-allowed; }
-  .box { background:var(--paper); border:3px solid var(--ink); border-radius:12px; box-shadow:6px 6px 0 var(--ink); padding:16px; margin-bottom:18px; }
-  .box h3 { margin:0 0 10px; font:900 13px system-ui; letter-spacing:2px; text-transform:uppercase; border-bottom:3px solid var(--ink); padding-bottom:8px; display:flex; gap:8px; align-items:center; }
-  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-  .between { justify-content:space-between; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:18px; }
-  .two { display:grid; grid-template-columns:minmax(260px, 1fr) minmax(300px, 1.3fr); gap:18px; }
-  @media (max-width: 760px) { .two { grid-template-columns:1fr; } }
-  .qr { background:var(--paper); border:3px solid var(--ink); border-radius:10px; padding:8px; width:240px; }
-  .qr svg { width:100%; height:auto; display:block; }
-  .dash { border-top:2px dashed var(--ink); margin:12px 0; }
-  .name { font-weight:900; font-size:19px; }
-  .badge { width:44px; height:44px; border:3px solid var(--ink); border-radius:10px; display:grid; place-items:center; background:var(--paper); flex:none; }
-  .sticker { display:inline-block; border:2px solid var(--ink); border-radius:4px; padding:1px 8px; font:900 10px system-ui; letter-spacing:1.5px; text-transform:uppercase;
-             background:var(--paper); box-shadow:2px 2px 0 var(--ink); transform:rotate(-2deg); }
-  .host { background:var(--green); } .helper { background:var(--purple); } .bad { background:var(--red); } .tightc { background:var(--tight); } .blue { background:var(--blue); }
-  .meter .k { font:900 11px system-ui; letter-spacing:1.5px; text-transform:uppercase; display:flex; justify-content:space-between; gap:8px; }
-  .meter .k span:last-child { font:700 12px ui-monospace, monospace; letter-spacing:0; text-transform:none; }
-  .bar { height:16px; border:3px solid var(--ink); border-radius:6px; background:var(--paper); overflow:hidden; display:flex; margin:4px 0 10px; }
-  .bar i { display:block; height:100%; }
-  .mini { display:grid; grid-template-columns:repeat(2, 1fr); gap:8px; }
-  .mini > div { border:3px solid var(--ink); border-radius:8px; padding:6px 10px; background:var(--paper); }
-  .mini > div.host { background:var(--green); } .mini > div.bad { background:var(--red); } .mini > div.tightc { background:var(--tight); }
-  .mini .k { font:900 10px system-ui; letter-spacing:1.5px; text-transform:uppercase; display:flex; gap:6px; align-items:center; }
-  .mini .v { font-weight:900; font-size:17px; }
-  .layers { display:flex; height:30px; border:3px solid var(--ink); border-radius:6px; padding:3px; gap:3px; background:var(--paper); }
-  .layers div { border:2px solid var(--ink); border-radius:3px; display:grid; place-items:center; font:900 11px system-ui; min-width:24px; overflow:hidden; white-space:nowrap; }
-  button, label.btn { border:3px solid var(--ink); border-radius:8px; background:var(--yellow); font-weight:900; padding:9px 16px; cursor:pointer; box-shadow:3px 3px 0 var(--ink);
-          text-transform:uppercase; letter-spacing:1px; font-size:13px; display:inline-flex; gap:6px; align-items:center; }
-  button:active { transform:translate(3px,3px); box-shadow:none; }
-  button.plain { background:var(--paper); } button:disabled { background:var(--cream); color:var(--muted); box-shadow:none; cursor:default; }
-  button.big { font-size:16px; padding:12px 22px; }
-  input.cap { width:70px; border:3px solid var(--ink); border-radius:8px; padding:6px; font:inherit; }
-  .feed { font:600 13px ui-monospace, monospace; max-height:230px; overflow:auto; }
-  .feed div { padding:3px 0; border-bottom:1px dashed #ccc; }
-  .ok { color:#0a7a2f; } .no { color:#b3261e; }
-  table { width:100%; border-collapse:collapse; font-size:14px; }
-  th { background:var(--ink); color:var(--paper); text-align:left; padding:8px; font:900 11px system-ui; letter-spacing:1.5px; text-transform:uppercase; }
-  td { padding:8px; border-bottom:2px solid var(--ink); vertical-align:top; }
-  .chip { display:inline-flex; gap:6px; align-items:center; border:3px solid var(--ink); border-radius:999px; padding:4px 12px; font-weight:800; font-size:13px; }
-  .chip.y { background:var(--green); } .chip.n { background:var(--red); }
-  select { border:3px solid var(--ink); border-radius:8px; padding:8px; font:inherit; background:var(--paper); flex:1; min-width:0; }
-  .hide { display:none !important; }
-  .track { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
-  .track div { border:3px solid var(--ink); border-radius:8px; padding:5px 10px; font:900 11px system-ui; letter-spacing:1px; text-transform:uppercase; background:var(--paper); }
-  .track div.done { background:var(--green); } .track div.now { background:var(--yellow); animation:blink 1.2s infinite; }
-  .msg { border:2px solid var(--ink); border-radius:12px; padding:12px; margin:10px 0; max-width:88%; background:var(--paper); white-space:pre-wrap; }
-  .me { background:var(--yellow); margin-left:auto; }
-  .stats { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
-  .stats span { border:2px solid var(--ink); border-radius:999px; padding:1px 9px; font:800 11px ui-monospace, monospace; background:var(--cream); display:inline-flex; gap:4px; align-items:center; }
-  .stats span.tag { background:var(--green); font-family:system-ui; letter-spacing:1px; text-transform:uppercase; }
-  .stats span.tag.vision { background:var(--purple); }
-  .msg img { max-width:240px; border:2px solid var(--ink); border-radius:8px; display:block; margin-bottom:8px; }
-  pre { background:var(--ink); color:var(--yellow); padding:10px; border-radius:6px; overflow-x:auto; white-space:pre; }
-  code { background:var(--cream); padding:0 4px; border-radius:4px; font-weight:700; }
-  form { position:fixed; left:0; right:0; bottom:0; background:var(--paper); border-top:3px solid var(--ink); padding:12px 16px; }
-  form .row { max-width:1080px; margin:0 auto; flex-wrap:nowrap; }
-  textarea { flex:1; border:3px solid var(--ink); border-radius:10px; padding:10px; font:inherit; resize:none; height:52px; }
-  #preview { max-width:1080px; margin:0 auto 8px; font:600 12px ui-monospace, monospace; }
-  .web { width:100%; height:auto; display:block; }
-  .chart { width:100%; height:180px; display:block; }
-
-  /* ------------------------------------------------ a developer's console, not a poster.
-     Everything above keeps its layout; this changes type, weight and depth only. */
-  body { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-  h1, h2, h3, .name, .tile .v, .mini .v, .banner .v, button, .step, th, .sticker, .pill { font-family:inherit; }
-  h1 { letter-spacing:0; }
-  h1::after { content:"_"; color:var(--term); animation:blink 1.1s step-end infinite; }
-  h2 { color:var(--muted); letter-spacing:1.5px; }
-  .box, .tile, .step, .banner, .pill, .qr, .badge, .sticker, .mini > div, .bar, .layers, .layers div, .advice,
-  .chip, .track div, .msg, button, label.btn, input.cap, select, textarea, .msg img, .stats span, form {
-    box-shadow:none; border-width:1px; border-radius:4px; border-color:var(--line);
+  /* ---------------------------------------------------------------- tokens
+     Near-black surfaces, hairline borders, no shadows. Prose in the system sans,
+     every number in mono. No web fonts: the demo runs with the internet off. */
+  :root {
+    --bg:#09090b; --card:#111113; --raised:#18181b; --line:#26262a; --line-soft:#1c1c20;
+    --fg:#ededed; --fg-2:#8b8b93; --fg-3:#63636b;
+    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --helper:#a78bfa; --info:#60a5fa;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --rail: 248px;
   }
-  .box { border-radius:5px; }
-  .sticker { transform:none; }
-  .step.on { background:#152219; color:var(--term); border-color:var(--term); transform:none; }
-  .logo { background:transparent; color:var(--term); border:1px solid var(--term); border-radius:4px; box-shadow:none; font-size:22px; }
-  .banner { background:var(--paper); border-left:3px solid var(--term); }
-  .banner .v, .tile .v, .mini .v, .name { font-weight:700; }
-  button, label.btn { background:#16211c; color:var(--term); border-color:#2f4a3a; text-transform:none; letter-spacing:.5px; }
-  button:hover:not(:disabled), label.btn:hover { background:#1d2c25; }
-  button:active { transform:none; }
-  button.plain { background:var(--paper); color:var(--ink); }
-  button:disabled { background:#0e1316; color:var(--muted); }
-  input.cap, select, textarea { background:#0b1013; color:var(--ink); }
-  th { background:#0d1316; color:var(--term); border-bottom:1px solid var(--line); }
-  td { border-bottom:1px solid #182022; }
-  pre { background:#0a0e10; color:var(--term); border:1px solid var(--line); }
-  code { background:#182024; color:#e8cf8c; font-weight:400; }
-  .me { background:#15262e; }
-  .dash { border-top:1px dashed var(--line); }
-  .feed { max-height:320px; font-size:12.5px; }
-  .feed div { border-bottom:1px dashed #171f21; }
-  .ok { color:#56d364; } .no { color:#ff7b72; }
-  .mono { color:var(--muted); }
-  .layers div { font-family:inherit; font-weight:700; }
-  svg text { fill:var(--ink); }
-  a { color:var(--term); }
-  ::selection { background:#2b4a38; }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.55 var(--sans); -webkit-font-smoothing:antialiased; }
+  ::selection { background:#264b36; }
   ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#1f292c; border-radius:5px; }
+  ::-webkit-scrollbar-thumb { background:#232327; border-radius:5px; }
   ::-webkit-scrollbar-track { background:transparent; }
+  a { color:var(--fg); text-decoration:none; }
+  svg.i { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  svg.i.lg { width:20px; height:20px; }
+  .mono { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  /* ---------------------------------------------------------------- shell */
+  .app { display:grid; grid-template-columns:var(--rail) 1fr; min-height:100vh; }
+  .rail { border-right:1px solid var(--line); background:#0b0b0d; display:flex; flex-direction:column;
+          position:sticky; top:0; height:100vh; }
+  .brand { padding:20px 18px 16px; border-bottom:1px solid var(--line-soft); }
+  .brand .mark { display:flex; align-items:center; gap:9px; font-weight:600; letter-spacing:-.2px; font-size:15px; }
+  .brand .mark i { width:22px; height:22px; border:1px solid var(--line); border-radius:6px; display:grid; place-items:center;
+                   color:var(--ok); font-style:normal; font-size:12px; font-family:var(--mono); }
+  .brand .sub { margin-top:7px; font-size:11.5px; color:var(--fg-3); font-family:var(--mono); }
+  nav { padding:10px; display:flex; flex-direction:column; gap:1px; flex:1; overflow:auto; }
+  nav a.nav { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; color:var(--fg-2);
+              font-size:13.5px; cursor:pointer; user-select:none; }
+  nav a.nav:hover, nav a.nav.on { background:var(--raised); color:var(--fg); }
+  nav a.nav .k { margin-left:auto; font:11px var(--mono); color:var(--fg-3); }
+  nav .group { padding:14px 10px 6px; font:10.5px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--fg-3); }
+  .rail-foot { border-top:1px solid var(--line-soft); padding:12px 16px; display:flex; flex-direction:column; gap:7px;
+               font:11.5px var(--mono); color:var(--fg-3); }
+  .rail-foot .r { display:flex; align-items:center; gap:7px; justify-content:space-between; }
+  .rail-foot b { color:var(--fg-2); font-weight:500; }
+
+  main { min-width:0; display:flex; flex-direction:column; }
+  .strip { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:18px; padding:0 28px; height:48px;
+           border-bottom:1px solid var(--line); background:rgba(9,9,11,.88); backdrop-filter:blur(8px);
+           font:12px var(--mono); color:var(--fg-2); }
+  .strip .s { display:flex; align-items:center; gap:7px; white-space:nowrap; }
+  .strip .s b { color:var(--fg); font-weight:500; }
+  .strip .sp { flex:1; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--fg-3); flex:none; }
+  .dot.ok { background:var(--ok); } .dot.warn { background:var(--warn); animation:pulse 1.4s infinite; }
+  .dot.bad { background:var(--bad); }
+  @keyframes pulse { 50% { opacity:.25; } }
+  .page { padding:28px; max-width:1180px; width:100%; }
+  .head { display:flex; align-items:flex-start; gap:20px; margin-bottom:22px; }
+  .head h1 { margin:0 0 5px; font-size:22px; font-weight:600; letter-spacing:-.4px; }
+  .head p { margin:0; color:var(--fg-2); font-size:13.5px; max-width:72ch; }
+  .head .act { margin-left:auto; display:flex; gap:8px; flex:none; }
+
+  /* ---------------------------------------------------------------- pieces */
+  .card { background:var(--card); border:1px solid var(--line); border-radius:8px; }
+  .card > .ch { padding:14px 16px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; gap:10px; }
+  .card > .ch h3 { margin:0; font-size:13.5px; font-weight:600; }
+  .card > .ch .d { color:var(--fg-3); font-size:12px; }
+  .card > .cb { padding:16px; }
+  .card > .cb.tight { padding:11px 16px; }
+  .grid { display:grid; gap:14px; }
+  .g2 { grid-template-columns:repeat(auto-fit, minmax(330px,1fr)); }
+  .g3 { grid-template-columns:repeat(auto-fit, minmax(210px,1fr)); }
+  .row { display:flex; align-items:center; gap:10px; }
+  .between { justify-content:space-between; }
+  .wrap { flex-wrap:wrap; }
+  .sp { flex:1; }
+  .muted { color:var(--fg-2); } .quiet { color:var(--fg-3); }
+  .sec { font:10.5px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--fg-3); margin:26px 0 10px; }
+
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:13px 15px; }
+  .stat .k { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--fg-3); }
+  .stat .v { margin-top:6px; font:600 21px/1.2 var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.5px;
+             white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stat .v small { font-size:12px; color:var(--fg-3); font-weight:400; }
+
+  button, .btn { font:500 13px var(--sans); border-radius:6px; padding:7px 13px; cursor:pointer; display:inline-flex;
+                 align-items:center; gap:7px; border:1px solid var(--line); background:var(--raised); color:var(--fg); }
+  button:hover:not(:disabled), .btn:hover { border-color:#34343a; background:#1f1f23; }
+  button.primary { background:var(--fg); color:#09090b; border-color:var(--fg); font-weight:600; }
+  button.primary:hover:not(:disabled) { background:#fff; border-color:#fff; }
+  button.ghost { background:transparent; }
+  button.danger { color:var(--bad); }
+  button:disabled { opacity:.45; cursor:default; }
+  button.sm { padding:5px 10px; font-size:12px; }
+  input, select, textarea { font:13px var(--mono); background:#0d0d0f; color:var(--fg); border:1px solid var(--line);
+                            border-radius:6px; padding:7px 10px; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:#3a3a42; }
+  input.cap { width:74px; }
+
+  .tag { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:999px;
+         padding:2px 9px; font:11px var(--mono); color:var(--fg-2); background:var(--raised); }
+  .tag.ok { color:var(--ok); border-color:#1e3a2a; } .tag.warn { color:var(--warn); border-color:#3a3320; }
+  .tag.bad { color:var(--bad); border-color:#3a2222; } .tag.helper { color:var(--helper); border-color:#2e2a45; }
+
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th { text-align:left; padding:9px 12px; font:10.5px var(--mono); letter-spacing:.08em; text-transform:uppercase;
+       color:var(--fg-3); border-bottom:1px solid var(--line); font-weight:500; }
+  td { padding:10px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  tr:last-child td { border-bottom:0; }
+  td.num { font-family:var(--mono); font-variant-numeric:tabular-nums; }
+
+  .meter .k { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--fg-2); margin-bottom:6px; }
+  .meter .k b { font:500 12px var(--mono); color:var(--fg); }
+  .bar { height:6px; border-radius:3px; background:#1d1d21; overflow:hidden; margin-bottom:13px; }
+  .bar i { display:block; height:100%; border-radius:3px; }
+  .layers { display:flex; height:26px; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#0d0d0f; }
+  .layers div { display:grid; place-items:center; font:11px var(--mono); color:#0b0b0d; min-width:0; overflow:hidden; white-space:nowrap; }
+
+  .feed { font:12px/1.65 var(--mono); max-height:360px; overflow:auto; }
+  .feed div { padding:3px 0; color:var(--fg-2); border-bottom:1px solid var(--line-soft); }
+  .feed div:last-child { border-bottom:0; }
+  .feed .t { color:var(--fg-3); margin-right:8px; }
+  .feed .ok { color:var(--ok); } .feed .no { color:var(--bad); }
+
+  .empty { text-align:center; padding:40px 20px; color:var(--fg-3); }
+  .empty h4 { margin:0 0 6px; color:var(--fg-2); font-size:14px; font-weight:500; }
+  .empty p { margin:0 auto; max-width:48ch; font-size:13px; }
+
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:12.5px; }
+  .kv .k { color:var(--fg-3); } .kv .v { font-family:var(--mono); }
+
+  pre { background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:11px 13px; overflow-x:auto;
+        font:12.5px/1.6 var(--mono); color:#d7e0dd; margin:9px 0; }
+  code { background:#1a1a1e; border-radius:4px; padding:1px 5px; font:12.5px var(--mono); }
+  .cmd { display:flex; align-items:center; gap:8px; background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  .cmd code { background:transparent; padding:0; flex:1; overflow:auto; white-space:nowrap; color:var(--fg-2); }
+
+  .msg { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0; max-width:82%; background:var(--card);
+         white-space:pre-wrap; font-size:13.5px; }
+  .msg.me { margin-left:auto; background:var(--raised); border-color:#2e2e34; }
+  .msg img { max-width:240px; border-radius:6px; display:block; margin-bottom:8px; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:9px; }
+  .chips span { font:11px var(--mono); color:var(--fg-3); border:1px solid var(--line-soft); border-radius:999px; padding:1px 8px; }
+  .chips span.who { color:var(--ok); border-color:#1e3a2a; }
+  .chips span.who.vision { color:var(--helper); border-color:#2e2a45; }
+  .composer { position:sticky; bottom:0; background:linear-gradient(180deg, rgba(9,9,11,0), var(--bg) 22%); padding:18px 0 4px; }
+  .composer .box { display:flex; gap:8px; align-items:flex-end; background:var(--card); border:1px solid var(--line);
+                   border-radius:10px; padding:8px; }
+  .composer textarea { flex:1; border:0; background:transparent; resize:none; height:38px; padding:8px; font:13.5px var(--sans); }
+
+  .qr { background:#fff; border-radius:8px; padding:10px; width:200px; flex:none; }
+  .qr svg { width:100%; height:auto; display:block; }
+  .web { width:100%; height:auto; display:block; }
+  .chart { width:100%; height:190px; display:block; }
+  .hide { display:none !important; }
+
+  /* the agent going away is a visible state, not a page that quietly stops moving */
+  .lost { position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:50; display:none;
+          background:#2a1416; border:1px solid #5a2326; color:#fca5a5; border-radius:8px; padding:9px 15px;
+          font:12.5px var(--mono); }
+  .lost.on { display:block; }
+  .toast { position:fixed; right:18px; bottom:18px; z-index:50; display:flex; flex-direction:column; gap:8px; }
+  .toast div { background:#2a1416; border:1px solid #5a2326; color:#fca5a5; border-radius:8px; padding:9px 14px;
+               font:12.5px var(--mono); max-width:420px; }
+
+  @media (max-width: 900px) {
+    .app { grid-template-columns:1fr; }
+    .rail { position:static; height:auto; flex-direction:row; align-items:center; overflow:auto; }
+    .rail-foot, .brand .sub, nav .group { display:none; }
+    nav { flex-direction:row; }
+    .page { padding:18px; }
+  }
 </style>
 </head>
 <body>
+
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></symbol>
   <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/></symbol>
@@ -164,502 +204,853 @@
   <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3 2 21h20z"/><path d="M12 10v5M12 18v.5"/></symbol>
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3"/></symbol>
   <symbol id="i-redo" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6L20 8M20 3v5h-5"/></symbol>
+  <symbol id="i-health" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6"/></symbol>
 </svg>
 
-<div class="wrap">
-  <header>
-    <div class="logo">M</div>
-    <div><h1>MeshAI</h1><div class="mono" id="meshid">this laptop is the Host</div></div>
-    <div class="pill" id="pill"><span class="dot"></span><span id="pilltext">idle</span></div>
-  </header>
+<div class="lost" id="lost">lost the agent — retrying…</div>
+<div class="toast" id="toast"></div>
 
-  <div class="banner"><div class="k">Right now</div><div class="v" id="now">…</div><div class="mono" style="color:var(--ink)" id="nowsub"></div></div>
-  <div id="advice"></div>
+<div class="app">
+  <aside class="rail">
+    <div class="brand">
+      <div class="mark"><i>M</i> MeshAI</div>
+      <div class="sub" id="meshid">connecting…</div>
+    </div>
+    <nav id="nav">
+      <div class="group">Mesh</div>
+      <a class="nav" data-go="overview"><svg class="i"><use href="#i-gauge"/></svg>Overview<span class="k">1</span></a>
+      <a class="nav" data-go="devices"><svg class="i"><use href="#i-hub"/></svg>Devices<span class="k">2</span></a>
+      <a class="nav" data-go="models"><svg class="i"><use href="#i-box"/></svg>Models<span class="k">3</span></a>
+      <div class="group">Work</div>
+      <a class="nav" data-go="run"><svg class="i"><use href="#i-layers"/></svg>Run<span class="k">4</span></a>
+      <a class="nav" data-go="chat"><svg class="i"><use href="#i-chat"/></svg>Chat<span class="k">5</span></a>
+      <a class="nav" data-go="measure"><svg class="i"><use href="#i-chart"/></svg>Measure<span class="k">6</span></a>
+      <a class="nav" data-go="checks"><svg class="i"><use href="#i-health"/></svg>Diagnostics<span class="k">7</span></a>
+    </nav>
+    <div class="rail-foot">
+      <div class="r"><span>engine</span><span class="row" style="gap:6px"><i class="dot" id="f-dot"></i><b id="f-state">–</b></span></div>
+      <div class="r"><span>internet</span><b id="f-net">–</b></div>
+      <div class="r"><span>pooled</span><b id="f-pool">–</b></div>
+    </div>
+  </aside>
 
-  <div class="tiles">
-    <div class="tile"><div class="k"><svg class="i"><use href="#i-hub"/></svg>Devices</div><div class="v" id="t-dev">1</div></div>
-    <div class="tile"><div class="k"><svg class="i"><use href="#i-chip"/></svg>Pooled memory</div><div class="v" id="t-pool">–</div></div>
-    <div class="tile"><div class="k"><svg class="i"><use href="#i-box"/></svg>Model</div><div class="v" id="t-model" style="font-size:16px">none</div></div>
-    <div class="tile"><div class="k"><svg class="i"><use href="#i-gauge"/></svg>Avg · best tok/s</div><div class="v" id="t-speed">–</div></div>
-    <div class="tile"><div class="k"><svg class="i"><use href="#i-chat"/></svg>Answers · tokens</div><div class="v" id="t-ans">0</div></div>
-    <div class="tile"><div class="k"><svg class="i"><use href="#i-link"/></svg>Internet</div><div class="v" id="t-net">–</div></div>
-  </div>
+  <main>
+    <div class="strip">
+      <span class="s"><i class="dot" id="s-dot"></i><b id="s-state">connecting</b></span>
+      <span class="s hide" id="s-model-w"><svg class="i"><use href="#i-box"/></svg><b id="s-model"></b></span>
+      <span class="s"><svg class="i"><use href="#i-hub"/></svg><b id="s-dev">–</b> devices</span>
+      <span class="s"><svg class="i"><use href="#i-gauge"/></svg><b id="s-tps">–</b></span>
+      <span class="sp"></span>
+      <span class="s" id="s-net"></span>
+    </div>
 
-  <div class="steps">
-    <div class="step on" data-s="1"><svg class="i"><use href="#i-hub"/></svg>1 Devices</div>
-    <div class="step" data-s="2"><svg class="i"><use href="#i-box"/></svg>2 Models</div>
-    <div class="step" data-s="3"><svg class="i"><use href="#i-layers"/></svg>3 Prepare</div>
-    <div class="step" data-s="4"><svg class="i"><use href="#i-chat"/></svg>4 Use</div>
-    <div class="step" data-s="5"><svg class="i"><use href="#i-chart"/></svg>5 Stats</div>
-  </div>
-
-  <!-- 1 DEVICES -->
-  <section data-p="1">
-    <div class="two">
-      <div class="box">
-        <h3><svg class="i"><use href="#i-qr"/></svg>Connect a phone</h3>
-        <div class="qr" id="qr"></div>
-        <ol style="margin:12px 0 8px; padding-left:20px; line-height:1.7">
-          <li>Plug the phone in, turn on <b>USB tethering</b>.</li>
-          <li>Phone: <b>MeshAI → Scan to join</b>.</li>
-          <li>Point it at this QR.</li>
-        </ol>
-        <div class="mono">Each QR works once · <a href="#" id="newqr">new QR</a></div>
-        <div class="mono" id="links" style="margin-top:4px"></div>
-        <div class="dash"></div>
-        <div class="mono">Another laptop joins with this, pasted into its terminal:</div>
-        <div class="row" style="margin-top:6px; flex-wrap:nowrap">
-          <code id="joincmd" style="flex:1; overflow:auto; white-space:nowrap"></code>
-          <button class="plain" id="copyjoin">copy</button>
+    <!-- ============================================================ OVERVIEW -->
+    <section class="page" data-p="overview">
+      <div class="head">
+        <div><h1>Overview</h1><p id="ov-sub">The health of the mesh, and what it is doing right now.</p></div>
+        <div class="act" id="ov-act"></div>
+      </div>
+      <div id="ov-advice"></div>
+      <div class="grid g3" id="ov-stats"></div>
+      <div class="sec">Running</div>
+      <div class="card"><div class="cb" id="ov-run"></div></div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card">
+          <div class="ch"><svg class="i"><use href="#i-hub"/></svg><h3>The mesh</h3><span class="d">who holds what</span></div>
+          <div class="cb" id="ov-web"></div>
+        </div>
+        <div class="card">
+          <div class="ch"><svg class="i"><use href="#i-clock"/></svg><h3>Recent answers</h3><span class="d">asked for by other tools</span></div>
+          <div class="cb" id="ov-live"></div>
         </div>
       </div>
-      <div class="box">
-        <h3><svg class="i"><use href="#i-hub"/></svg>The mesh</h3>
-        <div id="webbox"></div>
-        <div class="dash"></div>
-        <h3 style="border:0; margin-bottom:4px"><svg class="i"><use href="#i-clock"/></svg>Activity</h3>
-        <div class="feed" id="feed"></div>
+    </section>
+
+    <!-- ============================================================= DEVICES -->
+    <section class="page hide" data-p="devices">
+      <div class="head">
+        <div><h1>Devices</h1>
+          <p>Every device in this mesh, what it offers, and how well it is reachable. A phone joins by scanning
+             the code; another laptop joins from its terminal.</p></div>
+        <div class="act"><button class="ghost" id="newqr"><svg class="i"><use href="#i-redo"/></svg>New code</button></div>
       </div>
-    </div>
-    <h2><svg class="i"><use href="#i-check"/></svg>Before the demo</h2>
-    <div class="box">
-      <div class="row between">
-        <div><div class="name">Check this machine</div>
-          <div class="mono">The engine and its flags, the models, the ports, adb, and the room left. Everything
-            you would otherwise type in a terminal.</div></div>
-        <button id="checkbtn"><svg class="i"><use href="#i-check"/></svg>Run the checks</button>
+      <div class="grid g2">
+        <div class="card">
+          <div class="ch"><svg class="i"><use href="#i-qr"/></svg><h3>Add a phone</h3></div>
+          <div class="cb">
+            <div class="row wrap" style="align-items:flex-start; gap:18px">
+              <div class="qr" id="qr"></div>
+              <div style="min-width:180px; flex:1">
+                <ol class="muted" style="margin:0; padding-left:18px; line-height:1.9; font-size:13px">
+                  <li>Plug the phone in, turn on <b>USB tethering</b>.</li>
+                  <li>Open <b>MeshAI</b>, choose <b>Helper</b>.</li>
+                  <li>Scan this code.</li>
+                </ol>
+                <div class="quiet mono" style="margin-top:10px; font-size:11.5px" id="links"></div>
+                <div class="quiet mono" style="margin-top:4px; font-size:11.5px">each code works once</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ch"><svg class="i"><use href="#i-laptop"/></svg><h3>Add another laptop</h3></div>
+          <div class="cb">
+            <p class="muted" style="margin:0 0 10px; font-size:13px">Run this on the other machine, from the folder you
+               want it to share. It brings its memory into the pool, and a phone can ask it about that repository.</p>
+            <div class="cmd"><code id="joincmd">…</code><button class="sm ghost" id="copyjoin">copy</button></div>
+          </div>
+        </div>
       </div>
-      <div id="checks"></div>
-    </div>
-    <h2><svg class="i"><use href="#i-hub"/></svg>Your devices</h2>
-    <div class="grid" id="devices"></div>
-    <div class="row" style="justify-content:flex-end; margin-top:18px"><button class="big" data-go="2">Next: pick a model <svg class="i"><use href="#i-play"/></svg></button></div>
-  </section>
-
-  <!-- 2 MODELS -->
-  <section data-p="2" class="hide">
-    <div class="mono" id="pool" style="margin-bottom:10px"></div>
-    <div id="models"></div>
-    <h2><svg class="i"><use href="#i-image"/></svg>Or: one model per phone (USB)</h2>
-    <div class="box" style="background:var(--yellow)">
-      <div class="row between">
-        <div><div class="name">Vision + 8B</div><div>One phone reads photos, the other answers text.</div></div>
-        <button class="plain" id="preset"><svg class="i"><use href="#i-play"/></svg>Start both</button>
+      <div class="sec">Joined devices</div>
+      <div class="grid g2" id="devices"></div>
+      <div class="sec">Phones on USB</div>
+      <div class="card">
+        <div class="ch"><svg class="i"><use href="#i-phone"/></svg><h3>One whole model per phone</h3>
+          <span class="d">no splitting: each phone runs a model by itself</span>
+          <span class="sp"></span><button class="sm" id="preset">Start vision + text</button></div>
+        <div class="cb"><div class="grid g2" id="usb"></div></div>
       </div>
-      <div class="grid" id="usb" style="margin-top:14px"></div>
-    </div>
-  </section>
+    </section>
 
-  <!-- 3 PREPARE -->
-  <section data-p="3" class="hide">
-    <div class="box">
-      <div class="row between"><h3 style="border:0; margin:0"><svg class="i"><use href="#i-layers"/></svg>Prepare</h3><div class="mono" id="pmodel"></div></div>
-      <div class="row" id="checks" style="margin:10px 0"></div>
-    </div>
-    <div class="box" id="verdict"></div>
-    <div class="box">
-      <h3><svg class="i"><use href="#i-layers"/></svg>Who holds what</h3>
-      <div id="pbar"></div>
-      <div class="mono" style="margin:8px 0 12px">Embeddings and the output head always stay on this laptop.</div>
-      <table><thead><tr><th>Device</th><th>Layers</th><th>Memory</th><th>Link</th></tr></thead><tbody id="ptable"></tbody></table>
-      <div class="mono" id="skipped" style="margin-top:10px"></div>
-      <div class="row" style="margin-top:16px"><button class="big" id="start"><svg class="i"><use href="#i-play"/></svg>Start</button><button class="plain" data-go="2">◀ Models</button></div>
-    </div>
-  </section>
+    <!-- ============================================================== MODELS -->
+    <section class="page hide" data-p="models">
+      <div class="head">
+        <div><h1>Models</h1><p id="models-sub">Every model on this laptop, and whether the devices you have can run it.</p></div>
+      </div>
+      <div id="models"></div>
+    </section>
 
-  <!-- 4 USE -->
-  <section data-p="4" class="hide">
-    <div class="box" id="runbox"></div>
-    <div class="box" id="apibox" style="background:var(--blue)"></div>
-    <div id="scores"></div>
-    <div id="live"></div>
-    <div id="log"></div>
-  </section>
+    <!-- ================================================================= RUN -->
+    <section class="page hide" data-p="run">
+      <div class="head">
+        <div><h1>Run</h1>
+          <p>Which device holds which layers, and how the model comes up. The host keeps the embeddings and the
+             output head, so only one small activation crosses the link per word.</p></div>
+        <div class="act" id="run-act"></div>
+      </div>
+      <div id="run-body"></div>
+    </section>
 
-  <!-- 5 STATS -->
-  <section data-p="5" class="hide">
-    <div class="box">
-      <h3><svg class="i"><use href="#i-gauge"/></svg>Speed per answer</h3>
-      <div id="chart"></div>
-      <div class="row mono" style="margin-top:6px"><span>■ generating (tok/s)</span><span style="color:#a78bfa">■ time to first word (s)</span></div>
-    </div>
-    <div class="box">
-      <h3><svg class="i"><use href="#i-clock"/></svg>History</h3>
-      <table><thead><tr><th>Time</th><th>Question</th><th>tok/s</th><th>First word</th><th>Total</th><th>Tokens</th><th>From</th></tr></thead><tbody id="hist"></tbody></table>
-    </div>
-  </section>
+    <!-- ================================================================ CHAT -->
+    <section class="page hide" data-p="chat">
+      <div class="head">
+        <div><h1>Chat</h1><p>The same endpoint your tools use. Attach a photo and it goes to a device running a vision model.</p></div>
+        <div class="act" id="chat-act"></div>
+      </div>
+      <div class="card" id="apibox"></div>
+      <div id="log" style="margin-top:16px"></div>
+      <form class="composer" id="f">
+        <div class="quiet mono" id="preview" style="font-size:11.5px; margin-bottom:6px"></div>
+        <div class="box">
+          <label class="btn ghost" title="Attach a photo"><svg class="i"><use href="#i-image"/></svg>
+            <input type="file" id="img" accept="image/*" hidden></label>
+          <textarea id="q" placeholder="Ask anything"></textarea>
+          <button class="primary" id="send"><svg class="i"><use href="#i-in"/></svg>Send</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================================= MEASURE -->
+    <section class="page hide" data-p="measure">
+      <div class="head">
+        <div><h1>Measure</h1>
+          <p>The same fifteen coding problems, asked of whatever is running now, scored by executing every answer
+             against its own tests. No partial credit, no human judgement.</p></div>
+        <div class="act" id="measure-act"></div>
+      </div>
+      <div class="card">
+        <div class="ch"><svg class="i"><use href="#i-chart"/></svg><h3>Results</h3><span class="d">every configuration measured on this machine</span></div>
+        <div id="scores"></div>
+      </div>
+      <div class="sec">Speed per answer</div>
+      <div class="card"><div class="cb" id="chartbox"></div></div>
+      <div class="sec">History</div>
+      <div class="card"><div id="histbox"></div></div>
+    </section>
+
+    <!-- ========================================================= DIAGNOSTICS -->
+    <section class="page hide" data-p="checks">
+      <div class="head">
+        <div><h1>Diagnostics</h1>
+          <p>Everything you would otherwise check from a terminal before presenting: the engine and which flags it
+             has, the helper binary, the models, the ports, adb, and the room left on this machine.</p></div>
+        <div class="act"><button class="primary" id="checkbtn"><svg class="i"><use href="#i-check"/></svg>Run the checks</button></div>
+      </div>
+      <div class="card"><div id="checklist"><div class="empty"><h4>Not checked yet</h4>
+        <p>Press <b>Run the checks</b>. It takes a few seconds: it asks the engine what it supports and reads every model header.</p></div></div></div>
+      <div class="sec">Activity</div>
+      <div class="card"><div class="cb"><div class="feed" id="feed"></div></div></div>
+    </section>
+  </main>
 </div>
 
-<form id="f" class="hide">
-  <div id="preview"></div>
-  <div class="row">
-    <label class="btn" title="Upload a photo"><svg class="i"><use href="#i-image"/></svg><input type="file" id="img" accept="image/*" hidden></label>
-    <textarea id="q" placeholder="Ask anything"></textarea>
-    <button id="send" style="height:52px">Send</button>
-  </div>
-</form>
-
 <script>
+'use strict';
 const $ = id => document.getElementById(id);
 const ic = (n, cls = '') => `<svg class="i ${cls}"><use href="#i-${n}"/></svg>`;
-let S = null, step = 1, chosen = null, usb = [];
-const gb = x => (x || 0).toFixed(1);
-const sec = ms => ms == null ? '–' : (ms / 1000).toFixed(1) + ' s';
-const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const num = (x, d = 0) => Number.isFinite(+x) ? +x : d;
+const gb = x => num(x).toFixed(1);
+const sec = ms => ms == null || !Number.isFinite(+ms) ? '–' : (+ms / 1000).toFixed(1) + ' s';
+const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const PAGES = ['overview', 'devices', 'models', 'run', 'chat', 'measure', 'checks'];
 
-// ---------- steps
-function go(n) {
-  step = n;
-  document.querySelectorAll('.step').forEach(s => s.classList.toggle('on', +s.dataset.s === n));
-  document.querySelectorAll('section').forEach(p => p.classList.toggle('hide', +p.dataset.p !== n));
-  $('f').classList.toggle('hide', n !== 4);
+let S = null;            // last good /api/state
+let page = 'overview';
+let chosen = null;       // model picked on Models, waiting to start on Run
+let usb = [];
+let followed = null;     // run key, so a starting run pulls you to Chat exactly once
+let history = [];        // chat turns, memory only
+let image = null;        // pending photo as a data URL
+let scoresLoaded = false;
+let misses = 0;          // consecutive failed polls
+
+/* ---------------------------------------------------------------- transport
+   Every call has a deadline and a visible failure. A page that silently stops
+   updating is the worst thing to be standing in front of. */
+async function api(path, opts = {}, ms = 8000) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(path, { ...opts, signal: ctl.signal });
+    if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+    const t = await r.text();
+    return t ? JSON.parse(t) : null;
+  } finally { clearTimeout(timer); }
+}
+function post(path, body, ms = 10000) {
+  return api(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  }, ms);
+}
+/** A button press that fails must say so, not shrug. */
+function act(promise, what) {
+  return Promise.resolve(promise).then(poll).catch(e => toast(`${what} failed: ${e.message || e}`));
+}
+function toast(text) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  $('toast').appendChild(d);
+  setTimeout(() => d.remove(), 7000);
+}
+
+/* ------------------------------------------------------------------ routing */
+function go(p, push = true) {
+  if (!PAGES.includes(p)) p = 'overview';
+  page = p;
+  document.querySelectorAll('section[data-p]').forEach(s => s.classList.toggle('hide', s.dataset.p !== p));
+  document.querySelectorAll('a.nav').forEach(a => a.classList.toggle('on', a.dataset.go === p));
+  if (push && location.hash.slice(1) !== p) location.hash = p;
+  if (p === 'measure' && !scoresLoaded) { scoresLoaded = true; scores(); }
   render();
 }
-document.querySelectorAll('.step').forEach(s => s.onclick = () => { if (!s.classList.contains('locked')) go(+s.dataset.s); });
-document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(+b.dataset.go));
+document.querySelectorAll('a.nav').forEach(a => a.onclick = () => go(a.dataset.go));
+addEventListener('hashchange', () => go(location.hash.slice(1), false));
+addEventListener('keydown', e => {
+  if (e.target.matches('input, textarea, select') || e.metaKey || e.ctrlKey || e.altKey) return;
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= PAGES.length) go(PAGES[n - 1]);
+});
 
-// ---------- data
-async function poll() { try { S = await (await fetch('/api/state')).json(); } catch (e) { return; } render(); }
-async function pollUsb() { try { usb = await (await fetch('/api/usb/devices')).json(); if (step === 2) renderUsb(); } catch (e) {} }
-setInterval(poll, 2000); poll(); setInterval(pollUsb, 5000); pollUsb();
+/* ------------------------------------------------------------------ polling */
+async function poll() {
+  try {
+    const s = await api('/api/state', {}, 6000);
+    if (!s || typeof s !== 'object') throw new Error('empty state');
+    S = normalise(s);
+    misses = 0;
+    $('lost').classList.remove('on');
+    render();
+  } catch (e) {
+    // two misses is four seconds: long enough not to blink on one slow poll
+    if (++misses >= 2) {
+      $('lost').classList.add('on');
+      $('lost').textContent = `lost the agent (${esc(e.message || e)}) — retrying every 2 s`;
+      $('s-dot').className = 'dot bad';
+      $('s-state').textContent = 'disconnected';
+    }
+  }
+}
+/** Never let a missing or renamed field throw inside a renderer. */
+function normalise(s) {
+  s.run = s.run || {};
+  s.run.plan = s.run.plan || {};
+  s.run.status = s.run.status || 'idle';
+  s.peers = Array.isArray(s.peers) ? s.peers : [];
+  s.models = Array.isArray(s.models) ? s.models : [];
+  s.activity = Array.isArray(s.activity) ? s.activity : [];
+  s.chats = Array.isArray(s.chats) ? s.chats : [];
+  s.advice = Array.isArray(s.advice) ? s.advice : [];
+  s.stats = s.stats || { answers: 0, avg_tps: 0, best_tps: 0, tokens: 0 };
+  s.api = s.api || { key: '', urls: [] };
+  s.invite = s.invite || { hosts: [] };
+  s.invite.hosts = Array.isArray(s.invite.hosts) ? s.invite.hosts : [];
+  s.laptop = s.laptop || { specs: {}, usable_gb: 0 };
+  s.laptop.specs = s.laptop.specs || {};
+  s.caps = s.caps || {};
+  return s;
+}
+async function pollUsb() {
+  try {
+    const u = await api('/api/usb/devices', {}, 6000);
+    usb = Array.isArray(u) ? u : [];
+    if (page === 'devices') renderUsb();
+  } catch (e) { /* adb is optional: never let it take the page down */ }
+}
+poll(); setInterval(poll, 2000);
+pollUsb(); setInterval(pollUsb, 5000);
 
-let followed = null;
+/* -------------------------------------------------------------------- shell */
 function render() {
   if (!S) return;
-  const run = S.run;
-  const key = run.status !== 'idle' ? run.model + run.status.replace(/starting|loading|ready/, 'on') : null;
-  if (key && key !== followed) { followed = key; if (step !== 4) { go(4); return; } }
-  const n = S.peers.length + 1;
-  const pill = run.status === 'starting' || run.status === 'loading' ? 'loading' : run.status;
-  $('pill').className = 'pill ' + pill; $('pilltext').textContent = pill;
-  $('meshid').textContent = `mesh-${S.mesh} · this laptop is the Host`;
-  $('now').textContent = run.status === 'ready' ? `Running ${run.model}` : pill === 'loading' ? `Starting ${run.model}…`
-    : run.status === 'failed' ? run.step : S.peers.length ? `${n} devices connected — pick a model` : 'Connect your phones';
-  $('nowsub').textContent = `${n} device${n > 1 ? 's' : ''} online · ${gb(S.pool_gb)} GB for models`;
-  $('advice').innerHTML = (S.advice || []).map(a => `<div class="advice">${ic('warn')}${esc(a)}</div>`).join('');
-  $('t-dev').textContent = n; $('t-pool').textContent = gb(S.pool_gb) + ' GB';
-  $('t-model').textContent = run.status === 'ready' ? run.model : 'none';
-  $('t-speed').textContent = S.stats.answers ? `${S.stats.avg_tps.toFixed(1)} · ${S.stats.best_tps.toFixed(1)}` : '–';
-  $('t-ans').textContent = `${S.stats.answers} · ${S.stats.tokens}`;
-  // the demo turns the internet off on purpose: say so, rather than leaving a judge to wonder
-  const net = $('t-net');
-  net.textContent = S.online ? 'on' : 'OFFLINE';
-  net.style.color = S.online ? 'var(--muted)' : 'var(--term)';
-  document.querySelector('.step[data-s="3"]').classList.toggle('locked', !chosen);
-  if (step === 1) renderDevices();
-  if (step === 2) renderModels();
-  if (step === 3) renderPrepare();
-  if (step === 4) renderRun();
-  if (step === 5) renderStats();
+  try { paint(); } catch (e) { toast('render: ' + (e.message || e)); }
+}
+function paint() {
+  const r = S.run, busy = r.status === 'starting' || r.status === 'loading';
+  const cls = r.status === 'ready' ? 'ok' : busy ? 'warn' : r.status === 'failed' ? 'bad' : '';
+  const label = r.status === 'ready' ? 'ready' : busy ? r.status : r.status === 'failed' ? 'failed' : 'idle';
+  $('s-dot').className = 'dot ' + cls; $('f-dot').className = 'dot ' + cls;
+  $('s-state').textContent = label; $('f-state').textContent = label;
+  $('s-model').textContent = r.model || '';
+  $('s-model-w').classList.toggle('hide', !r.model);
+  $('s-dev').textContent = 1 + S.peers.length;
+  $('s-tps').textContent = S.stats.answers ? num(S.stats.avg_tps).toFixed(1) + ' tok/s' : '–';
+  $('s-net').innerHTML = S.online === false ? `<i class="dot ok"></i><b style="color:var(--ok)">OFFLINE</b>` : '';
+  $('meshid').textContent = 'mesh-' + (S.mesh || '?') + ' · this laptop is the host';
+  $('f-net').textContent = S.online === false ? 'off' : 'on';
+  $('f-pool').textContent = gb(S.pool_gb) + ' GB';
+
+  const key = (r.model || '') + ':' + (['starting', 'loading', 'ready'].includes(r.status) ? 'on' : r.status);
+  if (followed !== null && key !== followed && r.model && page !== 'chat') { followed = key; go('chat'); return; }
+  followed = key;
+
+  if (page === 'overview') renderOverview();
+  else if (page === 'devices') { renderDevices(); renderUsb(); }
+  else if (page === 'models') renderModels();
+  else if (page === 'run') renderRun();
+  else if (page === 'chat') renderChat();
+  else if (page === 'measure') renderStats();
+  else if (page === 'checks') renderFeed();
+}
+function wireGo() { document.querySelectorAll('[data-go2]').forEach(b => b.onclick = () => go(b.dataset.go2)); }
+
+/* ----------------------------------------------------------------- overview */
+const statTile = (icon, k, v, sub) =>
+  `<div class="stat"><div class="k">${ic(icon)}${esc(k)}</div><div class="v">${esc(v)}${sub ? ` <small>${esc(sub)}</small>` : ''}</div></div>`;
+
+function renderOverview() {
+  const r = S.run, n = 1 + S.peers.length, slices = r.plan.slices || [];
+  $('ov-sub').textContent = r.status === 'ready'
+    ? `${r.model} is answering across ${slices.length || 1} device${slices.length === 1 ? '' : 's'}.`
+    : n > 1 ? 'The devices are joined. Pick a model to run across them.'
+            : 'No other device has joined yet. Add one from Devices.';
+  $('ov-act').innerHTML = r.status === 'ready'
+    ? `<button data-go2="chat">${ic('chat')}Ask it something</button>`
+    : `<button class="primary" data-go2="${n > 1 ? 'models' : 'devices'}">${n > 1 ? 'Pick a model' : 'Add a device'}</button>`;
+  $('ov-stats').innerHTML =
+    statTile('hub', 'Devices', n, n > 1 ? 'in the mesh' : 'just this laptop') +
+    statTile('chip', 'Pooled memory', gb(S.pool_gb), 'GB for models') +
+    statTile('gauge', 'Speed', S.stats.answers ? num(S.stats.avg_tps).toFixed(1) : '–',
+             S.stats.answers ? `avg · ${num(S.stats.best_tps).toFixed(1)} best` : 'no answers yet') +
+    statTile('chat', 'Answers', S.stats.answers, `${num(S.stats.tokens)} tokens`) +
+    statTile('link', 'Internet', S.online === false ? 'OFFLINE' : 'on', S.online === false ? 'nothing leaves your devices' : '') +
+    statTile('box', 'Models here', S.models.length, 'on this laptop');
+  $('ov-advice').innerHTML = S.advice.map(a =>
+    `<div class="card" style="border-color:#3a3320; margin-bottom:10px"><div class="cb tight row" style="color:var(--warn)">${ic('warn')}<span>${esc(a)}</span></div></div>`).join('');
+  $('ov-run').innerHTML = runSummary();
+  $('ov-web').innerHTML = web();
+  const live = S.chats.filter(c => c.from === 'api').slice(-4).reverse();
+  $('ov-live').innerHTML = live.length ? live.map(c => `
+    <div style="padding:9px 0; border-bottom:1px solid var(--line-soft)">
+      <div class="mono" style="font-size:12px; color:var(--fg-2)">${esc(String(c.q || '').slice(0, 90))}</div>
+      <div class="chips">${c.done ? chipRow(c) : '<span>answering…</span>'}</div></div>`).join('')
+    : `<div class="empty"><h4>Nothing yet</h4><p>Answers asked for by other tools on <code>/v1</code> show up here.</p></div>`;
+  wireGo();
+}
+function runSummary() {
+  const r = S.run;
+  if (r.status === 'idle') return `<div class="empty"><h4>Nothing is running</h4>
+    <p>Choose a model and the planner decides which device holds which layers.</p></div>`;
+  if (r.status === 'failed') return `<div class="row" style="color:var(--bad)">${ic('warn')}<span>${esc(r.step)}</span></div>`;
+  return `<div class="row between wrap" style="margin-bottom:12px">
+      <div><div style="font-weight:600">${esc(r.model)}</div>
+        <div class="mono quiet" style="font-size:12px">${esc(r.step)}${r.seconds != null && r.status !== 'ready' ? ' · ' + r.seconds + ' s' : ''}</div></div>
+      <div class="row wrap">${track(r)}</div></div>
+    ${(r.plan.slices || []).length ? layerBar(r.plan) : ''}`;
 }
 
-// ---------- the mesh as a spider web
+/* ------------------------------------------------------------------ the web */
 function layersOf(id) {
-  const s = S.run.plan && S.run.plan.slices ? S.run.plan.slices.find(x => x.id === id) : null;
+  const s = (S.run.plan.slices || []).find(x => x.id === id);
   return s ? `${s.to - s.from} layers` : '';
 }
 function web() {
-  const W = 420, H = 300, cx = W / 2, cy = H / 2, R = 128;
+  const W = 420, H = 290, cx = W / 2, cy = H / 2, R = Math.min(W, H) / 2 * 0.84;
   let g = '';
-  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; g += `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * R}" y2="${cy + Math.sin(a) * R}" stroke="#2c3b35" stroke-width="1.5"/>`; }
-  for (let r = 1; r <= 5; r++) {
-    const rr = R * r / 5; let d = '';
-    for (let k = 0; k <= 12; k++) {
-      const a1 = k * Math.PI / 6, p = [cx + Math.cos(a1) * rr, cy + Math.sin(a1) * rr];
-      if (!k) { d = `M${p[0]},${p[1]}`; continue; }
-      const m = (k - .5) * Math.PI / 6, s = rr * .9; d += ` Q${cx + Math.cos(m) * s},${cy + Math.sin(m) * s} ${p[0]},${p[1]}`;
-    }
-    g += `<path d="${d}" fill="none" stroke="#1e2a26" stroke-width="1.5"/>`;
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    g += `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(a) * R).toFixed(1)}" y2="${(cy + Math.sin(a) * R).toFixed(1)}" stroke="#1f1f24"/>`;
   }
-  const label = (x, y, t) => { const w = t.length * 6.6 + 14; return `<rect x="${x - w / 2 + 3}" y="${y + 3}" width="${w}" height="20" rx="5" fill="#000"/><rect x="${x - w / 2}" y="${y}" width="${w}" height="20" rx="5" fill="#0d1316" stroke="#3a4a44" stroke-width="1.5"/><text x="${x}" y="${y + 14}" font-size="11" font-weight="900" text-anchor="middle" font-family="system-ui">${esc(t)}</text>`; };
-  const node = (x, y, r, fill) => `<circle cx="${x + 4}" cy="${y + 4}" r="${r}" fill="#000"/><circle cx="${x}" cy="${y}" r="${r}" fill="${fill}" stroke="#3f5a4e" stroke-width="2"/>`;
+  for (let ring = 1; ring <= 5; ring++) {
+    const rr = R * ring / 5; let d = '';
+    for (let k = 0; k <= 12; k++) {
+      const a1 = k * Math.PI / 6, px = cx + Math.cos(a1) * rr, py = cy + Math.sin(a1) * rr;
+      if (!k) { d = `M${px.toFixed(1)},${py.toFixed(1)}`; continue; }
+      const m = (k - .5) * Math.PI / 6, s = rr * .9;
+      d += ` Q${(cx + Math.cos(m) * s).toFixed(1)},${(cy + Math.sin(m) * s).toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`;
+    }
+    g += `<path d="${d}" fill="none" stroke="#1f1f24"/>`;
+  }
+  const label = (x, y, t) => {
+    const w = t.length * 6.2 + 14;
+    return `<rect x="${(x - w / 2).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="18" rx="5" fill="#18181b" stroke="#26262a"/>
+      <text x="${x.toFixed(1)}" y="${y + 12.5}" font-size="10.5" text-anchor="middle" fill="#8b8b93" font-family="ui-monospace,monospace">${esc(t)}</text>`;
+  };
   S.peers.forEach((p, i) => {
     const a = -Math.PI / 2 + i * 2 * Math.PI / Math.max(S.peers.length, 1) + (S.peers.length === 2 ? Math.PI / 2 : 0);
-    const x = cx + Math.cos(a) * R * .78, y = cy + Math.sin(a) * R * .78;
-    const slow = p.rtt_ms > 60;
-    g += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${slow ? '#ff7b72' : '#3f6a55'}" stroke-width="2.5" ${slow ? 'stroke-dasharray="6 5"' : ''}/>`;
-    g += `<circle r="5" fill="#ffd60a" stroke="#0a0e10" stroke-width="1.5"><animateMotion dur="1.6s" repeatCount="indefinite" path="M${cx},${cy} L${x},${y}"/></circle>`;
-    g += node(x, y, 20, '#2b2758');
-    const l = [p.name.split(' ·')[1] ? '·' + p.name.split(' ·')[1] : p.name, p.rtt_ms != null ? Math.round(p.rtt_ms) + ' ms' : '', layersOf(p.id)].filter(Boolean).join(' · ');
-    g += label(x, y + 24, l);
+    const x = cx + Math.cos(a) * R * .72, y = cy + Math.sin(a) * R * .72;
+    const slow = num(p.rtt_ms, 0) > 60;
+    g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${slow ? '#f87171' : '#2f6b4a'}" stroke-width="1.5" ${slow ? 'stroke-dasharray="5 4"' : ''}/>`;
+    if (S.run.status === 'ready') g += `<circle r="3.5" fill="#4ade80"><animateMotion dur="1.4s" repeatCount="indefinite" path="M${cx},${cy} L${x.toFixed(1)},${y.toFixed(1)} L${cx},${cy}"/></circle>`;
+    g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="17" fill="#1a1730" stroke="#a78bfa" stroke-width="1.2"/>`;
+    const short = String(p.name || '').split(' ·')[1] || String(p.name || '?');
+    g += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#a78bfa" font-family="ui-monospace,monospace">${esc(short.slice(0, 4))}</text>`;
+    const l = [p.rtt_ms != null ? Math.round(p.rtt_ms) + ' ms' : '', layersOf(p.id)].filter(Boolean).join(' · ');
+    if (l) g += label(x, y + 22, l);
   });
-  g += node(cx, cy, 26, '#16402a');
-  g += `<g transform="translate(${cx},${cy})" stroke="#8ee6a8" stroke-width="2" stroke-linecap="round">` +
-    [-1, 1].map(sd => [-.9, -.3, .3, .9].map(a => `<path d="M0,0 L${sd * 17 * Math.cos(a)},${13 * Math.sin(a) - 6} L${sd * 28 * Math.cos(a)},${21 * Math.sin(a) + 4}" fill="none"/>`).join('')).join('') +
-    `<circle r="9" cy="3" fill="#8ee6a8"/><circle r="5.5" cy="-8" fill="#8ee6a8"/><circle r="1.6" cx="-2" cy="-9" fill="#0a0e10" stroke="none"/><circle r="1.6" cx="2" cy="-9" fill="#0a0e10" stroke="none"/></g>`;
-  g += label(cx, cy + 32, 'this laptop' + (layersOf('laptop') ? ' · ' + layersOf('laptop') : ''));
+  g += `<circle cx="${cx}" cy="${cy}" r="22" fill="#10231a" stroke="#4ade80" stroke-width="1.4"/>
+        <text x="${cx}" y="${cy + 4.5}" font-size="12" text-anchor="middle" fill="#4ade80" font-family="ui-monospace,monospace">host</text>`;
+  g += label(cx, cy + 28, ['this laptop', layersOf('laptop')].filter(Boolean).join(' · '));
   return `<svg class="web" viewBox="0 0 ${W} ${H}">${g}</svg>`;
 }
 
-// ---------- 1 devices
-function meter(icon, k, v, frac, color) {
-  return `<div class="meter"><div class="k"><span>${ic(icon)} ${k}</span><span>${v}</span></div><div class="bar"><i style="width:${Math.max(2, Math.min(100, frac * 100))}%; background:${color}"></i></div></div>`;
-}
-function heatText(h, c) { if (c) return Math.round(c) + ' °C'; if (h == null || h < 0) return '–'; return h < .5 ? 'cool' : h < .8 ? 'warm' : 'hot'; }
-function heatFill(h, c) { if (c) return c > 90 ? 'bad' : c > 75 ? 'tightc' : 'host'; return h < 0 ? '' : h < .5 ? 'host' : h < .8 ? 'tightc' : 'bad'; }
+/* -------------------------------------------------------------------- cards */
+const meter = (k, v, frac, color) =>
+  `<div class="meter"><div class="k"><span>${esc(k)}</span><b>${esc(v)}</b></div>
+    <div class="bar"><i style="width:${Math.max(2, Math.min(100, num(frac) * 100)).toFixed(1)}%; background:${color}"></i></div></div>`;
+const heatText = (h, c) => c ? Math.round(c) + ' °C' : h == null || h < 0 ? '–' : h < .5 ? 'cool' : h < .8 ? 'warm' : 'hot';
+const heatColor = (h, c) => (c > 90 || h >= .8) ? 'var(--bad)' : (c > 75 || h >= .5) ? 'var(--warn)' : 'var(--ok)';
+
 function card(o) {
-  const s = o.specs, total = s.totalBytes || 1, cap = S.caps[o.id];
-  return `<div class="box ${o.laptop ? 'host' : 'helper'}">
-    <div class="row between" style="flex-wrap:nowrap"><div class="row" style="flex-wrap:nowrap"><div class="badge">${ic(o.laptop ? 'laptop' : 'phone', 'big')}</div>
-      <div><div class="name">${esc(s.name)}</div><div class="mono" style="color:var(--ink)">${esc(s.chip)} · ${s.cores} cores${s.maxGhz ? ' · ' + s.maxGhz.toFixed(1) + ' GHz' : ''}</div></div></div>
-      <span class="sticker">${o.laptop ? 'host' : 'helper'}</span></div>
-    <div class="dash"></div>
-    ${meter('chip', 'Memory', `${gb(s.freeBytes / 1e9)} / ${gb(total / 1e9)} GB free`, s.freeBytes / total, '#b8f0c6')}
-    ${meter('bolt', 'For models', `${gb(o.usable)} GB${cap ? ' (cap ' + gb(cap) + ')' : ''}`, o.usable * 1e9 / total, '#ffd60a')}
-    ${o.store && o.store.total ? meter('layers', 'Stored layers', `${o.store.done}/${o.store.total} · ${gb(o.store.bytes / 1e9)} GB${o.store.working ? ' · saving' : o.store.done == o.store.total ? ' · ready' : ''}`, o.store.done / o.store.total, '#c9b8ff') : ''}
-    <div class="mini">
-      <div class="${heatFill(s.heat, s.temp_c)}"><div class="k">${ic('temp')}Heat</div><div class="v">${heatText(s.heat, s.temp_c)}</div></div>
-      <div class="${!s.charging && s.battery < 30 ? 'bad' : s.charging ? 'host' : ''}"><div class="k">${ic('battery')}Battery</div><div class="v">${s.battery >= 0 ? s.battery + '%' : '–'}${s.charging ? ' ⚡' : ''}</div></div>
-      <div class="${o.laptop ? '' : o.rtt > 60 ? 'bad' : 'host'}"><div class="k">${ic('link')}Link</div><div class="v">${o.laptop ? 'host' : o.rtt == null ? '…' : Math.round(o.rtt) + ' ms'}</div></div>
-      <div class="${layersOf(o.id) ? 'tightc' : ''}"><div class="k">${ic('layers')}Holding</div><div class="v">${layersOf(o.id) || '–'}</div></div>
-    </div>
-    <div class="row mono" style="margin-top:10px">${o.laptop ? '' : esc(o.addr) + ' · worst ' + (o.worst != null ? Math.round(o.worst) + ' ms' : '–')}
-      <span style="margin-left:auto">cap GB</span><input class="cap" data-cap="${o.id}" placeholder="auto" value="${cap ? gb(cap) : ''}">
-      ${o.laptop ? '' : `<button class="plain" data-forget="${o.id}">Forget</button>`}</div>
-  </div>`;
+  const s = o.specs || {}, total = num(s.totalBytes, 1) || 1, cap = S.caps[o.id];
+  const st = o.store && o.store.total ? o.store : null;
+  return `<div class="card">
+    <div class="ch">${ic(o.laptop ? 'laptop' : 'phone', 'lg')}
+      <div style="min-width:0"><h3>${esc(o.name)}</h3>
+        <div class="d mono" style="overflow:hidden; text-overflow:ellipsis">${esc(s.chip || '')}${s.cores ? ' · ' + s.cores + ' cores' : ''}</div></div>
+      <span class="sp"></span><span class="tag ${o.laptop ? 'ok' : 'helper'}">${o.laptop ? 'host' : 'helper'}</span></div>
+    <div class="cb">
+      ${meter('Memory free', `${gb(num(s.freeBytes) / 1e9)} / ${gb(total / 1e9)} GB`, num(s.freeBytes) / total, 'var(--info)')}
+      ${meter('Offered for models' + (cap ? ` (capped ${gb(cap)} GB)` : ''), gb(o.usable) + ' GB', num(o.usable) * 1e9 / total, 'var(--ok)')}
+      ${st ? meter('Layers kept on the device', `${st.done}/${st.total} · ${gb(num(st.bytes) / 1e9)} GB`, num(st.done) / num(st.total, 1), 'var(--helper)') : ''}
+      <div class="kv" style="margin-top:4px">
+        <span class="k">Heat</span><span class="v" style="color:${heatColor(s.heat, s.temp_c)}">${heatText(s.heat, s.temp_c)}</span>
+        <span class="k">Battery</span><span class="v">${num(s.battery, -1) >= 0 ? s.battery + '%' : '–'}${s.charging ? ' charging' : ''}</span>
+        <span class="k">Link</span><span class="v">${o.laptop ? 'host' :
+          (o.rtt_ms != null ? num(o.rtt_ms).toFixed(1) + ' ms' + (o.rtt_worst_ms != null ? ` · worst ${num(o.rtt_worst_ms).toFixed(0)}` : '') : 'measuring…')}</span>
+        <span class="k">Holding</span><span class="v">${layersOf(o.id) || '–'}</span>
+        ${o.addr ? `<span class="k">Address</span><span class="v">${esc(o.addr)}</span>` : ''}
+      </div>
+      <div class="row between" style="margin-top:14px">
+        <label class="quiet" style="font-size:12px">cap <input class="cap mono" data-cap="${esc(o.id)}" value="${cap ? gb(cap) : ''}" placeholder="auto"> GB</label>
+        ${o.laptop ? '' : `<button class="sm ghost danger" data-forget="${esc(o.id)}">Remove</button>`}
+      </div></div></div>`;
 }
 function renderDevices() {
-  $('qr').innerHTML = S.qr;
-  $('links').textContent = 'reach this laptop at ' + S.invite.hosts.join(' · ');
-  $('joincmd').textContent = "mesh join '" + JSON.stringify(S.invite) + "'";
-  $('webbox').innerHTML = web();
-  $('feed').innerHTML = S.activity.map(a => `<div class="${/^✓/.test(a.line) ? 'ok' : /^(✗|refused|failed)/.test(a.line) ? 'no' : ''}">${a.t}  ${esc(a.line)}</div>`).join('') || '<div class="mono">Waiting for phones…</div>';
-  if (document.activeElement && document.activeElement.classList.contains('cap')) return;   // don't redraw while typing a cap
-  $('devices').innerHTML = [card({laptop: true, id: 'laptop', specs: S.laptop.specs, usable: S.laptop.usable_gb})]
-    .concat(S.peers.map(p => card({id: p.id, specs: p.specs, usable: p.usable_gb, rtt: p.rtt_ms, worst: p.rtt_worst_ms, addr: p.addr, store: p.store}))).join('');
-  document.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => fetch('/api/forget', {method: 'POST', body: JSON.stringify({id: b.dataset.forget})}).then(poll));
-  document.querySelectorAll('[data-cap]').forEach(i => i.onchange = () => fetch('/api/cap', {method: 'POST', body: JSON.stringify({id: i.dataset.cap, gb: parseFloat(i.value) || 0})}).then(poll));
+  $('qr').innerHTML = S.qr || '';
+  $('links').textContent = S.invite.hosts.length ? 'reachable at ' + S.invite.hosts.join(' · ') : 'no address yet';
+  $('joincmd').textContent = `mesh join '${JSON.stringify(S.invite)}'`;
+  // a poll must not wipe a memory cap somebody is halfway through typing
+  if (document.activeElement && document.activeElement.classList.contains('cap')) return;
+  $('devices').innerHTML =
+    card({ id: 'laptop', name: S.laptop.specs.name || 'This laptop', specs: S.laptop.specs, usable: S.laptop.usable_gb, laptop: true }) +
+    S.peers.map(p => card({ id: p.id, name: p.name || p.id, specs: p.specs, usable: p.usable_gb,
+                            addr: p.addr, rtt_ms: p.rtt_ms, rtt_worst_ms: p.rtt_worst_ms, store: p.store })).join('');
+  document.querySelectorAll('[data-forget]').forEach(b => b.onclick = () =>
+    act(post('/api/forget', { id: b.dataset.forget }), 'removing the device'));
+  document.querySelectorAll('[data-cap]').forEach(i => i.onchange = () => {
+    const v = parseFloat(i.value);
+    if (i.value.trim() && (!Number.isFinite(v) || v < 0)) { toast('the cap has to be a number of GB, or empty for auto'); i.value = ''; return; }
+    act(post('/api/cap', { id: i.dataset.cap, gb: Number.isFinite(v) ? v : 0 }), 'setting the cap');
+  });
 }
 
-// ---------- 2 models
-const look = v => v === 'doable' ? ['Doable', 'host', 'check'] : v === 'tight' ? ['Tight', 'tightc', 'warn'] : ['Not possible', 'bad', 'stop'];
+/* ------------------------------------------------------------------- models */
+const look = v => v === 'doable' ? ['Runs', 'ok', 'check'] : v === 'tight' ? ['Tight', 'warn', 'warn'] : ['Will not fit', 'bad', 'stop'];
+const isVision = f => /-vl|vision|llava/i.test(String(f || ''));
+
 function layerBar(p) {
-  return `<div class="layers">${p.slices.map(s => `<div class="${s.host ? 'host' : 'helper'}" style="flex:${Math.max(1, s.to - s.from)}" title="${esc(s.name)}">${s.to - s.from}</div>`).join('')}</div>` +
-    `<div class="mono" style="margin-top:6px; color:var(--ink)">${p.slices.map(s => `${s.host ? '🟩' : '🟪'} ${esc(s.name.replace(' (this laptop)', ''))}: ${s.from}–${s.to - 1} · ${gb(s.gb)} GB`).join(' &nbsp; ')}</div>`;
+  const sl = p.slices || [];
+  if (!sl.length) return '';
+  const total = sl.reduce((a, s) => a + (s.to - s.from), 0) || 1;
+  return `<div class="layers">${sl.map(s =>
+      `<div style="flex:${Math.max(s.to - s.from, 1)}; background:${s.host ? '#4ade80' : '#a78bfa'}" title="${esc(s.name)}: layers ${s.from}-${s.to - 1}">${s.to - s.from}</div>`).join('')}</div>
+    <div class="row wrap quiet mono" style="gap:14px; margin-top:8px; font-size:11.5px">
+      ${sl.map(s => `<span><b style="color:${s.host ? '#4ade80' : '#a78bfa'}">■</b> ${esc(s.name)} · ${s.from}-${s.to - 1} · ${gb(s.gb)} GB</span>`).join('')}
+      <span>${total} layers in all</span></div>`;
 }
 function renderModels() {
-  $('pool').textContent = `${S.peers.length + 1} devices · ${gb(S.pool_gb)} GB for models · model files on this laptop`;
-  $('models').innerHTML = S.models.map((m, i) => {
-    const [label, cls, icn] = look(m.plan.verdict);
-    return `<div class="box ${cls}">
-      <div class="row between"><div class="row" style="flex-wrap:nowrap"><div class="badge">${ic('box', 'big')}</div><div><div class="name">${esc(m.name)}</div>
-        <div class="mono" style="color:var(--ink)">${gb(m.gb)} GB · ${m.layers} layers · needs ${gb(m.plan.need_gb)} GB${/vl|vision/i.test(m.file) ? ' · 🖼 photos' : ''}</div></div></div>
-        <span class="sticker">${ic(icn)} ${label}</span></div>
-      <div style="font-weight:800; margin:10px 0">${esc(m.plan.reason)}</div>
-      ${m.plan.slices.length ? layerBar(m.plan) : ''}
-      ${m.plan.verdict !== 'not_possible' ? `<div class="row" style="margin-top:12px"><button data-pick="${i}">Select ${ic('play')}</button></div>` : ''}
-    </div>`;
-  }).join('') || '<div class="box">No models in the laptop\'s model folder.</div>';
-  document.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { chosen = S.models[+b.dataset.pick].file; go(3); });
-  renderUsb();
+  $('models-sub').textContent =
+    `${S.models.length} model${S.models.length === 1 ? '' : 's'} on this laptop · ${gb(S.pool_gb)} GB pooled across ${1 + S.peers.length} device${S.peers.length ? 's' : ''}.`;
+  if (!S.models.length) {
+    $('models').innerHTML = `<div class="card"><div class="empty"><h4>No models here</h4>
+      <p>Put a <code>.gguf</code> file in the laptop's model folder and it appears here with a verdict and a plan.
+         Diagnostics tells you which folder that is.</p></div></div>`;
+    return;
+  }
+  $('models').innerHTML = '<div class="grid g2">' + S.models.map(m => {
+    const p = m.plan || {}, [lab, cls, icon] = look(p.verdict), can = p.verdict !== 'not_possible';
+    return `<div class="card">
+      <div class="ch">${ic('box', 'lg')}<div style="min-width:0"><h3>${esc(m.name)}</h3>
+        <div class="d mono">${gb(m.gb)} GB · ${m.layers} layers${isVision(m.file) ? ' · vision' : ''}</div></div>
+        <span class="sp"></span><span class="tag ${cls}">${ic(icon)}${lab}</span></div>
+      <div class="cb">
+        <div class="muted" style="font-size:13px; margin-bottom:12px">${esc(p.reason || '')}</div>
+        ${can ? layerBar(p) : ''}
+        <div class="row between wrap" style="margin-top:14px">
+          <span class="quiet mono" style="font-size:11.5px">needs ${gb(p.need_gb)} GB</span>
+          ${can ? `<button class="primary sm" data-pick="${esc(m.file)}">${ic('play')}Use this model</button>` : ''}
+        </div></div></div>`;
+  }).join('') + '</div>';
+  document.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { chosen = b.dataset.pick; go('run'); });
 }
-const isVision = f => /-vl|vision|llava/i.test(f);
+
+/* --------------------------------------------------------------- usb phones */
 function renderUsb() {
-  $('usb').innerHTML = usb.map(d => `<div class="box ${d.running ? (d.vision ? 'helper' : 'host') : ''}" style="margin:0">
-      <div class="row between"><b>${ic('phone')} ${esc(d.name)}</b><span class="sticker">${d.running ? (d.vision ? 'photos' : 'text') : 'idle'}</span></div>
-      <div class="mono">${d.serial} · ${d.memFreeGb} / ${d.memTotalGb} GB free · ${d.battery}%</div>
-      <div class="mono">${d.running ? '▶ ' + esc(d.running) : 'no model running'}</div>
-      <div class="row" style="margin-top:8px"><select id="u-${d.serial}">${d.models.filter(m => !/30B/i.test(m.file) || m.gb >= 18.5).map(m => `<option value="${m.file}">${m.file.replace(/\.gguf$/, '')} · ${m.gb} GB</option>`).join('')}</select>
-      <button data-urun="${d.serial}">Run</button><button class="plain" data-ustop="${d.serial}">Stop</button></div></div>`).join('')
-    || '<div class="mono" style="color:var(--ink)">No phones on USB with debugging on.</div>';
-  document.querySelectorAll('[data-urun]').forEach(b => b.onclick = () => usbRun(b.dataset.urun, $('u-' + b.dataset.urun).value));
-  document.querySelectorAll('[data-ustop]').forEach(b => b.onclick = () => fetch('/api/usb/stop', {method: 'POST', body: JSON.stringify({serial: b.dataset.ustop})}).then(pollUsb));
+  if (!usb.length) {
+    $('usb').innerHTML = `<div class="empty" style="grid-column:1/-1"><h4>No phones on USB</h4>
+      <p>Plug a phone in with developer options and USB debugging on. This runs a whole model on each phone by
+         itself, which is a different thing from splitting one model across the mesh.</p></div>`;
+    return;
+  }
+  $('usb').innerHTML = usb.map(d => {
+    const running = d.running, vis = running && isVision(running);
+    const models = Array.isArray(d.models) ? d.models : [];
+    const fits = models.filter(m => num(m.gb) < 18.5 || num(d.memory_gb) >= 18.5);
+    return `<div class="card"><div class="ch">${ic('phone')}<div style="min-width:0"><h3>${esc(d.name)}</h3>
+        <div class="d mono">${esc(d.serial)} · ${gb(d.memory_gb)} GB · ${num(d.battery)}%</div></div>
+        <span class="sp"></span><span class="tag ${running ? (vis ? 'helper' : 'ok') : ''}">${running ? (vis ? 'photos' : 'text') : 'idle'}</span></div>
+      <div class="cb">
+        ${running ? `<div class="mono muted" style="font-size:12px; margin-bottom:10px">${esc(running)}</div>` : ''}
+        ${fits.length ? `<div class="row">
+          <select id="u-${esc(d.serial)}" style="flex:1; min-width:0">${fits.map(m =>
+            `<option value="${esc(m.file)}">${esc(String(m.file).replace('.gguf', ''))}</option>`).join('')}</select>
+          <button class="sm" data-urun="${esc(d.serial)}">${ic('play')}Run</button>
+          ${running ? `<button class="sm ghost" data-ustop="${esc(d.serial)}">${ic('stop')}Stop</button>` : ''}
+        </div>` : `<div class="quiet" style="font-size:12.5px">No model on this phone small enough for its memory.</div>`}
+      </div></div>`;
+  }).join('');
+  document.querySelectorAll('[data-urun]').forEach(b => b.onclick = () => {
+    const sel = $('u-' + b.dataset.urun);
+    if (!sel || !sel.value) { toast('that phone has no model to run'); return; }
+    usbRun(b.dataset.urun, sel.value);
+  });
+  document.querySelectorAll('[data-ustop]').forEach(b => b.onclick = () =>
+    post('/api/usb/stop', { serial: b.dataset.ustop }).then(pollUsb).catch(e => toast('stop failed: ' + e.message)));
 }
-function usbRun(serial, model) { return fetch('/api/usb/run', {method: 'POST', body: JSON.stringify({serial, model: model.replace(/\.gguf$/, '')})}).then(() => setTimeout(pollUsb, 12000)); }
+function usbRun(serial, model) {
+  post('/api/usb/run', { serial, model: String(model || '').replace('.gguf', '') })
+    .then(() => setTimeout(pollUsb, 12000))
+    .catch(e => toast('could not start that phone: ' + e.message));
+}
 $('preset').onclick = () => {
-  const vis = usb.find(d => d.models.some(m => isVision(m.file)));
-  if (vis) usbRun(vis.serial, vis.models.find(m => isVision(m.file)).file);
-  const txt = usb.find(d => d !== vis && d.models.some(m => /8B/i.test(m.file)));
-  if (txt) usbRun(txt.serial, txt.models.find(m => /8B/i.test(m.file)).file);
-  if (!vis && !txt) alert('Plug in the phones with USB debugging on.');
+  const v = usb.find(d => (d.models || []).some(m => isVision(m.file)));
+  const t = usb.find(d => d !== v && (d.models || []).some(m => /8B/i.test(m.file)));
+  if (!v) { toast('no phone on USB has a vision model'); return; }
+  if (!t) { toast('needs a second phone with an 8B model'); return; }
+  usbRun(v.serial, (v.models.find(m => isVision(m.file)) || {}).file);
+  usbRun(t.serial, (t.models.find(m => /8B/i.test(m.file)) || {}).file);
 };
 
-// ---------- 3 prepare
-function renderPrepare() {
-  const m = S.models.find(x => x.file === chosen); if (!m) return;
-  const p = m.plan, helpers = p.slices.filter(s => !s.host);
-  $('pmodel').textContent = m.name;
-  const slow = S.peers.filter(x => x.rtt_ms > 60);
-  const chk = (ok, t) => `<span class="chip ${ok ? 'y' : 'n'}">${ic(ok ? 'check' : 'stop')} ${t}</span>`;
-  $('checks').innerHTML = chk(true, 'model on this laptop') + chk(helpers.every(h => S.peers.some(x => x.id === h.id)), 'phones online')
-    + chk(p.verdict !== 'not_possible', 'memory ok') + chk(!slow.length, 'links fast') + chk(!(S.advice || []).length, 'no warnings');
-  const [label, cls] = look(p.verdict);
-  $('verdict').className = 'box ' + cls;
-  $('verdict').innerHTML = `<div class="name">${p.verdict === 'not_possible' ? 'Cannot run: ' + esc(p.reason) : helpers.length ? `Runs split across ${p.slices.length} devices.` : 'Runs on this laptop alone.'}</div>
-    <div class="mono" style="color:var(--ink)">${esc(m.name)}: needs ${gb(p.need_gb)} GB (weights ${gb(m.gb)} GB + conversation memory at 4k + working buffers) · pooled ${gb(S.pool_gb)} GB · ${label}</div>`;
-  $('pbar').innerHTML = p.slices.length ? layerBar(p) : '';
-  $('ptable').innerHTML = p.slices.map(s => {
-    const peer = S.peers.find(x => x.id === s.id);
-    return `<tr><td><b>${esc(s.name)}</b> <span class="sticker ${s.host ? 'host' : 'helper'}">${s.host ? 'host' : 'helper'}</span></td>
-      <td>${s.from}–${s.to - 1} (${s.to - s.from})</td><td>${gb(s.gb)} GB</td><td>${s.host ? '—' : peer && peer.rtt_ms != null ? Math.round(peer.rtt_ms) + ' ms' : '…'}</td></tr>`;
-  }).join('');
-  const sk = Object.entries(p.skipped || {});
-  $('skipped').textContent = sk.length ? 'Not used: ' + sk.map(([k, v]) => `${k} (${v})`).join(', ') : '';
-  $('start').disabled = p.verdict === 'not_possible';
-}
-$('start').onclick = async () => { await fetch('/api/run', {method: 'POST', body: JSON.stringify({model: chosen})}); go(4); poll(); };
-
-// ---------- 4 use
+/* ---------------------------------------------------------------------- run */
 function track(r) {
-  const helpers = r.plan && r.plan.slices ? r.plan.slices.filter(s => !s.host).length : 0;
-  const stages = ['Planning', helpers ? 'Phones ready' : null, helpers ? 'Sending layers' : 'Loading', 'Ready'].filter(Boolean);
-  const at = r.status === 'ready' ? stages.length - 1 : r.status === 'loading' ? stages.length - 2 : r.step.startsWith('Starting') ? 1 : 0;
-  return `<div class="track">${stages.map((s, i) => `<div class="${i < at || r.status === 'ready' ? 'done' : i === at ? 'now' : ''}">${i < at || r.status === 'ready' ? '✓ ' : ''}${s}</div>`).join('')}</div>`;
+  const helpers = (r.plan.slices || []).length > 1;
+  const stages = ['Planning', helpers ? 'Devices ready' : null, helpers ? 'Sending layers' : 'Loading', 'Ready'].filter(Boolean);
+  let at = r.status === 'starting' ? 1 : r.status === 'loading' ? (helpers ? 2 : 1) : 0;
+  if (r.status === 'ready') at = stages.length;
+  return stages.map((s, i) => `<span class="tag ${i < at ? 'ok' : ''}">${i < at ? ic('check') : ''}${s}</span>`).join('');
+}
+function planTable(p) {
+  const sl = (p || {}).slices || [];
+  if (!sl.length) return '';
+  return `<table><thead><tr><th>Device</th><th>Layers</th><th>Memory</th><th>Link</th></tr></thead><tbody>${
+    sl.map(s => {
+      const peer = S.peers.find(x => x.id === s.id);
+      return `<tr><td>${esc(s.name)} <span class="tag ${s.host ? 'ok' : 'helper'}">${s.host ? 'host' : 'helper'}</span></td>
+        <td class="num">${s.from}–${s.to - 1} <span class="quiet">(${s.to - s.from})</span></td>
+        <td class="num">${gb(s.gb)} GB</td>
+        <td class="num">${s.host ? '–' : (peer && peer.rtt_ms != null ? num(peer.rtt_ms).toFixed(1) + ' ms' : '–')}</td></tr>`;
+    }).join('')}</tbody></table>
+    <div class="quiet" style="padding:10px 12px 0; font-size:12px">The host also keeps the embeddings and the output head,
+      so one small activation crosses the link per word rather than any weights.</div>`;
 }
 function renderRun() {
-  const r = S.run, usbRunning = usb.filter(d => d.running);
-  const busy = r.status === 'starting' || r.status === 'loading';
-  $('runbox').className = 'box ' + (r.status === 'ready' ? 'host' : r.status === 'failed' ? 'bad' : busy ? 'tightc' : '');
-  if (r.status === 'idle' && usbRunning.length) {
-    $('runbox').innerHTML = `<div class="name">One model per phone</div><div class="mono" style="color:var(--ink)">${usbRunning.map(d => (d.vision ? '🖼 photos → ' : '💬 text → ') + esc(d.name) + ' · ' + esc(d.running)).join(' &nbsp; ')}</div>`;
+  const r = S.run, m = chosen ? S.models.find(x => x.file === chosen) : null;
+  const live = ['ready', 'loading', 'starting'].includes(r.status);
+  $('run-act').innerHTML = live
+    ? `<button class="ghost danger" id="stopbtn">${ic('stop')}Stop</button>`
+    : (S.last_run ? `<button id="again">${ic('redo')}Start the last one again</button>` : '') +
+      `<button class="primary" data-go2="models">${ic('box')}Choose a model</button>`;
+
+  if (live) {
+    $('run-body').innerHTML = `<div class="card"><div class="cb">${runSummary()}</div></div>
+      <div class="sec">What each device is doing</div>
+      <div class="card"><div class="cb">${planTable(r.plan) || '<div class="quiet">Running on this laptop alone.</div>'}</div></div>
+      <div class="sec">Activity</div><div class="card"><div class="cb"><div class="feed" id="runfeed"></div></div></div>`;
+    renderFeed('runfeed');
+  } else if (m) {
+    const p = m.plan || {}, [lab, cls] = look(p.verdict), can = p.verdict !== 'not_possible';
+    const skipped = Object.entries(p.skipped || {});
+    $('run-body').innerHTML = `<div class="card">
+        <div class="ch">${ic('box', 'lg')}<div><h3>${esc(m.name)}</h3><div class="d mono">${gb(m.gb)} GB · ${m.layers} layers</div></div>
+          <span class="sp"></span><span class="tag ${cls}">${lab}</span></div>
+        <div class="cb">
+          <div class="muted" style="font-size:13px">${esc(p.reason || '')}</div>
+          <div class="kv" style="margin-top:14px">
+            <span class="k">Needs</span><span class="v">${gb(p.need_gb)} GB, weights and cache together</span>
+            <span class="k">Pooled</span><span class="v">${gb(S.pool_gb)} GB across ${1 + S.peers.length} device${S.peers.length ? 's' : ''}</span>
+          </div>
+          ${can ? `<div style="margin-top:16px">${layerBar(p)}</div>` : ''}
+          ${skipped.length ? `<div class="quiet" style="margin-top:12px; font-size:12.5px">Left out: ${
+            skipped.map(([k, v]) => `${esc(k)} (${esc(v)})`).join(', ')}</div>` : ''}
+          <div class="row" style="margin-top:18px">
+            <button class="primary" id="start" ${can ? '' : 'disabled'}>${ic('play')}Start this model</button>
+            <button class="ghost" data-go2="models">Back to models</button></div>
+        </div></div>
+      ${can ? `<div class="sec">The plan</div><div class="card"><div class="cb">${planTable(p)}</div></div>` : ''}`;
+    const b = $('start');
+    if (b) b.onclick = () => {
+      b.disabled = true; b.textContent = 'Starting…';
+      act(post('/api/run', { model: chosen }, 15000), 'starting the model').finally(() => { b.disabled = false; });
+    };
   } else {
-    $('runbox').innerHTML = `<div class="row between"><div><div class="name">${esc(r.model || 'Nothing running')}</div>
-        <div class="mono" style="color:var(--ink)">${esc(r.step || '')}${busy && r.seconds != null ? ' · ' + r.seconds + ' s' : ''}</div></div>
-       <div class="row">${r.status === 'idle' || r.status === 'failed' ? (S.last_run ? `<button id="again">${ic('redo')}Start again</button>` : '') + '<button class="plain" data-go2="2">Pick a model</button>' : `<button class="plain" id="stopbtn">${ic('stop')}Stop</button>`}${r.status === 'ready' ? `<button class="plain" id="benchbtn"${S.benching ? ' disabled' : ''} title="Ask this setup the same coding problems every time, and run the answers against their tests">${ic('chart')}${S.benching ? 'measuring, watch the feed…' : 'Measure this setup'}</button>` : ''}</div></div>
-       ${r.status !== 'idle' ? track(r) : ''}
-       ${r.plan && r.plan.slices ? '<div style="margin-top:12px">' + layerBar(r.plan) + '</div>' : ''}`;
+    $('run-body').innerHTML = `<div class="card"><div class="empty">
+      <h4>${r.status === 'failed' ? 'The last run stopped' : 'Nothing chosen yet'}</h4>
+      <p>${r.status === 'failed' ? esc(r.step)
+        : 'Pick a model and this page shows exactly which device would hold which layers before anything starts.'}</p></div></div>`;
   }
-  const sb = $('stopbtn'); if (sb) sb.onclick = () => fetch('/api/stop', {method: 'POST'}).then(poll);
-  const ag = $('again'); if (ag) ag.onclick = () => fetch('/api/again', {method: 'POST'}).then(poll);
-  const bb = $('benchbtn');
-  if (bb) bb.onclick = () => {
-    // the server owns this state, so the next poll cannot hand the button back mid-measurement
-    bb.disabled = true; bb.textContent = 'measuring, watch the feed…';
-    fetch('/api/bench', {method: 'POST', headers: {'content-type': 'application/json'}, body: '{}'}).then(poll);
-  };
-  scores();
-  document.querySelectorAll('[data-go2]').forEach(b => b.onclick = () => go(2));
-  $('apibox').innerHTML = `<div class="row between"><div><b>${ic('key')} Use it from other tools</b>
-      <div class="mono" style="color:var(--ink)">on this laptop: <code>http://localhost:8080/v1</code> · other devices: ${S.api.urls.map(u => '<code>' + u + '</code>').join(' ')}</div></div>
-      <div class="mono" style="color:var(--ink)">key <code>${S.api.key}</code></div></div>`;
-  const others = (S.chats || []).filter(c => c.from === 'api').slice(-6);
-  $('live').innerHTML = others.length ? `<h2>${ic('chat')}Answered for other tools</h2>` + others.map(c =>
-    `<div class="msg me"><div class="stats" style="margin:0 0 6px"><span>${c.t}</span><span>from a tool</span></div>${md(c.q)}</div>` +
-    `<div class="msg">${md(c.a || '…')}${c.done ? statChips({tps: c.tps, first: c.first_ms, total: c.total_ms, tokens: c.tokens, ptps: c.prompt_tps, role: 'split'}) : '<div class="stats"><span>answering…</span></div>'}</div>`).join('') : '';
-}
-function statChips(x) {
-  return `<div class="stats"><span class="tag ${x.role === 'vision' ? 'vision' : ''}">${esc(x.role || 'split')}</span>` +
-    (x.who ? `<span>${esc(x.who)}</span>` : '') +
-    (x.tps != null ? `<span>${ic('gauge')}${(+x.tps).toFixed(1)} tok/s</span>` : '') +
-    (x.first != null ? `<span>${ic('clock')}first word ${sec(x.first)}</span>` : '') +
-    (x.total != null ? `<span>${ic('clock')}total ${sec(x.total)}</span>` : '') +
-    (x.tokens != null ? `<span>${ic('hash')}${x.tokens} tokens</span>` : '') +
-    (x.ptps != null ? `<span>${ic('in')}read ${(+x.ptps).toFixed(0)} tok/s</span>` : '') + '</div>';
+  const sb = $('stopbtn'); if (sb) sb.onclick = () => act(post('/api/stop'), 'stopping');
+  const ag = $('again'); if (ag) ag.onclick = () => act(post('/api/again'), 'starting again');
+  wireGo();
 }
 
-// ---------- 5 stats
-function renderStats() {
-  const c = (S.chats || []).filter(x => x.done && x.tps != null).slice(-20);
-  if (!c.length) { $('chart').innerHTML = '<div class="mono">No answers yet.</div>'; $('hist').innerHTML = ''; return; }
-  const W = 1000, H = 180, top = Math.max(...c.map(x => x.tps), 1), ftop = Math.max(...c.map(x => (x.first_ms || 0) / 1000), 1), w = W / c.length;
-  let g = '';
-  c.forEach((x, i) => {
-    const h = (H - 30) * x.tps / top, fx = i * w + w * .15, bw = w * .7;
-    g += `<rect x="${fx + 4}" y="${H - 20 - h + 4}" width="${bw}" height="${h}" fill="#000" rx="3"/><rect x="${fx}" y="${H - 20 - h}" width="${bw}" height="${h}" fill="${x.devices > 1 ? '#3d3a7a' : '#1c5236'}" stroke="#4a6b5b" stroke-width="1.5" rx="3"/>`;
-    g += `<text x="${fx + bw / 2}" y="${H - 24 - h}" font-size="12" font-weight="900" text-anchor="middle">${x.tps.toFixed(1)}</text>`;
-    const fy = H - 20 - (H - 30) * ((x.first_ms || 0) / 1000) / ftop;
-    g += `<circle cx="${fx + bw / 2}" cy="${fy}" r="4" fill="#a78bfa" stroke="#0a0e10" stroke-width="1.5"/>`;
-  });
-  $('chart').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>`;
-  $('hist').innerHTML = c.slice().reverse().map(x => `<tr><td class="mono">${x.t}</td><td>${esc((x.q || '').slice(0, 90))}</td><td><b>${x.tps.toFixed(1)}</b></td>
-    <td>${sec(x.first_ms)}</td><td>${sec(x.total_ms)}</td><td>${x.tokens || '–'}</td><td class="mono">${x.from === 'page' ? 'this page' : 'a tool'}</td></tr>`).join('');
+/* --------------------------------------------------------------------- chat */
+function renderChat() {
+  $('chat-act').innerHTML = S.run.status === 'ready'
+    ? `<button class="ghost" data-go2="measure">${ic('chart')}Measure this setup</button>` : '';
+  $('apibox').innerHTML = `<div class="cb tight row wrap between">
+      <div class="row">${ic('key')}<div><div style="font-size:13px">Point any OpenAI-compatible tool at this</div>
+        <div class="quiet mono" style="font-size:11.5px">here <code>http://localhost:8080/v1</code>${
+          S.api.urls.length ? ' · elsewhere ' + S.api.urls.map(u => `<code>${esc(u)}</code>`).join(' ') : ''}</div></div></div>
+      <div class="quiet mono" style="font-size:11.5px">key <code>${esc(S.api.key)}</code></div></div>`;
+  wireGo();
 }
+const chipRow = x => [
+  x.who ? `<span class="who${x.role === 'vision' ? ' vision' : ''}">${esc(x.who)}</span>` : '',
+  x.tps != null ? `<span>${num(x.tps).toFixed(1)} tok/s</span>` : '',
+  x.first_ms != null ? `<span>first word ${sec(x.first_ms)}</span>` : '',
+  x.total_ms != null ? `<span>${sec(x.total_ms)} total</span>` : '',
+  x.tokens != null ? `<span>${x.tokens} tokens</span>` : '',
+].filter(Boolean).join('');
 
-// ---------- what each setup is worth
-async function scores() {
-  const rows = await (await fetch('/api/bench/results')).json().catch(() => []);
-  const box = $('scores');
-  if (!box) return;
-  if (!rows.length) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="box"><div class="name">What each setup is worth</div>
-    <div class="mono" style="color:var(--ink); margin-bottom:8px">Same coding problems, answers run against their tests.</div>
-    <table style="width:100%; border-collapse:collapse" class="mono">
-      <tr style="text-align:left"><th>setup</th><th>passed</th><th>accuracy</th><th>speed</th><th>measured</th></tr>
-      ${rows.map(r => `<tr><td>${r.label}</td><td>${r.passed}/${r.tasks}</td>
-        <td><b>${r.accuracy}%</b></td><td>${r.median_tps} tok/s</td><td>${r.when}</td></tr>`).join('')}
-    </table></div>`;
+const md = t => String(t).split('```').map((chunk, i) => i % 2
+  ? `<pre>${esc(chunk.replace(/^[a-z]*\n/i, ''))}</pre>`
+  : esc(chunk).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')).join('');
+
+function bubble(cls, html) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls; d.innerHTML = html;
+  $('log').appendChild(d); scrollTo(0, document.body.scrollHeight);
+  return d;
 }
-
-// ---------- chat
-let history = [], image = null;
-$('img').onchange = () => {
-  const f = $('img').files[0]; if (!f) return;
+$('img').onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  if (!/^image\//.test(f.type)) { toast('that is not an image'); e.target.value = ''; return; }
   const rd = new FileReader();
-  rd.onload = () => { const im = new Image(); im.onload = () => {
-    const k = Math.min(1, 768 / Math.max(im.width, im.height)); const c = document.createElement('canvas');
-    c.width = im.width * k; c.height = im.height * k; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-    image = c.toDataURL('image/jpeg', 0.85); $('preview').textContent = '🖼 photo attached (' + c.width + '×' + c.height + ')';
-    if (!$('q').value) $('q').value = 'What is in this photo?';
-  }; im.src = rd.result; };
+  rd.onerror = () => toast('could not read that file');
+  rd.onload = () => {
+    const im = new Image();
+    im.onerror = () => toast('could not decode that image');
+    im.onload = () => {
+      try {
+        const s = Math.min(1, 768 / Math.max(im.width, im.height));
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(im.width * s)); c.height = Math.max(1, Math.round(im.height * s));
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        image = c.toDataURL('image/jpeg', 0.85);
+        $('preview').textContent = `photo attached (${c.width}×${c.height})`;
+        if (!$('q').value.trim()) $('q').value = 'What is in this photo?';
+      } catch (err) { toast('could not prepare that photo: ' + (err.message || err)); }
+    };
+    im.src = rd.result;
+  };
   rd.readAsDataURL(f);
 };
-function md(t) {
-  return String(t || '').split('```').map((p, i) => i % 2 ? '<pre>' + esc(p.replace(/^[^\n]*\n/, '')) + '</pre>'
-    : esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')).join('');
-}
-function bubble(cls, html) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; $('log').appendChild(d); window.scrollTo(0, document.body.scrollHeight); return d; }
 $('f').onsubmit = async e => {
   e.preventDefault();
-  const text = $('q').value.trim(); if (!text) return;
+  const text = $('q').value.trim();
+  if (!text) return;
+  if (S && S.run.status !== 'ready' && !usb.some(d => d.running)) {
+    toast('nothing is running yet — start a model first');
+    return;
+  }
   $('q').value = ''; $('send').disabled = true;
-  bubble('me', (image ? `<img src="${image}">` : '') + md(text));
-  const content = image ? [{type: 'text', text}, {type: 'image_url', image_url: {url: image}}] : text;
-  const msgs = image ? [{role: 'user', content}] : [...history, {role: 'user', content}];
-  const hadImage = !!image; image = null; $('preview').textContent = ''; $('img').value = '';
-  const out = bubble('', '…'); const t0 = performance.now(); let first = null, acc = '', timings = null;
-  const tick = setInterval(() => { if (!acc) out.innerHTML = `<div class="stats"><span>${ic('clock')}thinking… ${sec(performance.now() - t0)}</span></div>`; }, 200);
+  const hadImage = !!image;
+  bubble('me', (hadImage ? `<img src="${image}">` : '') + md(text));
+  const content = hadImage ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: image } }] : text;
+  const msgs = hadImage ? [{ role: 'user', content }] : [...history, { role: 'user', content }];
+  image = null; $('preview').textContent = ''; $('img').value = '';
+  const out = bubble('', '…');
+  const t0 = performance.now();
+  let acc = '', first = null, timings = null;
+  const tick = setInterval(() => { if (!acc) out.textContent = `thinking… ${((performance.now() - t0) / 1000).toFixed(1)} s`; }, 200);
   try {
-    const r = await fetch('/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json', 'x-mesh-client': 'page'},
-      body: JSON.stringify({messages: msgs, stream: true, max_tokens: 1024})});
-    if (!r.ok) { out.textContent = (await r.json()).error.message; throw 0; }
-    const route = (r.headers.get('x-mesh-route') || '').split(':');
-    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
-    while (true) {
-      const {done, value} = await reader.read(); if (done) break;
-      buf += dec.decode(value, {stream: true});
-      let i; while ((i = buf.indexOf('\n')) >= 0) {
-        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
-        const j = JSON.parse(line.slice(6)); if (j.timings) timings = j.timings;
-        const piece = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
-        if (piece) { if (first == null) first = performance.now() - t0; acc += piece;
-          out.innerHTML = md(acc) + `<div class="stats"><span>${ic('clock')}${sec(performance.now() - t0)}</span></div>`; }
+    const r = await fetch('/v1/chat/completions', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-mesh-client': 'page' },
+      body: JSON.stringify({ messages: msgs, stream: true, max_tokens: 1024 }),
+    });
+    if (!r.ok || !r.body) {
+      let why = `HTTP ${r.status}`;
+      try { why = (await r.json()).error.message || why; } catch (_) {}
+      out.textContent = why;
+      throw 0;
+    }
+    const route = String(r.headers.get('x-mesh-route') || '').split(':');
+    let who = '', role = route[0] || '';
+    if (route[0] === 'mesh') {
+      who = (S.run.plan.slices || []).map(s => String(s.name).split(' (')[0]).join(' + ');
+      role = 'split';
+    } else if (route[1]) {
+      who = (usb.find(d => d.serial === route[1]) || {}).name || route[1];
+    }
+    const reader = r.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const d = line.slice(6).trim();
+        if (!d || d === '[DONE]') continue;
+        let j; try { j = JSON.parse(d); } catch (_) { continue; }
+        if (j.timings) timings = j.timings;
+        const piece = (((j.choices || [{}])[0] || {}).delta || {}).content || '';
+        if (piece) {
+          if (first === null) first = performance.now() - t0;
+          acc += piece;
+          out.innerHTML = md(acc) + `<div class="chips"><span>${((performance.now() - t0) / 1000).toFixed(1)} s</span></div>`;
+          scrollTo(0, document.body.scrollHeight);
+        }
       }
     }
-    const total = performance.now() - t0;
-    const who = route[0] === 'mesh' ? (S.run.plan && S.run.plan.slices ? S.run.plan.slices.map(s => s.name.split(' (')[0]).join(' + ') : 'mesh')
-      : ((usb.find(d => d.serial === route[1]) || {}).name || route[1]);
-    out.innerHTML = md(acc) + statChips({role: route[0] === 'mesh' ? 'split' : route[0], who, tps: timings && timings.predicted_per_second,
-      first, total, tokens: timings && timings.predicted_n, ptps: timings && timings.prompt_per_second});
-    if (!hadImage) history.push({role: 'user', content: text}, {role: 'assistant', content: acc});
-  } catch (err) { if (err) out.textContent = 'Error: ' + err; }
-  clearInterval(tick);
-  $('send').disabled = false; $('q').focus();
+    if (!acc) { out.textContent = 'The model returned nothing. The activity feed on Diagnostics will say why.'; throw 0; }
+    out.innerHTML = md(acc) + `<div class="chips">${chipRow({
+      who, role, tps: timings && timings.predicted_per_second, first_ms: first,
+      total_ms: performance.now() - t0, tokens: timings && timings.predicted_n })}</div>`;
+    history.push({ role: 'user', content: text }, { role: 'assistant', content: acc });
+    if (history.length > 20) history = history.slice(-20);   // keep the prompt inside the context window
+  } catch (err) {
+    if (err) out.textContent = 'Error: ' + (err.message || err);
+  } finally {
+    clearInterval(tick); $('send').disabled = false; $('q').focus();
+  }
 };
-$('q').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } });
-$('copyjoin').onclick = e => {
-  e.preventDefault();
-  const t = $('joincmd').textContent;
-  (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(
-    () => { $('copyjoin').textContent = 'copied'; setTimeout(() => $('copyjoin').textContent = 'copy', 1200); },
-    () => { const r = document.createRange(); r.selectNode($('joincmd')); getSelection().removeAllRanges(); getSelection().addRange(r); });
-};
+$('q').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } };
+
+/* ------------------------------------------------------------------ measure */
+function renderStats() {
+  const ready = S.run.status === 'ready';
+  $('measure-act').innerHTML =
+    `<button class="primary" id="benchbtn" ${ready && !S.benching ? '' : 'disabled'}>${ic('chart')}${
+      S.benching ? 'Measuring…' : 'Measure this setup'}</button>`;
+  const bb = $('benchbtn');
+  if (bb && ready && !S.benching) bb.onclick = () => {
+    bb.disabled = true; bb.textContent = 'Measuring…';
+    post('/api/bench', {}, 15000)
+      .then(() => { poll(); setTimeout(scores, 5000); })
+      .catch(e => { toast('could not start the measurement: ' + e.message); bb.disabled = false; });
+  };
+  const c = S.chats.filter(x => x.done && x.tps != null).slice(-20);
+  if (!c.length) {
+    $('chartbox').innerHTML = `<div class="empty"><h4>No answers yet</h4>
+      <p>Ask something on the Chat page and the speed of each answer appears here, one device against the split.</p></div>`;
+    $('histbox').innerHTML = '';
+    return;
+  }
+  const W = 1000, H = 190, top = Math.max(...c.map(x => num(x.tps)), 1), w = W / c.length;
+  let g = '';
+  c.forEach((x, i) => {
+    const h = (H - 34) * num(x.tps) / top, fx = i * w + w * .2, bw = w * .6;
+    g += `<rect x="${fx.toFixed(1)}" y="${(H - 22 - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 1).toFixed(1)}" fill="${num(x.devices, 1) > 1 ? '#a78bfa' : '#4ade80'}" rx="3" opacity=".85"/>`;
+    g += `<text x="${(fx + bw / 2).toFixed(1)}" y="${(H - 27 - h).toFixed(1)}" font-size="11" text-anchor="middle" fill="#8b8b93" font-family="ui-monospace,monospace">${num(x.tps).toFixed(1)}</text>`;
+  });
+  $('chartbox').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>
+    <div class="row wrap quiet mono" style="gap:16px; font-size:11.5px; margin-top:6px">
+      <span><b style="color:#4ade80">■</b> one device</span><span><b style="color:#a78bfa">■</b> split across the mesh</span></div>`;
+  $('histbox').innerHTML = `<table><thead><tr><th>Time</th><th>Question</th><th>tok/s</th><th>First word</th><th>Tokens</th><th>Devices</th></tr></thead><tbody>${
+    c.slice().reverse().map(x => `<tr><td class="num quiet">${esc(x.t)}</td><td>${esc(String(x.q || '').slice(0, 80))}</td>
+      <td class="num">${num(x.tps).toFixed(1)}</td><td class="num">${sec(x.first_ms)}</td>
+      <td class="num">${x.tokens || '–'}</td><td class="num">${num(x.devices, 1)}</td></tr>`).join('')}</tbody></table>`;
+}
+async function scores() {
+  let rows = [];
+  try { rows = await api('/api/bench/results', {}, 8000) || []; }
+  catch (e) { $('scores').innerHTML = `<div class="cb" style="color:var(--bad)">Could not read the results: ${esc(e.message || e)}</div>`; return; }
+  if (!Array.isArray(rows)) rows = [];
+  $('scores').innerHTML = rows.length
+    ? `<table><thead><tr><th>Setup</th><th>Accuracy</th><th>Passed</th><th>Median speed</th><th>Measured</th></tr></thead><tbody>${
+      rows.map(r => `<tr><td>${esc(r.label)}</td><td class="num"><b>${esc(r.accuracy)}%</b></td>
+        <td class="num quiet">${esc(r.passed)}/${esc(r.tasks)}</td><td class="num">${esc(r.median_tps)} tok/s</td>
+        <td class="num quiet">${esc(r.when)}</td></tr>`).join('')}</tbody></table>`
+    : `<div class="empty"><h4>Nothing measured yet</h4>
+        <p>Start a model, then press <b>Measure this setup</b>. It asks fifteen coding problems and runs every answer
+           against its tests, so the score is earned rather than claimed.</p></div>`;
+}
+
+/* -------------------------------------------------------------- diagnostics */
+function renderFeed(target = 'feed') {
+  const el = $(target);
+  if (!el) return;
+  el.innerHTML = S.activity.map(a => {
+    const line = String(a.line || '');
+    const cls = /^✓/.test(line) ? 'ok' : /^(✗|refused|failed)/.test(line) ? 'no' : '';
+    return `<div class="${cls}"><span class="t">${esc(a.t)}</span>${esc(line)}</div>`;
+  }).join('') || '<div class="quiet">Nothing has happened yet.</div>';
+}
 $('checkbtn').onclick = async () => {
   const b = $('checkbtn');
-  b.disabled = true; b.textContent = 'checking…';
+  b.disabled = true; b.textContent = 'Checking…';
   try {
-    const r = await (await fetch('/api/check', {method: 'POST'})).json();
-    $('checks').innerHTML = '<div class="dash"></div>' + r.map(c =>
-      `<div class="row" style="flex-wrap:nowrap; align-items:flex-start; padding:3px 0">
-         <span class="${c.ok ? 'ok' : 'no'}" style="width:16px">${c.ok ? '\u2713' : '\u2717'}</span>
-         <b style="width:120px">${esc(c.what)}</b><span class="mono" style="flex:1">${esc(c.detail)}</span></div>`).join('');
+    const r = await post('/api/check', undefined, 30000) || [];
+    $('checklist').innerHTML = `<table><tbody>${r.map(c => `<tr>
+      <td style="width:26px; color:${c.ok ? 'var(--ok)' : 'var(--bad)'}">${c.ok ? '✓' : '✗'}</td>
+      <td style="width:160px"><b>${esc(c.what)}</b></td>
+      <td class="mono quiet">${esc(c.detail)}</td></tr>`).join('')}</tbody></table>`;
   } catch (e) {
-    $('checks').innerHTML = `<div class="no">could not run the checks: ${esc(String(e))}</div>`;
+    $('checklist').innerHTML = `<div class="cb" style="color:var(--bad)">Could not run the checks: ${esc(e.message || e)}</div>`;
   }
   b.disabled = false; b.innerHTML = ic('check') + 'Run the checks';
   poll();
 };
-$('newqr').onclick = e => { e.preventDefault(); fetch('/api/newqr', {method: 'POST'}).then(poll); };
+$('newqr').onclick = () => act(post('/api/newqr'), 'making a new code');
+$('copyjoin').onclick = () => {
+  const t = $('joincmd').textContent;
+  const done = () => { $('copyjoin').textContent = 'copied'; setTimeout(() => $('copyjoin').textContent = 'copy', 1200); };
+  const fallback = () => {
+    try {
+      const r = document.createRange(); r.selectNode($('joincmd'));
+      getSelection().removeAllRanges(); getSelection().addRange(r);
+      toast('clipboard is blocked here — the command is selected, press ctrl+C');
+    } catch (_) { toast('could not copy: select the command by hand'); }
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, fallback); else fallback();
+};
+
+go(location.hash.slice(1) || 'overview', false);
 </script>
 </body>
 </html>
