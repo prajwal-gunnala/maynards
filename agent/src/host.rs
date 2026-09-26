@@ -174,6 +174,9 @@ fn read_gguf(path: &std::path::Path) -> Option<Model> {
     fn read_str(r: &mut BufReader<fs::File>, pos: &mut u64) -> Option<String> {
         let mut l = [0u8; 8]; r.read_exact(&mut l).ok()?; *pos += 8;
         let n = u64::from_le_bytes(l) as usize;
+        // a truncated or corrupt file gives a nonsense length; allocating it aborts the whole
+        // process (Rust does not unwind on allocation failure) and scan_models runs on every poll
+        if n > (1 << 20) { return None; }
         let mut b = vec![0u8; n]; r.read_exact(&mut b).ok()?; *pos += n as u64;
         Some(String::from_utf8_lossy(&b).to_string())
     }
@@ -220,7 +223,7 @@ fn read_gguf(path: &std::path::Path) -> Option<Model> {
         rd!(4);
         offsets.push(u64::from_le_bytes(rd!(8)));
     }
-    let align = meta.get("general.alignment").and_then(|v| v.as_u64()).unwrap_or(32);
+    let align = meta.get("general.alignment").and_then(|v| v.as_u64()).filter(|a| *a > 0).unwrap_or(32);
     let data = pos.div_ceil(align) * align;
     let mut order: Vec<usize> = (0..offsets.len()).collect();
     order.sort_by_key(|&i| offsets[i]);
@@ -232,6 +235,7 @@ fn read_gguf(path: &std::path::Path) -> Option<Model> {
     let arch = meta.get("general.architecture").and_then(|v| v.as_str()).unwrap_or("").to_string();
     let num = |k: &str| meta.get(&format!("{arch}.{k}")).and_then(|v| v.as_u64());
     let n_layer = num("block_count")? as usize;
+    if n_layer == 0 || n_layer > 512 { return None; }
     let mut layers = vec![0u64; n_layer];
     let mut other = 0;
     for (i, n) in names.iter().enumerate() {
@@ -471,6 +475,10 @@ fn start(hub: Arc<Hub>, file: String) {
     hub.say(format!("run {}: {}", m.name, p["reason"].as_str().unwrap_or("")));
     thread::spawn(move || {
         let cancelled = || *hub.run_gen.lock().unwrap() != gen;
+        // Only this run may report a failure. A thread from a previous run that is still
+        // unwinding must not call stop(): that would kill the run the user just started and
+        // blame it on whatever the old thread was doing.
+        let bail = |why: &str| { if !cancelled() { stop(&hub, why); } };
         let slices = p["slices"].as_array().cloned().unwrap_or_default();
         let helpers: Vec<Value> = slices.iter().filter(|s| !s["host"].as_bool().unwrap_or(false)).cloned().collect();
         let mut addrs = Vec::new();
@@ -479,7 +487,7 @@ fn start(hub: Arc<Hub>, file: String) {
             set_run(&hub, "starting", &format!("Starting {name}"));
             hub.replies.lock().unwrap().remove(id);
             let wire = hub.peers.lock().unwrap().get(id).map(|p| p.wire.clone());
-            let Some(w) = wire else { stop(&hub, &format!("failed: {name} is not connected")); return; };
+            let Some(w) = wire else { bail(&format!("failed: {name} is not connected")); return; };
             let _ = send(&w, json!({"t": "run", "layers": format!("{}-{}", s["from"], s["to"].as_u64().unwrap_or(1) - 1), "model": m.name}));
             let t0 = Instant::now();
             let reply = loop {
@@ -494,12 +502,18 @@ fn start(hub: Arc<Hub>, file: String) {
                     hub.say(format!("✓ {name} ready at {a}, layers {}-{}", s["from"], s["to"].as_u64().unwrap_or(1) - 1));
                     addrs.push(a);
                 }
-                other => { stop(&hub, &format!("failed: {name} did not start ({})", other.map(|o| o["reason"].as_str().unwrap_or("no answer").to_string()).unwrap_or("no answer".into()))); return; }
+                other => { bail(&format!("failed: {name} did not start ({})", other.map(|o| o["reason"].as_str().unwrap_or("no answer").to_string()).unwrap_or("no answer".into()))); return; }
             }
         }
         for (a, s) in addrs.iter().zip(&helpers) {
-            let ok = (0..10).any(|_| { let ok = a.parse::<SocketAddr>().ok().and_then(|sa| TcpStream::connect_timeout(&sa, Duration::from_secs(1)).ok()).is_some(); if !ok { thread::sleep(Duration::from_millis(500)); } ok });
-            if !ok { stop(&hub, &format!("failed: cannot reach {} at {a}", s["name"].as_str().unwrap_or(""))); return; }
+            let mut ok = false;
+            for _ in 0..10 {
+                if cancelled() { return; }
+                ok = a.parse::<SocketAddr>().ok().and_then(|sa| TcpStream::connect_timeout(&sa, Duration::from_secs(1)).ok()).is_some();
+                if ok { break; }
+                thread::sleep(Duration::from_millis(500));
+            }
+            if !ok { bail(&format!("failed: cannot reach {} at {a}", s["name"].as_str().unwrap_or(""))); return; }
         }
         // engine arguments: same rules as the phone app's EngineArgs
         let bin = std::env::var("MESH_LLAMA_BIN").unwrap_or_else(|_| "/mnt/storage/meshai/build/v3/host/bin".into());
@@ -525,16 +539,40 @@ fn start(hub: Arc<Hub>, file: String) {
             }
         }
         let log = fs::File::create("/tmp/mesh-host-engine.log").ok();
-        let child = Command::new(format!("{bin}/llama-server")).args(&args)
+        let mut cmd = Command::new(format!("{bin}/llama-server"));
+        cmd.args(&args)
             .stdout(log.as_ref().and_then(|f| f.try_clone().ok()).map(Stdio::from).unwrap_or(Stdio::null()))
-            .stderr(log.map(Stdio::from).unwrap_or(Stdio::null())).spawn();
-        match child { Ok(c) => *hub.engine.lock().unwrap() = Some(c), Err(e) => { stop(&hub, &format!("failed: engine: {e}")); return; } }
+            .stderr(log.map(Stdio::from).unwrap_or(Stdio::null()));
+        // if this agent dies, the kernel stops the engine too, so a restart can bind the port again
+        #[cfg(unix)]
+        unsafe {
+            use std::os::unix::process::CommandExt;
+            cmd.pre_exec(|| { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM); Ok(()) });
+        }
+        let child = cmd.spawn();
+        match child {
+            Ok(c) => {
+                // Publish first, then check: if the run was cancelled while llama-server was
+                // starting, the child is ours to kill. Without this it keeps the port and
+                // several GB, and every later run fails with "the engine stopped".
+                let pid = c.id();
+                *hub.engine.lock().unwrap() = Some(c);
+                if cancelled() {
+                    let mut slot = hub.engine.lock().unwrap();
+                    if slot.as_ref().map(|c| c.id()) == Some(pid) {
+                        if let Some(mut c) = slot.take() { let _ = c.kill(); let _ = c.wait(); }
+                    }
+                    return;
+                }
+            }
+            Err(e) => { bail(&format!("failed: engine: {e}")); return; }
+        }
         set_run(&hub, "loading", if helpers.is_empty() { "Loading the model" } else { "Sending layers to the phones" });
         loop {
             if cancelled() { return; }
             if let Ok((200, _)) = crate::http_get(&format!("127.0.0.1:{ENGINE_PORT}"), "/health") { break; }
             let exited = hub.engine.lock().unwrap().as_mut().map(|c| c.try_wait().ok().flatten().is_some()).unwrap_or(true);
-            if exited { stop(&hub, "failed: the engine stopped (log: /tmp/mesh-host-engine.log)"); return; }
+            if exited { bail("failed: the engine stopped (log: /tmp/mesh-host-engine.log)"); return; }
             thread::sleep(Duration::from_secs(1));
         }
         let secs = hub.run.lock().unwrap().started.map(|t| t.elapsed().as_secs()).unwrap_or(0);
@@ -547,7 +585,7 @@ fn start(hub: Arc<Hub>, file: String) {
             thread::sleep(Duration::from_secs(2));
             if cancelled() { return; }
             let exited = hub.engine.lock().unwrap().as_mut().map(|c| c.try_wait().ok().flatten().is_some()).unwrap_or(true);
-            if exited { stop(&hub, "failed: the engine stopped (log: /tmp/mesh-host-engine.log)"); return; }
+            if exited { bail("failed: the engine stopped (log: /tmp/mesh-host-engine.log)"); return; }
         }
     });
 }
@@ -810,10 +848,17 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         _ if path.starts_with("/v1/") => {
             let photo = String::from_utf8_lossy(&body).contains("\"image_url\"");
             let usb_vision = photo && crate::phones().iter().any(|p| crate::running_model(crate::port_for(&hub.usb_ports, p)).map(|m| crate::is_vision(&m)).unwrap_or(false));
-            if hub.run.lock().unwrap().status == "ready" && !usb_vision {
+            let (status, step) = { let r = hub.run.lock().unwrap(); (r.status.clone(), r.step.clone()) };
+            if status == "ready" && !usb_vision {
                 forward_logged(s, &hub, &first, &headers, &body)
-            } else {
+            } else if usb_vision || !crate::phones().is_empty() {
                 crate::route_to_phones(s, &first, &headers, &body, &hub.usb_ports)
+            } else {
+                // say what is actually happening. "no model is running: start one first" while a
+                // model is loading, or after it failed, is the worst thing to show an audience.
+                let msg = if status == "idle" { "no model is running: start one first".to_string() }
+                          else { format!("{status}: {step}") };
+                crate::reply_status(&mut s, 503, "application/json", json!({"error": {"message": msg}}).to_string().as_bytes())
             }
         }
         _ => write!(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),

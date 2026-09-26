@@ -184,7 +184,13 @@ fn start_helper(bind: &str) -> Res<(Child, String)> {
             .spawn().map_err(|e| format!("cannot start {bin}: {e} (set MESH_RPC_SERVER)"))?;
         let addr = format!("{bind}:{port}");
         for _ in 0..30 {
-            if TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_millis(300)).is_ok() {
+            let sa = match addr.parse::<std::net::SocketAddr>() {
+                Ok(sa) => sa,
+                // an empty or IPv6 bind address is not parseable here; try the next port rather
+                // than panicking, which would kill the helper and make the host blame the phone
+                Err(_) => break,
+            };
+            if TcpStream::connect_timeout(&sa, Duration::from_millis(300)).is_ok() {
                 return Ok((child, addr));
             }
             if let Ok(Some(_)) = child.try_wait() { break; }
@@ -212,8 +218,18 @@ const PHONE_MODELS: &str = "/sdcard/Android/data/ai.maynards.mesh/files/models";
 type Ports = std::sync::Arc<Mutex<std::collections::BTreeMap<String, u16>>>;
 
 fn adb(serial: &str, args: &[&str]) -> String {
-    Command::new("adb").arg("-s").arg(serial).args(args).output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).replace('\r', "")).unwrap_or_default()
+    match Command::new("adb").arg("-s").arg(serial).args(args).output() {
+        Ok(o) => {
+            // a failed forward, an unauthorised device or a refused am start used to return ""
+            // and be treated as success, so the phone silently did nothing
+            if !o.status.success() {
+                let err = String::from_utf8_lossy(&o.stderr).trim().to_string();
+                eprintln!("adb {args:?} on {serial}: {}", if err.is_empty() { "failed".into() } else { err });
+            }
+            String::from_utf8_lossy(&o.stdout).replace('\r', "")
+        }
+        Err(e) => { eprintln!("adb not available: {e}"); String::new() }
+    }
 }
 
 fn phones() -> Vec<String> {
@@ -369,7 +385,12 @@ fn read_request(s: &TcpStream) -> std::io::Result<(String, Vec<String>, Vec<u8>)
 }
 
 fn reply(s: &mut TcpStream, ctype: &str, b: &[u8]) -> std::io::Result<()> {
-    write!(s, "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n", b.len())?;
+    reply_status(s, 200, ctype, b)
+}
+
+fn reply_status(s: &mut TcpStream, code: u16, ctype: &str, b: &[u8]) -> std::io::Result<()> {
+    let text = match code { 200 => "OK", 404 => "Not Found", 503 => "Service Unavailable", _ => "Error" };
+    write!(s, "HTTP/1.1 {code} {text}\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n", b.len())?;
     s.write_all(b)
 }
 
