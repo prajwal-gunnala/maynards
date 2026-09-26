@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeshAI</title>
+<style>
+  :root { --ink:#0a0a0a; --paper:#fff; --cream:#f3f1ea; --yellow:#ffd60a; --green:#b8f0c6; --purple:#cfc3ff; --red:#ff8a80; --muted:#55555c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--cream); color:var(--ink); font:16px/1.45 system-ui, sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:20px 16px 150px; }
+  header { display:flex; gap:14px; align-items:center; margin-bottom:18px; }
+  .logo { width:52px; height:52px; background:var(--yellow); border:3px solid var(--ink); border-radius:12px; box-shadow:4px 4px 0 var(--ink);
+          display:grid; place-items:center; font-weight:900; font-size:26px; }
+  h1 { margin:0; font-size:26px; font-weight:900; letter-spacing:-.5px; text-transform:uppercase; }
+  h2 { font-size:12px; letter-spacing:2px; text-transform:uppercase; font-weight:900; margin:22px 0 10px; }
+  .sub { color:var(--muted); }
+  .tabs { display:flex; gap:10px; margin-bottom:16px; }
+  .tab { border:3px solid var(--ink); border-radius:10px; padding:10px 18px; font-weight:900; letter-spacing:1px; text-transform:uppercase;
+         background:var(--paper); box-shadow:3px 3px 0 var(--ink); cursor:pointer; }
+  .tab.on { background:var(--ink); color:var(--yellow); box-shadow:none; transform:translate(3px,3px); }
+  .box { background:var(--paper); border:3px solid var(--ink); border-radius:12px; box-shadow:6px 6px 0 var(--ink); padding:16px; margin-bottom:16px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:16px; }
+  .dev.running { background:var(--green); } .dev.vision { background:var(--purple); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .name { font-weight:900; font-size:19px; }
+  .mono { font:600 12px ui-monospace, monospace; color:var(--muted); }
+  .sticker { display:inline-block; border:2px solid var(--ink); border-radius:4px; padding:1px 8px; font:900 10px system-ui; letter-spacing:1.5px;
+             text-transform:uppercase; background:var(--paper); transform:rotate(-3deg); box-shadow:2px 2px 0 var(--ink); }
+  .bar { height:16px; border:3px solid var(--ink); border-radius:6px; background:var(--paper); overflow:hidden; margin:4px 0 10px; }
+  .bar i { display:block; height:100%; background:var(--yellow); border-right:3px solid var(--ink); }
+  select { border:3px solid var(--ink); border-radius:8px; padding:8px; font:inherit; background:var(--paper); flex:1; min-width:0; }
+  button, label.btn { border:3px solid var(--ink); border-radius:8px; background:var(--yellow); font-weight:900; padding:8px 14px; cursor:pointer;
+          box-shadow:3px 3px 0 var(--ink); text-transform:uppercase; letter-spacing:1px; font-size:13px; }
+  button.plain { background:var(--paper); }
+  button:disabled { background:var(--cream); color:var(--muted); box-shadow:none; }
+  .hint { color:var(--muted); font-size:14px; }
+  /* chat */
+  .msg { border:2px solid var(--ink); border-radius:12px; padding:12px; margin:10px 0; max-width:88%; background:var(--paper); white-space:pre-wrap; }
+  .me { background:var(--yellow); margin-left:auto; }
+  .meta { font:600 11px ui-monospace, monospace; color:var(--muted); margin-top:6px; }
+  .tag { display:inline-block; border:2px solid var(--ink); border-radius:4px; padding:0 6px; font:900 10px system-ui; letter-spacing:1px; text-transform:uppercase; margin-right:6px; }
+  .tag.vision { background:var(--purple); } .tag.text { background:var(--green); }
+  .msg img { max-width:240px; border:2px solid var(--ink); border-radius:8px; display:block; margin-bottom:8px; }
+  pre { background:var(--ink); color:var(--yellow); padding:10px; border-radius:6px; overflow-x:auto; white-space:pre; }
+  form { position:fixed; left:0; right:0; bottom:0; background:var(--paper); border-top:3px solid var(--ink); padding:12px 16px; }
+  form .row { max-width:980px; margin:0 auto; flex-wrap:nowrap; }
+  textarea { flex:1; border:3px solid var(--ink); border-radius:10px; padding:10px; font:inherit; resize:none; height:52px; }
+  #preview { max-width:980px; margin:0 auto 8px; font:600 12px ui-monospace, monospace; }
+  .chips { display:flex; gap:10px; flex-wrap:wrap; }
+  .chip { border:3px solid var(--ink); border-radius:10px; padding:6px 12px; box-shadow:3px 3px 0 var(--ink); font-weight:800; background:var(--paper); }
+  .chip.text { background:var(--green); } .chip.vision { background:var(--purple); }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">M</div>
+    <div><h1>MeshAI</h1><div class="sub">Your phones. One brain. Nothing leaves your devices.</div></div>
+  </header>
+  <div class="tabs">
+    <div class="tab on" data-t="devices">📱 Devices</div>
+    <div class="tab" data-t="chat">💬 Chat</div>
+  </div>
+
+  <section id="devices">
+    <div class="box" style="background:var(--yellow)">
+      <div class="row" style="justify-content:space-between">
+        <div><div class="name">Vision + 8B</div><div class="hint" style="color:var(--ink)">One phone reads photos, the other answers text.</div></div>
+        <button class="plain" id="preset">Start both</button>
+      </div>
+    </div>
+    <h2>Phones on USB</h2>
+    <div class="grid" id="list"><div class="hint">Looking for phones…</div></div>
+    <p class="hint">Plug a phone in with USB debugging on. Each phone needs the MeshAI app; models live in the app's folder.</p>
+  </section>
+
+  <section id="chat" class="hide">
+    <div class="chips" id="chips"></div>
+    <div id="log"></div>
+  </section>
+</div>
+
+<form id="f" class="hide">
+  <div id="preview"></div>
+  <div class="row">
+    <label class="btn" title="Upload a photo">🖼<input type="file" id="img" accept="image/*" hidden></label>
+    <textarea id="q" placeholder="Ask anything · photos go to the vision phone"></textarea>
+    <button id="send" style="height:52px">Send</button>
+  </div>
+</form>
+
+<script>
+const $ = id => document.getElementById(id);
+let devices = [], busy = {};
+
+// ---- tabs
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  $('devices').classList.toggle('hide', t.dataset.t !== 'devices');
+  $('chat').classList.toggle('hide', t.dataset.t !== 'chat');
+  $('f').classList.toggle('hide', t.dataset.t !== 'chat');
+  if (t.dataset.t === 'chat') { chips(); $('q').focus(); }
+});
+
+// ---- devices
+const isVision = f => /-vl|vision|llava/i.test(f);
+async function refresh() {
+  try { devices = await (await fetch('/api/devices')).json(); } catch (e) { return; }
+  $('list').innerHTML = devices.length ? devices.map(card).join('') : '<div class="hint">No phones on USB.</div>';
+  devices.forEach(d => {
+    $('run-' + d.serial).onclick = () => run(d.serial, $('m-' + d.serial).value);
+    $('stop-' + d.serial).onclick = () => stop(d.serial);
+  });
+}
+function card(d) {
+  const state = d.running ? (d.vision ? 'vision' : 'running') : '';
+  const free = d.memTotalGb ? Math.round(100 * d.memFreeGb / d.memTotalGb) : 0;
+  // a model still being copied to the phone cannot run yet (the 30B is 18.6 GB when complete)
+  const full = {'Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf': 18.6};
+  const opts = d.models.map(m => (full[m.file] && m.gb < full[m.file]) ? `<option disabled>${m.file.replace(/\.gguf$/, '')} · copying ${m.gb} / ${full[m.file]} GB</option>` : `<option value="${m.file}" ${m.file.replace(/\.gguf$/, '') === (d.running || '').replace(/\.gguf$/, '') ? 'selected' : ''}>${m.file.replace(/\.gguf$/, '')} · ${m.gb} GB</option>`).join('');
+  return `<div class="box dev ${state}">
+    <div class="row" style="justify-content:space-between">
+      <div class="name">📱 ${d.name}</div>
+      <span class="sticker">${busy[d.serial] || (d.running ? (d.vision ? 'vision' : 'text') : 'idle')}</span>
+    </div>
+    <div class="mono">${d.chip} · ${d.serial} · 🔋 ${d.battery}%${d.charging ? ' ⚡' : ''}</div>
+    <div class="mono" style="margin-top:8px">MEMORY · ${d.memFreeGb} / ${d.memTotalGb} GB free</div>
+    <div class="bar"><i style="width:${free}%"></i></div>
+    <div class="mono">${d.running ? '▶ running ' + d.running : 'no model running'}</div>
+    <div class="row" style="margin-top:10px">
+      <select id="m-${d.serial}">${opts || '<option>no models on this phone</option>'}</select>
+      <button id="run-${d.serial}" ${opts ? '' : 'disabled'}>Run</button>
+      <button id="stop-${d.serial}" class="plain">Stop</button>
+    </div>
+  </div>`;
+}
+async function run(serial, model) {
+  busy[serial] = 'starting'; refresh();
+  await fetch('/api/run', {method: 'POST', body: JSON.stringify({serial, model: model.replace(/\.gguf$/, '')})});
+  setTimeout(() => { delete busy[serial]; refresh(); }, 12000);
+}
+async function stop(serial) {
+  await fetch('/api/stop', {method: 'POST', body: JSON.stringify({serial})});
+  setTimeout(refresh, 1500);
+}
+$('preset').onclick = async () => {
+  // the phone that has a vision model runs it; another phone runs the 8B (or its biggest text model)
+  const vis = devices.find(d => d.models.some(m => isVision(m.file)));
+  if (vis) run(vis.serial, vis.models.find(m => isVision(m.file)).file);
+  const txt = devices.find(d => d !== vis && d.models.some(m => !isVision(m.file)));
+  if (txt) {
+    const ms = txt.models.filter(m => !isVision(m.file) && !/30B/i.test(m.file));
+    const pick = ms.find(m => /8B/i.test(m.file)) || ms.sort((a, b) => b.gb - a.gb)[0];
+    if (pick) run(txt.serial, pick.file);
+  }
+  if (!vis && !txt) alert('Plug in the phones first.');
+};
+refresh(); setInterval(refresh, 4000);
+
+// ---- chat
+let history = [], image = null;
+async function chips() {
+  const s = await (await fetch('/api/status')).json();
+  $('chips').innerHTML = s.length ? s.map(d => `<div class="chip ${d.role}">${d.role === 'vision' ? '🖼 photos' : '💬 text'} · ${d.model.replace(/\.gguf$/, '')}</div>`).join('')
+    : '<div class="hint">No phone is running a model. Go to Devices and press Run.</div>';
+}
+setInterval(() => { if (!$('chat').classList.contains('hide')) chips(); }, 5000);
+
+$('img').onchange = () => {
+  const f = $('img').files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const im = new Image();
+    im.onload = () => {   // shrink to 768 px so the phone reads it in seconds, not minutes
+      const k = Math.min(1, 768 / Math.max(im.width, im.height));
+      const c = document.createElement('canvas'); c.width = im.width * k; c.height = im.height * k;
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      image = c.toDataURL('image/jpeg', 0.85);
+      $('preview').textContent = '🖼 photo attached (' + c.width + '×' + c.height + ')';
+      if (!$('q').value) $('q').value = 'What is in this photo?';
+    };
+    im.src = r.result;
+  };
+  r.readAsDataURL(f);
+};
+function md(t) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return t.split('```').map((p, i) => i % 2 ? '<pre>' + esc(p.replace(/^[^\n]*\n/, '')) + '</pre>'
+    : esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')).join('');
+}
+function bubble(cls, html) {
+  const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; $('log').appendChild(d);
+  window.scrollTo(0, document.body.scrollHeight); return d;
+}
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('q').value.trim(); if (!text) return;
+  $('q').value = ''; $('send').disabled = true;
+  bubble('me', (image ? `<img src="${image}">` : '') + md(text));
+  const content = image ? [{type: 'text', text}, {type: 'image_url', image_url: {url: image}}] : text;
+  const msgs = image ? [{role: 'user', content}] : [...history, {role: 'user', content}];
+  image = null; $('preview').textContent = ''; $('img').value = '';
+  const out = bubble('', '…'); const t0 = performance.now(); let first = 0, acc = '', timings = null;
+  try {
+    const r = await fetch('/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json'},
+      body: JSON.stringify({messages: msgs, stream: true, max_tokens: 1024})});
+    if (!r.ok) { out.textContent = (await r.json()).error.message; throw 0; }
+    const route = r.headers.get('x-mesh-route') || '';
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const {done, value} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        const j = JSON.parse(line.slice(6));
+        if (j.timings) timings = j.timings;
+        const piece = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+        if (piece) { if (!first) first = performance.now() - t0; acc += piece; out.innerHTML = md(acc); }
+      }
+    }
+    const [role, dev] = route.split(':');
+    const name = (devices.find(d => d.serial === dev) || {}).name || dev;
+    out.innerHTML = md(acc) + `<div class="meta"><span class="tag ${role}">${role}</span>${name}` +
+      (timings ? ` · ${timings.predicted_per_second.toFixed(1)} tok/s · first word ${(first / 1000).toFixed(1)}s` : '') + '</div>';
+    if (!image && typeof content === 'string') history.push({role: 'user', content: text}, {role: 'assistant', content: acc});
+  } catch (err) { if (err) out.textContent = 'Error: ' + err; }
+  $('send').disabled = false; $('q').focus();
+};
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } });
+</script>
+</body>
+</html>

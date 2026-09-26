@@ -6,6 +6,7 @@
 //!   mesh tests FILE [--out PATH] [--host IP]    write unit tests for a file
 //!   mesh diff             [--host IP]           review staged git changes (or unstaged if none)
 //!   mesh hook                                   run `mesh diff` before every git commit (advice only)
+//!   mesh panel [--port 8080]                    web app: see the USB phones, run a model on each, chat with them
 //!   mesh route --text IP:PORT --vision IP:PORT [--port 8080] [--lan]
 //!                                               one address for several phones: photos go to the vision phone,
 //!                                               text to the text phone; a chat page at http://localhost:8080/
@@ -35,6 +36,7 @@ fn main() {
         Some("tests") if args.len() >= 2 => tests(&host(host_flag), &args[1], flag(&args, "--out")),
         Some("diff") => diff(&host(host_flag)),
         Some("hook") => hook(),
+        Some("panel") => panel(flag(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(API_PORT)),
         Some("route") => route(flag(&args, "--text"), flag(&args, "--vision"),
             flag(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(API_PORT), args.iter().any(|a| a == "--lan")),
         _ => {
@@ -195,6 +197,190 @@ fn stop(engine: &mut Option<Child>) {
         let _ = c.kill();
         let _ = c.wait();
     }
+}
+
+// ---------------------------------------------------------------- panel: drive the USB phones from a web page
+
+const PANEL_PAGE: &str = include_str!("panel.html");
+const PKG: &str = "ai.maynards.mesh";
+const PHONE_MODELS: &str = "/sdcard/Android/data/ai.maynards.mesh/files/models";
+
+type Ports = std::sync::Arc<Mutex<std::collections::BTreeMap<String, u16>>>;
+
+fn adb(serial: &str, args: &[&str]) -> String {
+    Command::new("adb").arg("-s").arg(serial).args(args).output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).replace('\r', "")).unwrap_or_default()
+}
+
+fn phones() -> Vec<String> {
+    let out = Command::new("adb").arg("devices").output().map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+    out.lines().skip(1).filter_map(|l| {
+        let mut it = l.split_whitespace();
+        let (s, st) = (it.next()?, it.next()?);
+        (st == "device" && !s.starts_with("emulator")).then(|| s.to_string())
+    }).collect()
+}
+
+/// Each phone's API (its port 8080) is forwarded to a fixed laptop port, so it works without any network.
+fn port_for(ports: &Ports, serial: &str) -> u16 {
+    let mut p = ports.lock().unwrap();
+    let next = 18081 + p.len() as u16;
+    let port = *p.entry(serial.to_string()).or_insert(next);
+    adb(serial, &["forward", &format!("tcp:{port}"), "tcp:8080"]);
+    port
+}
+
+fn running_model(port: u16) -> Option<String> {
+    let (code, body) = http_get(&format!("127.0.0.1:{port}"), "/v1/models").ok()?;
+    if code != 200 { return None; }
+    let v: Value = serde_json::from_str(&body).ok()?;
+    v["data"][0]["id"].as_str().map(|m| m.rsplit('/').next().unwrap_or(m).to_string())
+}
+
+fn is_vision(model: &str) -> bool {
+    let m = model.to_ascii_lowercase();
+    m.contains("-vl") || m.contains("vision") || m.contains("llava")
+}
+
+fn device(ports: &Ports, serial: &str) -> Value {
+    let info = adb(serial, &["shell", &format!(
+        "getprop ro.product.marketname; getprop ro.product.model; getprop ro.soc.model; \
+         grep -E 'MemTotal|MemAvailable' /proc/meminfo; dumpsys battery | grep -E 'level:|powered: true'; \
+         ls -l {PHONE_MODELS} 2>/dev/null")]);
+    let lines: Vec<&str> = info.lines().collect();
+    let get = |i: usize| lines.get(i).map(|s| s.trim()).unwrap_or("");
+    let kb = |key: &str| lines.iter().find(|l| l.starts_with(key))
+        .and_then(|l| l.split_whitespace().nth(1)).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+    let battery = lines.iter().find(|l| l.trim().starts_with("level:"))
+        .and_then(|l| l.split(':').nth(1)).and_then(|v| v.trim().parse::<i64>().ok()).unwrap_or(-1);
+    let models: Vec<Value> = lines.iter().filter(|l| l.ends_with(".gguf") && !l.contains("mmproj-"))
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split_whitespace().collect();
+            let size: f64 = f.get(4)?.parse().ok()?;
+            Some(json!({"file": f.last()?, "gb": (size / 1e8).round() / 10.0}))
+        }).collect();
+    let port = port_for(ports, serial);
+    let running = running_model(port);
+    json!({
+        "serial": serial,
+        "name": if get(0).is_empty() { get(1) } else { get(0) },
+        "chip": get(2),
+        "memTotalGb": (kb("MemTotal:") / 1e5).round() / 10.0,
+        "memFreeGb": (kb("MemAvailable:") / 1e5).round() / 10.0,
+        "battery": battery,
+        "charging": lines.iter().any(|l| l.contains("powered: true")),
+        "models": models,
+        "port": port,
+        "running": running,
+        "vision": running.as_deref().map(is_vision).unwrap_or(false),
+    })
+}
+
+fn panel(port: u16) -> Res<()> {
+    let l = std::net::TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
+    println!("MeshAI panel on http://localhost:{port}/");
+    let ports: Ports = Default::default();
+    for s in l.incoming().flatten() {
+        let ports = ports.clone();
+        thread::spawn(move || { if let Err(e) = panel_one(s, &ports) { eprintln!("panel: {e}"); } });
+    }
+    Ok(())
+}
+
+fn panel_one(mut s: TcpStream, ports: &Ports) -> std::io::Result<()> {
+    let (first, headers, body) = read_request(&s)?;
+    let path = first.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let json_reply = |s: &mut TcpStream, v: Value| reply(s, "application/json", v.to_string().as_bytes());
+    let req: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+    match path.as_str() {
+        "/" | "/index.html" => reply(&mut s, "text/html; charset=utf-8", PANEL_PAGE.as_bytes()),
+        "/api/devices" => {
+            let list: Vec<Value> = phones().iter().map(|p| device(ports, p)).collect();
+            json_reply(&mut s, Value::Array(list))
+        }
+        "/api/run" => {
+            let (serial, model) = (req["serial"].as_str().unwrap_or(""), req["model"].as_str().unwrap_or(""));
+            port_for(ports, serial);
+            adb(serial, &["shell", "am", "start", "-S", "-n", &format!("{PKG}/.MainActivity"), "--es", "role", "HOST", "--es", "run", model]);
+            json_reply(&mut s, json!({"ok": true}))
+        }
+        "/api/stop" => {
+            adb(req["serial"].as_str().unwrap_or(""), &["shell", "am", "force-stop", PKG]);
+            json_reply(&mut s, json!({"ok": true}))
+        }
+        "/api/status" => {
+            // the chat tab's device chips
+            let list: Vec<Value> = phones().iter().filter_map(|p| {
+                let port = port_for(ports, p);
+                let m = running_model(port)?;
+                Some(json!({"role": if is_vision(&m) { "vision" } else { "text" }, "name": p, "model": m, "ok": true}))
+            }).collect();
+            json_reply(&mut s, Value::Array(list))
+        }
+        _ if path.starts_with("/v1/") => {
+            // photos to a phone running a vision model, everything else to a phone running a text model
+            let wants_vision = String::from_utf8_lossy(&body).contains("\"image_url\"");
+            let mut text = None;
+            let mut vision = None;
+            for p in phones() {
+                let port = port_for(ports, &p);
+                if let Some(m) = running_model(port) {
+                    let t = format!("127.0.0.1:{port}");
+                    if is_vision(&m) { vision.get_or_insert((t, p)); } else { text.get_or_insert((t, p)); }
+                }
+            }
+            let pick = if wants_vision { vision.clone().map(|v| ("vision", v)) } else { None }
+                .or_else(|| text.clone().map(|t| ("text", t)))
+                .or_else(|| vision.clone().map(|v| ("vision", v)));
+            match pick {
+                Some((role, (target, serial))) => forward(s, &first, &headers, &body, role, &target, &serial),
+                None => {
+                    let msg = json!({"error": {"message": "no phone is running a model: open the Devices tab and press Run"}}).to_string();
+                    write!(s, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{msg}", msg.len())
+                }
+            }
+        }
+        _ => write!(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+    }
+}
+
+fn read_request(s: &TcpStream) -> std::io::Result<(String, Vec<String>, Vec<u8>)> {
+    let mut r = BufReader::new(s.try_clone()?);
+    let mut first = String::new();
+    r.read_line(&mut first)?;
+    let mut headers = Vec::new();
+    let mut len = 0usize;
+    loop {
+        let mut h = String::new();
+        if r.read_line(&mut h)? == 0 || h == "\r\n" { break; }
+        let lower = h.to_ascii_lowercase();
+        if let Some(v) = lower.strip_prefix("content-length:") { len = v.trim().parse().unwrap_or(0); }
+        if !lower.starts_with("host:") && !lower.starts_with("connection:") { headers.push(h); }
+    }
+    let mut body = vec![0u8; len];
+    r.read_exact(&mut body)?;
+    Ok((first, headers, body))
+}
+
+fn reply(s: &mut TcpStream, ctype: &str, b: &[u8]) -> std::io::Result<()> {
+    write!(s, "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n", b.len())?;
+    s.write_all(b)
+}
+
+/// Passes one request to a phone and streams the answer back, tagged with which phone answered.
+fn forward(mut s: TcpStream, first: &str, headers: &[String], body: &[u8], role: &str, target: &str, who: &str) -> std::io::Result<()> {
+    let mut up = TcpStream::connect(target)?;
+    write!(up, "{first}Host: {target}\r\nConnection: close\r\n")?;
+    for h in headers { up.write_all(h.as_bytes())?; }
+    up.write_all(b"\r\n")?;
+    up.write_all(body)?;
+    let mut ur = BufReader::new(up);
+    let mut status = String::new();
+    ur.read_line(&mut status)?;
+    s.write_all(status.as_bytes())?;
+    write!(s, "X-Mesh-Route: {role}:{who}\r\nAccess-Control-Expose-Headers: X-Mesh-Route\r\n")?;
+    std::io::copy(&mut ur, &mut s)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- routing between phones
