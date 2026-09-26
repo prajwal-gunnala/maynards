@@ -13,10 +13,13 @@ class Shelf(ctx: Context) {
 
     /** Chat models only: projector and speech/image files are skipped. */
     fun scan(): List<ModelInfo> = dir.listFiles { f -> f.name.endsWith(".gguf") && !f.name.startsWith("mmproj") }
+        .also { android.util.Log.i("mesh", "models in ${dir.path}: ${it?.map { f -> f.name }}") }
         .orEmpty()
         .mapNotNull { f ->
             val key = "${f.name}:${f.length()}"
-            cache[key] ?: runCatching { Gguf.read(f) }.getOrNull()?.also { cache[key] = it }
+            cache[key] ?: runCatching { Gguf.read(f) }
+                .onFailure { android.util.Log.w("mesh", "cannot read ${f.name}: $it") }
+                .getOrNull()?.also { cache[key] = it }
         }
         .filter { it.layers > 0 && it.arch !in NOT_CHAT }
         .sortedBy { it.fileBytes }

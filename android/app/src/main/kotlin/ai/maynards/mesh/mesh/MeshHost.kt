@@ -26,7 +26,7 @@ data class Peer(
     val id: String,
     val specs: Specs,
     val addr: String,          // the Helper's IP, as seen from the Host
-    val rttMs: Double = -1.0,  // average of the last few pings
+    val rttMs: Double = -1.0,  // median of the last 10 pings (Wi-Fi spikes would skew an average)
     val rttWorstMs: Double = -1.0,
 )
 
@@ -135,7 +135,8 @@ class MeshHost(private val ctx: Context) {
                     "pong" -> {
                         rtts.addLast((System.nanoTime() - m.optLong("at")) / 1e6)
                         if (rtts.size > 10) rtts.removeFirst()
-                        _peers.update { p -> p[id]?.let { p + (id to it.copy(rttMs = rtts.average(), rttWorstMs = rtts.max())) } ?: p }
+                        val median = rtts.sorted()[rtts.size / 2]
+                        _peers.update { p -> p[id]?.let { p + (id to it.copy(rttMs = median, rttWorstMs = rtts.max())) } ?: p }
                     }
                     else -> _events.tryEmit(id to m)
                 }

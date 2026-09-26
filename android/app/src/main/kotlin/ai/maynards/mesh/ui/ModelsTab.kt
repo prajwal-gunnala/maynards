@@ -49,8 +49,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /** The devices as the planner sees them: this phone as Host, plus every joined Helper. */
-fun meshDevices(me: Specs, peers: Collection<Peer>): List<Device> =
-    listOf(Device(me.id, "This phone", me.usableBytes, isHost = true, heat = me.heat, battery = me.battery, charging = me.charging)) +
+fun meshDevices(me: Specs, peers: Collection<Peer>, hostCap: Long = 0): List<Device> =
+    listOf(Device(me.id, "This phone", if (hostCap > 0) minOf(me.usableBytes, hostCap) else me.usableBytes, isHost = true, heat = me.heat, battery = me.battery, charging = me.charging)) +
         peers.map { Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging) }
 
 @Composable

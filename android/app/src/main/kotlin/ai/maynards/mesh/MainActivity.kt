@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
                     when (val r = role) {
                         null -> RolePicker(onPick = pick)
                         Role.HELPER -> HelperScreen(app.engine, app.client, onChangeRole = { pick(null) })
-                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
+                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.hostCapBytes, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
                     }
                 }
             }
@@ -64,11 +64,13 @@ class MainActivity : ComponentActivity() {
  * Lets a laptop drive the phone without touching the screen:
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --ez start true
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --es join '<invite json>'
+ *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HOST --es cap_gb 3   (test: Host pretends to have 3 GB)
  */
 private fun ComponentActivity.handleAdbExtras(i: android.content.Intent?) {
     val role = i?.getStringExtra("role")?.let { runCatching { Role.valueOf(it) }.getOrNull() } ?: return
     RoleStore.save(this, role)
     val app = application as MeshApp
+    i.getStringExtra("cap_gb")?.toDoubleOrNull()?.let { app.hostCapBytes = (it * 1e9).toLong() }
     if (role == Role.HELPER && i.getBooleanExtra("start", false)) {
         val ip = ai.maynards.mesh.engine.Net.best()?.ip ?: return
         MeshService.start(this, "Helper ready")

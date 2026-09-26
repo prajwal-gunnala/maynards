@@ -3,16 +3,24 @@
 # native libraries, so the two programs are renamed lib*.so and started from nativeLibraryDir.
 set -euo pipefail
 
-BIN=${BIN:-/mnt/storage/meshai/build/v3/android-arm64/bin}
+OUT=${OUT:-/mnt/storage/meshai/build/v3}
 NDK=${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/28.2.13676358}
-DST=$(dirname "$0")/../android/app/src/main/jniLibs/arm64-v8a
+LIBS=$(dirname "$0")/../android/app/src/main/jniLibs
 STRIP=$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip
 
-mkdir -p "$DST"
-rm -f "$DST"/*.so
-cp "$BIN/ggml-rpc-server" "$DST/libmesh_rpc.so"
-cp "$BIN/llama-server" "$DST/libmesh_server.so"
-cp "$BIN"/lib*.so "$DST/"
-rm -f "$DST/libllama-bench-impl.so"
-"$STRIP" --strip-unneeded "$DST"/*.so
-du -sh "$DST"
+copy() {  # copy <build bin dir> <abi>
+  local bin=$1 dst=$LIBS/$2
+  mkdir -p "$dst"
+  rm -f "$dst"/*.so
+  cp "$bin/ggml-rpc-server" "$dst/libmesh_rpc.so"
+  cp "$bin/llama-server" "$dst/libmesh_server.so"
+  cp "$bin"/lib*.so "$dst/"
+  rm -f "$dst/libllama-bench-impl.so"
+  "$STRIP" --strip-unneeded "$dst"/*.so
+  du -sh "$dst"
+}
+
+copy "$OUT/android-arm64/bin" arm64-v8a
+# the emulator build, if there is one (scripts/build-llama.sh emulator)
+[ -x "$OUT/android-x86_64/bin/llama-server" ] && copy "$OUT/android-x86_64/bin" x86_64
+true
