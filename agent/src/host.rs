@@ -318,32 +318,35 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
         if let Some(w) = &why { skipped.insert(d.name.clone(), json!(w)); }
         why.is_none()
     }).collect();
-    helpers.sort_by(|a, b| b.usable.partial_cmp(&a.usable).unwrap());
+    helpers.sort_by(|a, b| b.usable.partial_cmp(&a.usable).unwrap().then(a.id.cmp(&b.id)));
     let verdict = |have: f64, need: f64| if have - need >= need * 0.15 { "doable" } else { "tight" };
     let slice = |d: &Dev, from: usize, to: usize, bytes: f64| json!({"id": d.id, "name": d.name, "from": from, "to": to, "gb": bytes / GB, "host": d.host});
     if host.usable >= need {
         return json!({"verdict": verdict(host.usable, need), "reason": "Runs on this laptop alone", "need_gb": need / GB,
             "slices": [slice(host, 0, m.layers.len(), m.bytes as f64)], "skipped": skipped});
     }
-    // split: this laptop keeps embeddings, output head and the first layers; helpers continue in order
-    let mut slices = Vec::new();
-    let mut next = 0usize;
+    // split: phones take their full share first, from the last layer back (the biggest phone gets the tail);
+    // this laptop keeps embeddings, output head and whatever is left at the front
+    let cost = |i: usize| m.layers[i] as f64 + kv_layer;
+    let mut end = m.layers.len();
     let mut capacity = 0.0;
-    for d in std::iter::once(host).chain(helpers.iter().copied()) {
-        if next >= m.layers.len() { break; }
-        let fixed = if d.host { m.other as f64 + HOST_RESERVE + extra } else { HELPER_RESERVE };
-        let cap = d.usable - fixed;
-        let (from, mut used) = (next, 0.0);
-        while next < m.layers.len() && used + m.layers[next] as f64 + kv_layer <= cap { used += m.layers[next] as f64 + kv_layer; next += 1; }
-        if next > from || d.host {
-            slices.push(slice(d, from, next, used + if d.host { m.other as f64 } else { 0.0 }));
-            capacity += cap.max(0.0) + fixed;
-        }
+    let mut tail = Vec::new();
+    for d in &helpers {
+        if end == 0 { break; }
+        let cap = d.usable - HELPER_RESERVE;
+        let (to, mut used) = (end, 0.0);
+        while end > 0 && used + cost(end - 1) <= cap { used += cost(end - 1); end -= 1; }
+        if end < to { tail.push(slice(d, end, to, used)); capacity += cap + HELPER_RESERVE; }
     }
-    if next < m.layers.len() {
-        let missing: f64 = (next..m.layers.len()).map(|i| m.layers[i] as f64 + kv_layer).sum();
+    let fixed = m.other as f64 + HOST_RESERVE + extra;
+    let front: f64 = (0..end).map(cost).sum();
+    if fixed + front > host.usable {
+        let missing = fixed + front - host.usable;
         return json!({"verdict": "not_possible", "reason": format!("Short by {:.1} GB", missing / GB), "need_gb": need / GB, "slices": [], "skipped": skipped});
     }
+    capacity += host.usable;
+    let mut slices = vec![slice(host, 0, end, front + m.other as f64)];
+    slices.extend(tail.into_iter().rev());
     let n = slices.len();
     json!({"verdict": verdict(capacity, need + HELPER_RESERVE * (n as f64 - 1.0)), "reason": format!("Needs {n} devices"),
            "need_gb": need / GB, "slices": slices, "skipped": skipped})
