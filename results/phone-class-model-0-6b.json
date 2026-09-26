@@ -1,0 +1,78 @@
+{
+  "label": "phone-class model, 0.6B",
+  "note": "Qwen3-0.6B Q8_0 on an i3 laptop, stands in for what a phone holds alone",
+  "url": "http://127.0.0.1:8080/v1",
+  "when": "2026-09-27 00:39",
+  "tasks": 8,
+  "passed": 2,
+  "accuracy": 25.0,
+  "median_tps": 22.1,
+  "median_seconds": 5.8,
+  "total_seconds": 44.4,
+  "results": [
+    {
+      "id": "running_max",
+      "ok": false,
+      "why": "IndexError: list index out of range",
+      "seconds": 1.7,
+      "tokens": 34,
+      "tps": 21.9
+    },
+    {
+      "id": "balanced_brackets",
+      "ok": false,
+      "why": "SyntaxError: unterminated string literal (detected at line 3)",
+      "seconds": 7.3,
+      "tokens": 157,
+      "tps": 21.7
+    },
+    {
+      "id": "word_frequencies",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 5.8,
+      "tokens": 126,
+      "tps": 22.1
+    },
+    {
+      "id": "merge_intervals",
+      "ok": true,
+      "why": "",
+      "seconds": 5.8,
+      "tokens": 121,
+      "tps": 21.1
+    },
+    {
+      "id": "roman_to_int",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 12.4,
+      "tokens": 240,
+      "tps": 20.4
+    },
+    {
+      "id": "flatten_nested",
+      "ok": false,
+      "why": "TypeError: 'int' object is not iterable",
+      "seconds": 3.1,
+      "tokens": 53,
+      "tps": 22.8
+    },
+    {
+      "id": "group_anagrams",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 3.7,
+      "tokens": 68,
+      "tps": 22.7
+    },
+    {
+      "id": "binary_search_insert",
+      "ok": true,
+      "why": "",
+      "seconds": 4.6,
+      "tokens": 88,
+      "tps": 22.6
+    }
+  ]
+}
