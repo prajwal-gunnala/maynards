@@ -47,9 +47,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MeshTheme {
                 Surface(Modifier.fillMaxSize().systemBarsPadding(), color = MaterialTheme.colorScheme.background) {
-                    var role by remember { mutableStateOf(RoleStore.load(this)) }
-                    val pick: (Role?) -> Unit = { RoleStore.save(this, it); role = it }
-                    when (val r = role) {
+                    var role by remember { mutableStateOf(RoleStore.load(this) ?: Role.HELPER) }   // phones help; laptops host
+                    var picking by remember { mutableStateOf(false) }
+                    val pick: (Role?) -> Unit = { if (it == null) picking = true else { RoleStore.save(this, it); role = it; picking = false } }
+                    when (val r = if (picking) null else role) {
                         null -> RolePicker(onPick = pick)
                         Role.HELPER -> HelperScreen(app.engine, app.client, onChangeRole = { pick(null) })
                         Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.downloads, app.hostCapBytes, app.autoRun.also { app.autoRun = null }, app.autoRunHelpers, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })

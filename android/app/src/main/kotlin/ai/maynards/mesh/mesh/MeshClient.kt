@@ -19,6 +19,10 @@ import java.net.InetSocketAddress
 import java.net.Socket
 
 /** The Helper's link to its Host. */
+/** The whole mesh, as the Host sees it (sent every 2 s). */
+data class MeshDevice(val name: String, val kind: String, val role: String, val layers: String, val rttMs: Double?)
+data class MeshView(val devices: List<MeshDevice> = emptyList(), val model: String = "", val status: String = "", val tps: Double? = null)
+
 data class Link(
     val state: State = State.IDLE,
     val hostName: String = "",
@@ -42,6 +46,9 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
 
     private val _link = MutableStateFlow(Link())
     val link: StateFlow<Link> = _link
+
+    private val _mesh = MutableStateFlow(MeshView())
+    val mesh: StateFlow<MeshView> = _mesh
 
     /** The last invite, so the app can rejoin after a restart. */
     val savedInvite: Invite? get() = prefs.getString("invite", null)?.let(Invite::parse)
@@ -91,7 +98,8 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
         val reporter = scope.launch {
             while (isActive) {
                 delay(2_000)
-                runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson())) }.onFailure { w.close() }
+                val running = engine.state.value.let { if (it.status == EngineState.Status.RUNNING) it.address else "" }
+                runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson(), "engine" to running)) }.onFailure { w.close() }
             }
         }
         try {
@@ -101,6 +109,16 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                     "ping" -> w.send(msg("pong", "at" to m.optLong("at")))
                     "run" -> run(w, bind = sock.localAddress.hostAddress ?: "", layers = m.optString("layers"), model = m.optString("model"))
                     "stop" -> { engine.stop(); _link.value = _link.value.copy(layers = "", model = "") }
+                    "mesh" -> _mesh.value = MeshView(
+                        devices = m.optJSONArray("devices")?.let { a ->
+                            List(a.length()) { i -> a.getJSONObject(i).let { d ->
+                                MeshDevice(d.optString("name"), d.optString("kind"), d.optString("role"), d.optString("layers"),
+                                    if (d.isNull("rtt")) null else d.optDouble("rtt"))
+                            } }
+                        } ?: emptyList(),
+                        model = m.optString("model"), status = m.optString("status"),
+                        tps = if (m.isNull("tps")) null else m.optDouble("tps"),
+                    )
                     "bye" -> { _link.value = Link(state = Link.State.FAILED, error = m.optString("reason")); break }
                 }
             }
@@ -126,7 +144,18 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
         }
     }
 
-    private fun connectAny(invite: Invite): Socket? = invite.hosts.firstNotNullOfOrNull { ip ->
-        runCatching { Socket().apply { connect(InetSocketAddress(ip, invite.port), 4_000) } }.getOrNull()
+    /**
+     * The first address is the preferred link (the Host lists its USB cable first). Try it for a few seconds
+     * before falling back, so a Host that is just restarting does not push us onto slow Wi-Fi.
+     */
+    private fun connectAny(invite: Invite): Socket? {
+        val first = invite.hosts.firstOrNull() ?: return null
+        repeat(5) {
+            runCatching { Socket().apply { connect(InetSocketAddress(first, invite.port), 2_000) } }.getOrNull()?.let { return it }
+            Thread.sleep(1_000)
+        }
+        return invite.hosts.drop(1).firstNotNullOfOrNull { ip ->
+            runCatching { Socket().apply { connect(InetSocketAddress(ip, invite.port), 4_000) } }.getOrNull()
+        }
     }
 }

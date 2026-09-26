@@ -47,6 +47,7 @@ import kotlinx.coroutines.delay
 fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
     val ctx = LocalContext.current
     val link by client.link.collectAsState()
+    val mesh by client.mesh.collectAsState()
     val eng by engine.state.collectAsState()
     var scanError by remember { mutableStateOf("") }
     var held by remember { mutableLongStateOf(0L) }
@@ -115,12 +116,33 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
             }
         }
 
-        NBox(pad = 8.dp) {
-            val nodes = listOf(
-                WebNode(link.hostName.ifBlank { "Host" }, HostGreen, isHost = true),
-                WebNode("This phone", HelperPurple, note = if (eng.status == Status.RUNNING) "working" else ""),
-            )
-            MeshWeb(if (link.state == Link.State.JOINED) nodes else nodes.take(1), Modifier.fillMaxWidth().aspectRatio(1.6f))
+        if (link.state == Link.State.JOINED && mesh.devices.isNotEmpty()) {
+            // the whole mesh, as the Host sees it
+            NBox(fill = Paper) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Title("${mesh.devices.size} devices", 24)
+                        Spacer(Modifier.width(10.dp))
+                        Sticker(when (mesh.status) { "ready" -> "running"; "starting", "loading" -> "loading"; "failed" -> "stopped"; else -> "idle" },
+                            when (mesh.status) { "ready" -> HostGreen; "starting", "loading" -> Tight; "failed" -> Danger; else -> Paper })
+                    }
+                    if (mesh.model.isNotBlank()) Mono(mesh.model + (mesh.tps?.let { " · last answer %.1f tok/s".format(it) } ?: ""), 12)
+                    MeshWeb(
+                        mesh.devices.map { d ->
+                            WebNode(d.name.substringBefore(" (").take(14), if (d.role == "host") HostGreen else HelperPurple, isHost = d.role == "host",
+                                note = listOfNotNull(d.layers.takeIf { it.isNotBlank() }?.let { "L$it" }, d.rttMs?.let { "%.0f ms".format(it) }.takeIf { d.role != "host" }).joinToString(" · "))
+                        },
+                        Modifier.fillMaxWidth().aspectRatio(1.3f),
+                    )
+                    mesh.devices.forEach { d ->
+                        Mono((if (d.role == "host") "💻 " else "📱 ") + d.name + (if (d.layers.isNotBlank()) " · layers ${d.layers}" else ""), 11, Ink)
+                    }
+                }
+            }
+        } else {
+            NBox(pad = 8.dp) {
+                MeshWeb(listOf(WebNode("This phone", HelperPurple, isHost = true)), Modifier.fillMaxWidth().aspectRatio(1.6f))
+            }
         }
         SpecsCard(rememberSpecs())
 

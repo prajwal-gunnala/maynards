@@ -27,6 +27,7 @@ struct Peer {
     specs: Value,
     rtts: VecDeque<f64>,
     wire: Arc<Mutex<TcpStream>>,
+    engine: Option<String>,   // the phone's report: its engine address, "" when not running, None if never said
 }
 
 #[derive(Clone, Default)]
@@ -50,6 +51,10 @@ pub struct Hub {
     usb_ports: crate::Ports,
     models: Mutex<HashMap<String, (u64, Model)>>,
     run_gen: Mutex<u64>,
+    chats: Mutex<VecDeque<Value>>,   // every question the mesh answered, from any client
+    caps: Mutex<HashMap<String, f64>>, // per-device memory cap in bytes, set on the page ("laptop" = this laptop)
+    api_key: String,                  // other machines on the link use the API with this key
+    last_run: Mutex<Option<String>>,  // model file of the last run that got ready, kept across restarts
 }
 
 fn config() -> std::path::PathBuf {
@@ -118,6 +123,11 @@ fn link_kind(iface_ip: &str) -> &'static str {
 
 fn laptop_specs() -> Value {
     let mut v = crate::specs();
+    // hottest thermal zone, in °C (the CPU package on most laptops)
+    let temp = fs::read_dir("/sys/class/thermal").into_iter().flatten().flatten()
+        .filter_map(|e| fs::read_to_string(e.path().join("temp")).ok()?.trim().parse::<f64>().ok())
+        .fold(0.0_f64, f64::max) / 1000.0;
+    v["temp_c"] = json!(temp);
     v["name"] = json!(format!("{} (this laptop)", v["name"].as_str().unwrap_or("Laptop")));
     v
 }
@@ -133,6 +143,7 @@ fn usable(specs: &Value) -> f64 {
 
 #[derive(Clone)]
 struct Model {
+    proj: Option<(String, u64)>,   // image projector (mmproj-...), stays on this laptop
     file: String,
     name: String,
     bytes: u64,
@@ -230,7 +241,7 @@ fn read_gguf(path: &std::path::Path) -> Option<Model> {
     let file = path.file_name()?.to_string_lossy().to_string();
     Some(Model {
         name: meta.get("general.name").and_then(|v| v.as_str()).map(String::from).unwrap_or(file.trim_end_matches(".gguf").into()),
-        file, bytes, layers, other, kv_per_token: n_layer as u64 * kv_heads * (k + v) * 2,
+        proj: None, file, bytes, layers, other, kv_per_token: n_layer as u64 * kv_heads * (k + v) * 2,
     })
 }
 
@@ -244,7 +255,14 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
         let len = e.metadata().map(|m| m.len()).unwrap_or(0);
         let cached = hub.models.lock().unwrap().get(&name).filter(|(l, _)| *l == len).map(|(_, m)| m.clone());
         let m = cached.or_else(|| read_gguf(&e.path()).inspect(|m| { hub.models.lock().unwrap().insert(name.clone(), (len, m.clone())); }));
-        if let Some(m) = m { out.push(m); }
+        if let Some(mut m) = m {
+            // a vision model sees through its projector: mmproj-<same name without the quant>.gguf
+            let base = m.file.trim_end_matches(".gguf").rsplit_once('-').map(|x| x.0.to_string()).unwrap_or_default();
+            m.proj = fs::read_dir(&dir).into_iter().flatten().flatten()
+                .find(|e| e.file_name().to_string_lossy().starts_with(&format!("mmproj-{base}")))
+                .and_then(|e| Some((e.path().to_string_lossy().to_string(), e.metadata().ok()?.len())));
+            out.push(m);
+        }
     }
     out.sort_by_key(|m| m.bytes);
     out
@@ -260,7 +278,8 @@ const HELPER_RESERVE: f64 = 0.15 * GB;
 fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let kv = (m.kv_per_token * ctx * 17 / 32) as f64; // 8-bit KV cache
     let kv_layer = kv / m.layers.len().max(1) as f64;
-    let need = m.bytes as f64 + kv + HOST_RESERVE;
+    let extra = m.proj.as_ref().map(|p| p.1 as f64).unwrap_or(0.0);
+    let need = m.bytes as f64 + kv + HOST_RESERVE + extra;
     let host = &devs[0];
     let biggest = m.layers.iter().copied().max().unwrap_or(0) as f64 + kv_layer;
     let mut skipped = serde_json::Map::new();
@@ -286,7 +305,7 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let mut capacity = 0.0;
     for d in std::iter::once(host).chain(helpers.iter().copied()) {
         if next >= m.layers.len() { break; }
-        let fixed = if d.host { m.other as f64 + HOST_RESERVE } else { HELPER_RESERVE };
+        let fixed = if d.host { m.other as f64 + HOST_RESERVE + extra } else { HELPER_RESERVE };
         let cap = d.usable - fixed;
         let (from, mut used) = (next, 0.0);
         while next < m.layers.len() && used + m.layers[next] as f64 + kv_layer <= cap { used += m.layers[next] as f64 + kv_layer; next += 1; }
@@ -306,14 +325,14 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
 
 fn devices(hub: &Hub) -> Vec<Dev> {
     let me = laptop_specs();
-    // test switch: pretend the laptop has at most this much room, to force a split
-    let cap = std::env::var("MESH_HOST_CAP_GB").ok().and_then(|v| v.parse::<f64>().ok()).map(|g| g * GB).unwrap_or(f64::MAX);
+    let caps = hub.caps.lock().unwrap().clone();
+    let cap = caps.get("laptop").copied().unwrap_or(f64::MAX);
     let mut v = vec![Dev { id: "laptop".into(), name: me["name"].as_str().unwrap_or("This laptop").into(), usable: usable(&me).min(cap),
         rtt: 0.0, heat: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true }];
     for (id, p) in hub.peers.lock().unwrap().iter() {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        v.push(Dev { id: id.clone(), name: p.name.clone(), usable: usable(&p.specs), rtt: r.get(r.len() / 2).copied().unwrap_or(0.0),
+        v.push(Dev { id: id.clone(), name: p.name.clone(), usable: usable(&p.specs).min(caps.get(id).copied().unwrap_or(f64::MAX)), rtt: r.get(r.len() / 2).copied().unwrap_or(0.0),
             heat: p.specs["heat"].as_f64().unwrap_or(0.0), battery: p.specs["battery"].as_i64().unwrap_or(100),
             charging: p.specs["charging"].as_bool().unwrap_or(true), host: false });
     }
@@ -365,7 +384,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     };
     send(&wire, json!({"t": "welcome", "secret": secret, "host": "laptop", "mesh": hub.mesh}))?;
     hub.say(format!("✓ {name} joined over {} ({peer_ip})", link_kind(&my_ip)));
-    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone() });
+    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None });
     sock.set_read_timeout(Some(Duration::from_secs(60)))?;
 
     let alive = Arc::new(Mutex::new(true));
@@ -376,7 +395,13 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         let Ok(line) = line else { break };
         let Ok(m) = serde_json::from_str::<Value>(&line) else { continue };
         match m["t"].as_str().unwrap_or("") {
-            "specs" => if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) { p.specs = m["specs"].clone(); },
+            "specs" => {
+                if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) {
+                    p.specs = m["specs"].clone();
+                    p.engine = m.get("engine").and_then(|e| e.as_str()).map(String::from);
+                }
+                lost_layers(&hub, &id, &name, &m);
+            }
             "pong" => if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) {
                 p.rtts.push_back(now_ms().saturating_sub(m["at"].as_u64().unwrap_or(0)) as f64);
                 while p.rtts.len() > 10 { p.rtts.pop_front(); }
@@ -393,6 +418,17 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     let in_run = hub.run.lock().unwrap().plan["slices"].as_array().map(|s| s.iter().any(|x| x["id"] == id.as_str())).unwrap_or(false);
     hub.say(format!("✗ {name} control link lost{}", if in_run { " (model keeps running; it will reconnect)" } else { "" }));
     Ok(())
+}
+
+/// Phones report whether their engine runs ("engine": its address, or "" when it is not running). If a phone in the
+/// running plan reports no engine, its layers are gone and the model cannot answer: say so at once.
+fn lost_layers(hub: &Hub, id: &str, name: &str, m: &Value) {
+    let Some(engine) = m.get("engine").and_then(|e| e.as_str()) else { return };   // older app: no report
+    let run = hub.run.lock().unwrap().clone();
+    let in_plan = run.plan["slices"].as_array().map(|s| s.iter().any(|x| x["id"] == id)).unwrap_or(false);
+    if run.status == "ready" && in_plan && engine.is_empty() {
+        stop(hub, &format!("failed: {name} lost its layers (its app restarted) - press Start again"));
+    }
 }
 
 // ---------------------------------------------------------------- running a model
@@ -462,6 +498,7 @@ fn start(hub: Arc<Hub>, file: String) {
             "-ctk".into(), "q8_0".into(), "-ctv".into(), "q8_0".into(), "-fa".into(), "on".into(),
             // read the file once, front to back: with mmap, sending layers to phones reads it in scattered pieces
             "--load-mode".into(), "none".into()];
+        if let Some((path, _)) = &m.proj { args.extend(["--mmproj".into(), path.clone(), "--no-mmproj-offload".into()]); }
         if helpers.is_empty() {
             args.extend(["-ngl".into(), "0".into()]);
         } else {
@@ -491,6 +528,8 @@ fn start(hub: Arc<Hub>, file: String) {
         let secs = hub.run.lock().unwrap().started.map(|t| t.elapsed().as_secs()).unwrap_or(0);
         set_run(&hub, "ready", &format!("Ready in {secs} s"));
         hub.say(format!("✓ {} ready in {secs} s", m.name));
+        *hub.last_run.lock().unwrap() = Some(m.file.clone());
+        let _ = fs::write(config().join("last-run.json"), json!({"file": m.file, "name": m.name, "at": chrono_like()}).to_string());
         // watchdog: report if the engine itself stops (e.g. a phone's layers disappeared)
         loop {
             thread::sleep(Duration::from_secs(2));
@@ -501,20 +540,162 @@ fn start(hub: Arc<Hub>, file: String) {
     });
 }
 
+/// Like crate::forward, but also keeps the question, the answer and its speed for the Use page's live view.
+fn forward_logged(mut s: TcpStream, hub: &Arc<Hub>, first: &str, headers: &[String], body: &[u8]) -> std::io::Result<()> {
+    let target = format!("127.0.0.1:{ENGINE_PORT}");
+    let req: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+    let from_page = headers.iter().any(|h| h.to_ascii_lowercase().starts_with("x-mesh-client: page"));
+    let question = req["messages"].as_array().and_then(|m| m.last()).map(|m| match &m["content"] {
+        Value::String(t) => t.clone(),
+        Value::Array(parts) => parts.iter().filter_map(|p| p["text"].as_str()).collect::<Vec<_>>().join(" ") + " [photo]",
+        _ => String::new(),
+    }).unwrap_or_default();
+    let idx = {
+        let mut c = hub.chats.lock().unwrap();
+        c.push_back(json!({"t": chrono_like(), "q": question, "a": "", "from": if from_page { "page" } else { "api" }, "done": false}));
+        while c.len() > 20 { c.pop_front(); }
+        c.len() - 1
+    };
+    let t0 = Instant::now();
+    let mut first_ms: Option<u128> = None;
+    let mut up = TcpStream::connect(&target)?;
+    write!(up, "{first}Host: {target}\r\nConnection: close\r\n")?;
+    for h in headers { up.write_all(h.as_bytes())?; }
+    up.write_all(b"\r\n")?;
+    up.write_all(body)?;
+    let mut ur = BufReader::new(up);
+    let mut status = String::new();
+    ur.read_line(&mut status)?;
+    s.write_all(status.as_bytes())?;
+    write!(s, "X-Mesh-Route: mesh:laptop\r\nAccess-Control-Expose-Headers: X-Mesh-Route\r\n")?;
+    // copy through, reading line by line so streamed words show up in the live view as they arrive
+    let mut answer = String::new();
+    let mut timings = Value::Null;
+    let mut whole = String::new();
+    let mut line = String::new();
+    loop {
+        line.clear();
+        let n = ur.read_line(&mut line)?;
+        if n == 0 { break; }
+        s.write_all(line.as_bytes())?;
+        if let Some(d) = line.trim().strip_prefix("data: ") {
+            if let Ok(j) = serde_json::from_str::<Value>(d) {
+                if let Some(t) = j["choices"][0]["delta"]["content"].as_str() {
+                    if !t.is_empty() && first_ms.is_none() { first_ms = Some(t0.elapsed().as_millis()); }
+                    answer.push_str(t);
+                }
+                if !j["timings"].is_null() { timings = j["timings"].clone(); }
+                let mut c = hub.chats.lock().unwrap();
+                if let Some(e) = c.get_mut(idx) { e["a"] = json!(answer); }
+            }
+        } else {
+            whole.push_str(&line);
+        }
+    }
+    if answer.is_empty() {   // non-streamed reply: the JSON body follows the headers
+        if let Some(j) = whole.split_once("\r\n\r\n").and_then(|(_, b)| serde_json::from_str::<Value>(b.trim()).ok()) {
+            answer = j["choices"][0]["message"]["content"].as_str().unwrap_or("").to_string();
+            timings = j["timings"].clone();
+        }
+    }
+    let mut c = hub.chats.lock().unwrap();
+    if let Some(e) = c.get_mut(idx) {
+        e["a"] = json!(answer);
+        e["done"] = json!(true);
+        e["tps"] = timings["predicted_per_second"].clone();
+        e["tokens"] = timings["predicted_n"].clone();
+        e["prompt_tps"] = timings["prompt_per_second"].clone();
+        e["prompt_n"] = timings["prompt_n"].clone();
+        e["total_ms"] = json!(t0.elapsed().as_millis() as u64);
+        e["first_ms"] = json!(first_ms.map(|x| x as u64).unwrap_or((timings["prompt_ms"].as_f64().unwrap_or(0.0)) as u64));
+        e["model"] = json!(hub.run.lock().unwrap().model);
+        e["devices"] = json!(hub.run.lock().unwrap().plan["slices"].as_array().map(|a| a.len()).unwrap_or(1));
+        if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(config().join("history.jsonl")) {
+            let _ = writeln!(f, "{}", e);
+        }
+    }
+    Ok(())
+}
+
+/// Every phone shows the whole mesh: who is in it, who holds which layers, what runs and how fast.
+fn tell_phones(hub: &Hub) {
+    let run = hub.run.lock().unwrap().clone();
+    let slices = run.plan["slices"].as_array().cloned().unwrap_or_default();
+    let layers = |id: &str| slices.iter().find(|s| s["id"] == id)
+        .map(|s| format!("{}-{}", s["from"], s["to"].as_u64().unwrap_or(1).saturating_sub(1))).unwrap_or_default();
+    let me = laptop_specs();
+    let mut devices = vec![json!({"name": me["name"], "kind": "laptop", "role": "host", "layers": layers("laptop"), "rtt": 0})];
+    let peers = hub.peers.lock().unwrap();
+    for (id, p) in peers.iter() {
+        let mut r: Vec<f64> = p.rtts.iter().copied().collect();
+        r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        devices.push(json!({"name": p.name, "kind": "phone", "role": "helper", "layers": layers(id), "rtt": r.get(r.len() / 2)}));
+    }
+    let tps = hub.chats.lock().unwrap().iter().rev().find_map(|c| c["tps"].as_f64());
+    let m = json!({"t": "mesh", "devices": devices, "model": run.model, "status": run.status, "tps": tps});
+    for p in peers.values() { let _ = send(&p.wire, m.clone()); }
+}
+
+/// A phone's USB tethering offers itself as this laptop's way to the internet, and a cable beats Wi-Fi, so all
+/// browsing would go through the phone. Keep tether links local: they carry the mesh (layers, chat) only.
+fn keep_wifi_default(hub: &Hub) {
+    let routes = Command::new("ip").args(["-4", "route", "show", "default"]).output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+    for line in routes.lines() {
+        let Some(dev) = line.split_whitespace().skip_while(|w| *w != "dev").nth(1) else { continue };
+        if !(dev.starts_with("enx") || dev.starts_with("usb") || dev.starts_with("rndis")) { continue; }
+        let ok = Command::new("nmcli").args(["device", "modify", dev, "ipv4.never-default", "yes", "ipv6.never-default", "yes"])
+            .output().map(|o| o.status.success()).unwrap_or(false);
+        hub.say(if ok { format!("{dev}: tether link kept local, internet stays on Wi-Fi") }
+                else { format!("{dev}: could not keep the tether link local (nmcli)") });
+    }
+}
+
+/// Plain warnings for the page, before they turn into a failed demo.
+fn advice(hub: &Hub) -> Vec<String> {
+    let mut a = Vec::new();
+    let me = laptop_specs();
+    if me["freeBytes"].as_f64().unwrap_or(0.0) < 3.0 * GB { a.push("This laptop is low on memory: close other apps".into()); }
+    if me["temp_c"].as_f64().unwrap_or(0.0) > 90.0 { a.push("This laptop is hot".into()); }
+    for p in hub.peers.lock().unwrap().values() {
+        let s = &p.specs;
+        let mut r: Vec<f64> = p.rtts.iter().copied().collect();
+        r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        if !s["charging"].as_bool().unwrap_or(true) { a.push(format!("{} is not charging", p.name)); }
+        if s["battery"].as_i64().unwrap_or(100) < 30 { a.push(format!("{} battery is {}%", p.name, s["battery"])); }
+        if usable(s) < 1.5 * GB { a.push(format!("{} is low on memory: close its other apps", p.name)); }
+        if s["heat"].as_f64().unwrap_or(0.0) >= 0.8 { a.push(format!("{} is hot: it will slow down", p.name)); }
+        if r.get(r.len() / 2).copied().unwrap_or(0.0) > 60.0 { a.push(format!("{} has a slow link: use USB tethering", p.name)); }
+    }
+    a
+}
+
 // ---------------------------------------------------------------- web page and API
 
 pub fn host(port: u16) -> Result<(), String> {
     let secrets: HashMap<String, String> = fs::read_to_string(config().join("host-secrets.json")).ok()
         .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
     let mesh = fs::read_to_string(config().join("mesh-id")).unwrap_or_else(|_| { let m = random_hex(4); let _ = fs::write(config().join("mesh-id"), &m); m });
+    let api_key = fs::read_to_string(config().join("api-key")).map(|k| k.trim().to_string())
+        .unwrap_or_else(|_| { let k = random_hex(12); let _ = fs::write(config().join("api-key"), &k); k });
+    let history: VecDeque<Value> = fs::read_to_string(config().join("history.jsonl")).unwrap_or_default().lines()
+        .filter_map(|l| serde_json::from_str(l).ok()).collect::<Vec<Value>>().into_iter().rev().take(30).rev().collect();
+    let last_run = fs::read_to_string(config().join("last-run.json")).ok()
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|v| v["file"].as_str().map(String::from));
+    let mut caps = HashMap::new();
+    if let Some(g) = std::env::var("MESH_HOST_CAP_GB").ok().and_then(|v| v.parse::<f64>().ok()) { caps.insert("laptop".to_string(), g * GB); }
     let hub = Arc::new(Hub {
         mesh: mesh.trim().into(), token: Mutex::new(random_hex(16)), secrets: Mutex::new(secrets), peers: Default::default(),
         replies: Default::default(), activity: Default::default(), run: Mutex::new(Run { status: "idle".into(), ..Default::default() }),
         engine: Default::default(), usb_ports: Default::default(), models: Default::default(), run_gen: Default::default(),
+        chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
     });
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
-    let l = TcpListener::bind(("127.0.0.1", port)).map_err(|e| format!("port {port}: {e}"))?;
+    { let h = hub.clone(); thread::spawn(move || loop { tell_phones(&h); thread::sleep(Duration::from_secs(2)); }); }
+    { let h = hub.clone(); thread::spawn(move || loop { keep_wifi_default(&h); thread::sleep(Duration::from_secs(5)); }); }
+    // all addresses: the page and API for this laptop; other machines on the link may use /v1 with the key
+    let l = TcpListener::bind(("0.0.0.0", port)).map_err(|e| format!("port {port}: {e}"))?;
     hub.say(format!("MeshAI host on http://localhost:{port}/  (phones join on port {CONTROL_PORT})"));
     for s in l.incoming().flatten() {
         let hub = hub.clone();
@@ -528,7 +709,7 @@ fn state(hub: &Hub) -> Value {
     let peers: Vec<Value> = hub.peers.lock().unwrap().iter().map(|(id, p)| {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB,
+        json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine,
                "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last()})
     }).collect();
     let devs = devices(hub);
@@ -538,6 +719,13 @@ fn state(hub: &Hub) -> Value {
     }).collect();
     let run = hub.run.lock().unwrap().clone();
     let invite = hub.invite();
+    let stats = {
+        let c = hub.chats.lock().unwrap();
+        let t: Vec<f64> = c.iter().filter_map(|x| x["tps"].as_f64()).collect();
+        let avg = if t.is_empty() { 0.0 } else { t.iter().sum::<f64>() / t.len() as f64 };
+        let tokens: u64 = c.iter().filter_map(|x| x["tokens"].as_u64()).sum();
+        json!({"answers": t.len(), "avg_tps": avg, "best_tps": t.iter().cloned().fold(0.0, f64::max), "tokens": tokens})
+    };
     let qr = qrcode::QrCode::new(invite.to_string().as_bytes()).map(|c| c.render::<qrcode::render::svg::Color>()
         .min_dimensions(240, 240).quiet_zone(true).build()).unwrap_or_default();
     json!({
@@ -546,6 +734,12 @@ fn state(hub: &Hub) -> Value {
         "peers": peers, "models": models,
         "pool_gb": devs.iter().map(|d| d.usable).sum::<f64>() / GB,
         "activity": hub.activity.lock().unwrap().iter().rev().map(|(t, l)| json!({"t": t, "line": l})).collect::<Vec<_>>(),
+        "chats": hub.chats.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
+        "stats": stats,
+        "advice": advice(hub),
+        "last_run": *hub.last_run.lock().unwrap(),
+        "caps": hub.caps.lock().unwrap().iter().map(|(k, v)| (k.clone(), json!(v / GB))).collect::<serde_json::Map<String, Value>>(),
+        "api": {"key": hub.api_key, "urls": laptop_ips().iter().map(|(ip, _)| format!("http://{ip}:8080/v1")).collect::<Vec<_>>()},
         "run": {"status": run.status, "step": run.step, "model": run.model, "plan": run.plan,
                 "seconds": run.started.map(|t| t.elapsed().as_secs())},
     })
@@ -554,6 +748,17 @@ fn state(hub: &Hub) -> Value {
 fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     let (first, headers, body) = crate::read_request(&s)?;
     let path = first.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let local = s.peer_addr().map(|a| a.ip().is_loopback()).unwrap_or(false);
+    if !local {
+        let key = headers.iter().find_map(|h| {
+            let l = h.to_ascii_lowercase();
+            l.strip_prefix("authorization: bearer ").or_else(|| l.strip_prefix("x-mesh-key: ")).map(|k| k.trim().to_string())
+        });
+        if !path.starts_with("/v1/") || key.as_deref() != Some(hub.api_key.as_str()) {
+            let msg = json!({"error": {"message": "from another machine: /v1 only, with Authorization: Bearer <key> (key on the laptop's Use page)"}}).to_string();
+            return write!(s, "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{msg}", msg.len());
+        }
+    }
     let req: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
     let ok = |s: &mut TcpStream, v: Value| crate::reply(s, "application/json", v.to_string().as_bytes());
     match path.as_str() {
@@ -578,12 +783,23 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
             ok(&mut s, json!({"ok": true}))
         }
         "/api/usb/stop" => { crate::adb(req["serial"].as_str().unwrap_or(""), &["shell", "am", "force-stop", crate::PKG]); ok(&mut s, json!({"ok": true})) }
+        "/api/cap" => {
+            let (id, gb) = (req["id"].as_str().unwrap_or("").to_string(), req["gb"].as_f64().unwrap_or(0.0));
+            if gb > 0.0 { hub.caps.lock().unwrap().insert(id.clone(), gb * GB); } else { hub.caps.lock().unwrap().remove(&id); }
+            hub.say(format!("memory cap for {id}: {}", if gb > 0.0 { format!("{gb:.1} GB") } else { "auto".into() }));
+            ok(&mut s, json!({"ok": true}))
+        }
+        "/api/again" => {
+            let last = hub.last_run.lock().unwrap().clone();
+            if let Some(f) = last { start(hub.clone(), f); }
+            ok(&mut s, json!({"ok": true}))
+        }
         "/api/newqr" => { *hub.token.lock().unwrap() = random_hex(16); ok(&mut s, json!({"ok": true})) }
         _ if path.starts_with("/v1/") => {
             let photo = String::from_utf8_lossy(&body).contains("\"image_url\"");
             let usb_vision = photo && crate::phones().iter().any(|p| crate::running_model(crate::port_for(&hub.usb_ports, p)).map(|m| crate::is_vision(&m)).unwrap_or(false));
             if hub.run.lock().unwrap().status == "ready" && !usb_vision {
-                crate::forward(s, &first, &headers, &body, "mesh", &format!("127.0.0.1:{ENGINE_PORT}"), "laptop")
+                forward_logged(s, &hub, &first, &headers, &body)
             } else {
                 crate::route_to_phones(s, &first, &headers, &body, &hub.usb_ports)
             }
