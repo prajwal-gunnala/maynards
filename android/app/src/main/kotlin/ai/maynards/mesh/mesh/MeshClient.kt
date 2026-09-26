@@ -24,6 +24,7 @@ data class Link(
     val hostName: String = "",
     val hostIp: String = "",
     val layers: String = "",   // which part of the model this phone holds, e.g. "25-48"
+    val model: String = "",
     val error: String = "",
 ) {
     enum class State { IDLE, CONNECTING, JOINED, FAILED }
@@ -98,8 +99,8 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 val m = w.read() ?: break
                 when (m.optString("t")) {
                     "ping" -> w.send(msg("pong", "at" to m.optLong("at")))
-                    "run" -> run(w, bind = sock.localAddress.hostAddress ?: "", layers = m.optString("layers"))
-                    "stop" -> { engine.stop(); _link.value = _link.value.copy(layers = "") }
+                    "run" -> run(w, bind = sock.localAddress.hostAddress ?: "", layers = m.optString("layers"), model = m.optString("model"))
+                    "stop" -> { engine.stop(); _link.value = _link.value.copy(layers = "", model = "") }
                     "bye" -> { _link.value = Link(state = Link.State.FAILED, error = m.optString("reason")); break }
                 }
             }
@@ -111,13 +112,13 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     }
 
     /** Start the engine on the link address, then tell the Host where to find it. */
-    private fun run(w: Wire, bind: String, layers: String) = scope.launch {
+    private fun run(w: Wire, bind: String, layers: String, model: String) = scope.launch {
         engine.startHelper(bind, threads = (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)).join()
         val s = withTimeoutOrNull(20_000) {
             engine.state.first { it.status == EngineState.Status.RUNNING || it.status == EngineState.Status.FAILED }
         }
         if (s?.status == EngineState.Status.RUNNING) {
-            _link.value = _link.value.copy(layers = layers)
+            _link.value = _link.value.copy(layers = layers, model = model)
             runCatching { w.send(msg("ready", "addr" to s.address)) }
         } else {
             runCatching { w.send(msg("failed", "reason" to "engine did not start")) }

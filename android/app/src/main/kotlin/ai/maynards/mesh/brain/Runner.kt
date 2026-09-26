@@ -63,7 +63,7 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                     val answer = async(start = CoroutineStart.UNDISPATCHED) {
                         host.events.filter { (id, m) -> id == s.deviceId && m.optString("t") in setOf("ready", "failed", "gone") }.first()
                     }
-                    host.send(s.deviceId, msg("run", "layers" to "${s.from}-${s.to - 1}"))
+                    host.send(s.deviceId, msg("run", "layers" to "${s.from}-${s.to - 1}", "model" to plan.model.name))
                     answer.await()
                 }
                 val m = reply?.second

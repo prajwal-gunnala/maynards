@@ -11,7 +11,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -21,7 +29,7 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /** One device on the web. */
-data class WebNode(val label: String, val fill: Color, val isHost: Boolean = false)
+data class WebNode(val label: String, val fill: Color, val isHost: Boolean = false, val note: String = "")
 
 private const val SPOKES = 12
 private const val RINGS = 5
@@ -35,6 +43,7 @@ fun MeshWeb(nodes: List<WebNode>, modifier: Modifier = Modifier, lineColor: Colo
     val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
         0f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Restart), label = "t",
     )
+    val text = rememberTextMeasurer()
     Canvas(modifier) {
         val c = center
         val r = min(size.width, size.height) / 2f * 0.92f
@@ -50,8 +59,12 @@ fun MeshWeb(nodes: List<WebNode>, modifier: Modifier = Modifier, lineColor: Colo
             drawCircle(Yellow, 9f, bead)
             drawCircle(Ink, 9f, bead, style = Stroke(3f))
             drawNode(p, r * 0.13f, n.fill)
+            drawLabel(text, n, Offset(p.x, p.y + r * 0.13f + 8f))
         }
-        nodes.firstOrNull { it.isHost }?.let { drawNode(c, r * 0.17f, it.fill) }
+        nodes.firstOrNull { it.isHost }?.let {
+            drawNode(c, r * 0.17f, it.fill)
+            if (helpers.isNotEmpty()) drawLabel(text, it, Offset(c.x, c.y + r * 0.17f + 8f))
+        }
         drawSpider(c, r * 0.09f)
     }
 }
@@ -62,6 +75,19 @@ fun WebBackdrop(modifier: Modifier = Modifier, color: Color = Ink.copy(alpha = 0
     Canvas(modifier) {
         drawWeb(Offset(size.width * 0.95f, size.height * 0.05f), maxOf(size.width, size.height) * 0.9f, color)
     }
+}
+
+/** Device name (and layers held, while running) under its node, in a small white tag. */
+private fun DrawScope.drawLabel(tm: TextMeasurer, n: WebNode, top: Offset) {
+    val line = if (n.note.isBlank()) n.label.take(14) else "${n.label.take(12)} · ${n.note}"
+    val layout = tm.measure(line, TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Black, color = Ink))
+    val w = layout.size.width + 16f
+    val h = layout.size.height + 8f
+    val tl = Offset(top.x - w / 2, top.y)
+    drawRoundRect(Ink, Offset(tl.x + 3f, tl.y + 3f), Size(w, h), CornerRadius(8f))
+    drawRoundRect(Paper, tl, Size(w, h), CornerRadius(8f))
+    drawRoundRect(Ink, tl, Size(w, h), CornerRadius(8f), style = Stroke(3f))
+    drawText(layout, topLeft = Offset(tl.x + 8f, tl.y + 4f))
 }
 
 private fun angleFor(i: Int, n: Int): Float {

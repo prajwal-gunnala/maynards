@@ -98,6 +98,7 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         if (eng.status == Status.RUNNING) {
             NBox(fill = Yellow) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (link.model.isNotBlank()) Title(link.model, 18)
                     IconLabel(Icons.Outlined.Layers, "Holding layers ${link.layers.ifBlank { "…" }}")
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconLabel(Icons.Outlined.Memory, "Model memory")
@@ -110,7 +111,10 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         }
 
         NBox(pad = 8.dp) {
-            val nodes = listOf(WebNode("host", HostGreen, isHost = true), WebNode("me", HelperPurple))
+            val nodes = listOf(
+                WebNode(link.hostName.ifBlank { "Host" }, HostGreen, isHost = true),
+                WebNode("This phone", HelperPurple, note = if (eng.status == Status.RUNNING) "working" else ""),
+            )
             MeshWeb(if (link.state == Link.State.JOINED) nodes else nodes.take(1), Modifier.fillMaxWidth().aspectRatio(1.6f))
         }
         SpecsCard(rememberSpecs())

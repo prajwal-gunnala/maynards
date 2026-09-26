@@ -77,7 +77,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (tab) {
-                0 -> MeshTab(host, onChangeRole)
+                0 -> MeshTab(host, runner, onChangeRole)
                 1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap)) { runner.run(it); tab = 2 }
                 2 -> {
                     val run by runner.state.collectAsState()
@@ -94,11 +94,12 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
 }
 
 @Composable
-private fun MeshTab(host: MeshHost, onChangeRole: () -> Unit) {
+private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onChangeRole: () -> Unit) {
+    val run by runner.state.collectAsState()
     val peers by host.peers.collectAsState()
     val token by host.token.collectAsState()
     val me = rememberSpecs()
-    var showQr by remember { mutableStateOf(true) }
+    var showQr by remember { mutableStateOf(host.peers.value.isEmpty()) }   // once someone joined, the web comes first
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -119,8 +120,8 @@ private fun MeshTab(host: MeshHost, onChangeRole: () -> Unit) {
         }
         NBox(pad = 8.dp) {
             MeshWeb(
-                listOf(WebNode("me", HostGreen, isHost = true)) +
-                    peers.values.map { WebNode(it.specs.name, HelperPurple) },
+                listOf(WebNode("This phone", HostGreen, isHost = true, note = layersOf(run.plan, me.id))) +
+                    peers.values.map { WebNode(it.specs.name, HelperPurple, note = layersOf(run.plan, it.id)) },
                 Modifier.fillMaxWidth().aspectRatio(1.4f),
             )
         }
@@ -146,6 +147,10 @@ private fun MeshTab(host: MeshHost, onChangeRole: () -> Unit) {
         NButton("Change role", fill = Paper, onClick = onChangeRole)
     }
 }
+
+/** "25 layers" for a device in the running plan, or nothing. */
+private fun layersOf(plan: ai.maynards.mesh.brain.Plan?, id: String): String =
+    plan?.slices?.firstOrNull { it.deviceId == id }?.let { "${it.count} layers" } ?: ""
 
 @Composable
 private fun PeerRow(p: Peer) = DeviceRow(
