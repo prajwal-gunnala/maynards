@@ -29,6 +29,8 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    // The engine programs ship as lib*.so; they must be extracted to disk to be run.
+    packaging { jniLibs { useLegacyPackaging = true } }
 }
 
 dependencies {

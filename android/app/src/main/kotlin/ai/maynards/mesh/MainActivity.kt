@@ -1,6 +1,7 @@
 package ai.maynards.mesh
 
 import ai.maynards.mesh.ui.Header
+import ai.maynards.mesh.ui.HelperScreen
 import ai.maynards.mesh.ui.HelperPurple
 import ai.maynards.mesh.ui.HostGreen
 import ai.maynards.mesh.ui.Label
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         // Staying on screen keeps us the top app, which is what earns the big CPU cores.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        handleAdbExtras(intent)
 
         setContent {
             MeshTheme {
@@ -46,11 +48,26 @@ class MainActivity : ComponentActivity() {
                     val pick: (Role?) -> Unit = { RoleStore.save(this, it); role = it }
                     when (val r = role) {
                         null -> RolePicker(onPick = pick)
+                        Role.HELPER -> HelperScreen((application as MeshApp).engine, onChangeRole = { pick(null) })
                         else -> RoleHome(r, onChangeRole = { pick(null) })
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * Lets a laptop drive the phone without touching the screen:
+ *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --ez start true
+ */
+private fun ComponentActivity.handleAdbExtras(i: android.content.Intent?) {
+    val role = i?.getStringExtra("role")?.let { runCatching { Role.valueOf(it) }.getOrNull() } ?: return
+    RoleStore.save(this, role)
+    if (role == Role.HELPER && i.getBooleanExtra("start", false)) {
+        val ip = ai.maynards.mesh.engine.Net.best()?.ip ?: return
+        MeshService.start(this, "Helper ready")
+        (application as MeshApp).engine.startHelper(ip, ai.maynards.mesh.ui.helperThreads())
     }
 }
 
