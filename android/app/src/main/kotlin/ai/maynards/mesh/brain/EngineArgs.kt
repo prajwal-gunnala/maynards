@@ -10,13 +10,14 @@ object EngineArgs {
     /**
      * @param helperAddrs "ip:port" of each helper, in the same order as [Plan.helpers]
      */
-    fun host(plan: Plan, modelPath: String, ctx: Int, threads: Int, helperAddrs: List<String>): List<String> {
+    fun host(plan: Plan, modelPath: String, ctx: Int, threads: Int, helperAddrs: List<String>, mmproj: String? = null): List<String> {
         require(helperAddrs.size == plan.helpers.size) { "one address per helper" }
         val a = mutableListOf(
             "-m", modelPath, "-c", "$ctx", "-t", "$threads",
             "--jinja", "--fit", "off", "--reasoning", "off",
             "-ctk", "q8_0", "-ctv", "q8_0", "-fa", "on",
         )
+        if (mmproj != null) a += listOf("--mmproj", mmproj, "--no-mmproj-offload")
         if (!plan.split) {
             a += listOf("-ngl", "0")
             return a

@@ -48,11 +48,11 @@ object Planner {
     /** KV cache stored at 8 bits (q8_0 is 34 bytes per 32 values). */
     fun kvBytes(m: ModelInfo, ctx: Int): Long = m.kvBytesPerToken * ctx * 17 / 32
 
-    fun plan(m: ModelInfo, devices: List<Device>, ctx: Int = 4096): Plan {
+    fun plan(m: ModelInfo, devices: List<Device>, ctx: Int = 4096, hostExtra: Long = 0): Plan {
         val host = devices.firstOrNull { it.isHost } ?: error("no host")
         val kv = kvBytes(m, ctx)
         val kvPerLayer = kv / maxOf(m.layers, 1)
-        val need = m.weightBytes + kv + HOST_RESERVE
+        val need = m.weightBytes + kv + HOST_RESERVE + hostExtra
 
         val skipped = LinkedHashMap<String, String>()
         val biggest = (m.layerBytes.maxOrNull() ?: 0) + kvPerLayer
@@ -82,7 +82,7 @@ object Planner {
         val order = listOf(host) + helpers
         for (d in order) {
             if (next >= m.layers) { skipped[d.id] = "not needed"; continue }
-            val fixed = if (d.isHost) m.otherBytes + HOST_RESERVE else HELPER_RESERVE
+            val fixed = if (d.isHost) m.otherBytes + HOST_RESERVE + hostExtra else HELPER_RESERVE
             val cap = d.usableBytes - fixed
             var used = 0L
             val from = next

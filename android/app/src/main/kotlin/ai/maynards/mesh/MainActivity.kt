@@ -2,6 +2,7 @@ package ai.maynards.mesh
 
 import ai.maynards.mesh.ui.Header
 import ai.maynards.mesh.ui.HelperScreen
+import ai.maynards.mesh.ui.HostScreen
 import ai.maynards.mesh.ui.HelperPurple
 import ai.maynards.mesh.ui.HostGreen
 import ai.maynards.mesh.ui.Label
@@ -25,6 +26,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -41,15 +43,16 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         handleAdbExtras(intent)
 
+        val app = application as MeshApp
         setContent {
             MeshTheme {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                Surface(Modifier.fillMaxSize().systemBarsPadding(), color = MaterialTheme.colorScheme.background) {
                     var role by remember { mutableStateOf(RoleStore.load(this)) }
                     val pick: (Role?) -> Unit = { RoleStore.save(this, it); role = it }
                     when (val r = role) {
                         null -> RolePicker(onPick = pick)
-                        Role.HELPER -> HelperScreen((application as MeshApp).engine, onChangeRole = { pick(null) })
-                        else -> RoleHome(r, onChangeRole = { pick(null) })
+                        Role.HELPER -> HelperScreen(app.engine, app.client, onChangeRole = { pick(null) })
+                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
                     }
                 }
             }
@@ -60,30 +63,19 @@ class MainActivity : ComponentActivity() {
 /**
  * Lets a laptop drive the phone without touching the screen:
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --ez start true
+ *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --es join '<invite json>'
  */
 private fun ComponentActivity.handleAdbExtras(i: android.content.Intent?) {
     val role = i?.getStringExtra("role")?.let { runCatching { Role.valueOf(it) }.getOrNull() } ?: return
     RoleStore.save(this, role)
+    val app = application as MeshApp
     if (role == Role.HELPER && i.getBooleanExtra("start", false)) {
         val ip = ai.maynards.mesh.engine.Net.best()?.ip ?: return
         MeshService.start(this, "Helper ready")
-        (application as MeshApp).engine.startHelper(ip, ai.maynards.mesh.ui.helperThreads())
+        app.engine.startHelper(ip, ai.maynards.mesh.ui.helperThreads())
     }
-}
-
-@androidx.compose.runtime.Composable
-private fun RoleHome(role: Role, onChangeRole: () -> Unit) {
-    val host = role == Role.HOST
-    Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        Spacer(Modifier.height(24.dp))
-        Header()
-        NBox(fill = if (host) HostGreen else HelperPurple) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Label(if (host) "This phone is" else "This phone is a")
-                Title(if (host) "The brain" else "Helper", 34)
-            }
-        }
-        ai.maynards.mesh.ui.SpecsCard(ai.maynards.mesh.ui.rememberSpecs())
-        NButton("Change role", fill = Paper, onClick = onChangeRole)
+    i.getStringExtra("join")?.let(ai.maynards.mesh.mesh.Invite::parse)?.let {
+        MeshService.start(this, "Helper joined")
+        app.client.join(it)
     }
 }
