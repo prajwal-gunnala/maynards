@@ -6,6 +6,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -81,6 +87,25 @@ fun Sticker(text: String, fill: Color = Yellow, tilt: Float = -3f) {
             Modifier.background(fill, shape).border(2.dp, Ink, shape).padding(horizontal = 9.dp, vertical = 3.dp),
             fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.5.sp, color = Ink,
         )
+    }
+}
+
+/** A square icon tile with a thick border, like an app badge. */
+@Composable
+fun BigIcon(icon: ImageVector, fill: Color = Yellow, size: Dp = 48.dp) {
+    val shape = RoundedCornerShape(10.dp)
+    Box(Modifier.size(size).background(fill, shape).border(Border, Ink, shape), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(size * 0.58f), tint = Ink)
+    }
+}
+
+/** A label with a small icon in front. */
+@Composable
+fun IconLabel(icon: ImageVector, text: String, color: Color = Ink) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, Modifier.size(16.dp), tint = color)
+        Spacer(Modifier.width(6.dp))
+        Label(text, color)
     }
 }
 

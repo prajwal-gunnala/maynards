@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -48,7 +49,11 @@ fun HelperScreen(engine: Engine, onChangeRole: () -> Unit) {
                     Spacer(Modifier.width(10.dp))
                     Sticker(sticker, color)
                 }
-                Mono(if (running) s.address else Net.best()?.let { "${it.ip} · ${it.kind}" } ?: "no network")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Wifi, null, tint = Ink)
+                    Spacer(Modifier.width(8.dp))
+                    Mono(if (running) s.address else Net.best()?.let { "${it.ip} · ${it.kind}" } ?: "no network")
+                }
             }
         }
         SpecsCard(rememberSpecs())

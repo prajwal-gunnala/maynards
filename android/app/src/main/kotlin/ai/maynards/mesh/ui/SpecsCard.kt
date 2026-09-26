@@ -8,6 +8,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.BatteryChargingFull
+import androidx.compose.material.icons.outlined.BatteryFull
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.Laptop
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.PhoneAndroid
+import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,21 +55,31 @@ fun rememberSpecs(): Specs {
 fun SpecsCard(s: Specs, fill: Color = Paper) {
     NBox(fill = fill, shadow = 5.dp, pad = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                BigIcon(if (s.kind == "laptop") Icons.Outlined.Laptop else Icons.Outlined.PhoneAndroid, HelperPurple)
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.name, fontWeight = FontWeight.Black, fontSize = 17.sp, color = Ink)
                     Mono("${s.chip} · ${s.cores} cores · ${"%.1f".format(s.maxGhz)} GHz", 11, Muted)
                 }
             }
-            Meter("Memory", "${gb(s.freeBytes)} / ${gb(s.totalBytes)} GB free", s.freeBytes.toFloat() / s.totalBytes, HostGreen)
-            Meter("For the model", "${gb(s.usableBytes)} GB", s.usableBytes.toFloat() / s.totalBytes, Yellow)
+            Meter(Icons.Outlined.Memory, "Memory", "${gb(s.freeBytes)} / ${gb(s.totalBytes)} GB free", s.freeBytes.toFloat() / s.totalBytes, HostGreen)
+            Meter(Icons.Outlined.Bolt, "For the model", "${gb(s.usableBytes)} GB", s.usableBytes.toFloat() / s.totalBytes, Yellow)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Stat("Heat", heatLabel(s.heat), Modifier.weight(1f), if (s.heat >= 0.8f) Danger else Paper)
-                Stat("Battery", "${s.battery}%${if (s.charging) " ⚡" else ""}", Modifier.weight(1f),
-                    if (!s.charging && s.battery < 20) Danger else Paper)
+                Stat(Icons.Outlined.Thermostat, "Heat", heatLabel(s.heat), Modifier.weight(1f), heatColor(s.heat))
+                Stat(if (s.charging) Icons.Outlined.BatteryChargingFull else Icons.Outlined.BatteryFull,
+                    "Battery", "${s.battery}%", Modifier.weight(1f),
+                    if (!s.charging && s.battery < 20) Danger else if (s.charging) HostGreen else Paper)
             }
         }
     }
+}
+
+private fun heatColor(h: Float) = when {
+    h < 0 -> Paper
+    h < 0.5f -> HostGreen
+    h < 0.8f -> Tight
+    else -> Danger
 }
 
 private fun heatLabel(h: Float) = when {
@@ -68,10 +90,10 @@ private fun heatLabel(h: Float) = when {
 }
 
 @Composable
-private fun Meter(label: String, value: String, frac: Float, color: Color) {
+private fun Meter(icon: ImageVector, label: String, value: String, frac: Float, color: Color) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row {
-            Box(Modifier.weight(1f)) { Label(label) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.weight(1f)) { IconLabel(icon, label) }
             Mono(value, 12)
         }
         val shape = RoundedCornerShape(6.dp)
@@ -82,10 +104,10 @@ private fun Meter(label: String, value: String, frac: Float, color: Color) {
 }
 
 @Composable
-private fun Stat(label: String, value: String, modifier: Modifier, fill: Color) {
+private fun Stat(icon: ImageVector, label: String, value: String, modifier: Modifier, fill: Color) {
     val shape = RoundedCornerShape(8.dp)
     Column(modifier.background(fill, shape).border(Border, Ink, shape).padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Label(label, Muted)
+        IconLabel(icon, label)
         Text(value, fontWeight = FontWeight.Black, fontSize = 18.sp, color = Ink)
     }
 }
