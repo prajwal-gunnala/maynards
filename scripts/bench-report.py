@@ -50,18 +50,22 @@ def bars(runs, width=760, height=320):
         out.append(f'<rect x="{x:.1f}" y="{y:.1f}" width="{bw:.1f}" height="{bh:.1f}" fill="{BAR}"/>')
         out.append(f'<text x="{cx:.1f}" y="{y-7:.1f}" text-anchor="middle" fill="{INK}" '
                    f'font-weight="bold">{r["accuracy"]:.0f}%</text>')
-        ty = pad_t + h - h * min(r["median_tps"] / top_tps, 1.0)
-        pts.append((cx, ty, r["median_tps"]))
+        # keep the speed line inside the plot and clear of the title
+        ty = pad_t + h - (h * 0.82) * min(r["median_tps"] / top_tps, 1.0)
+        pts.append((cx, ty, r["median_tps"], y))
         for j, line in enumerate(wrap(r["label"])):
             out.append(f'<text x="{cx:.1f}" y="{pad_t+h+18+j*14:.1f}" text-anchor="middle" '
                        f'fill="{MUTED}">{esc(line)}</text>')
 
     if len(pts) > 1:
         out.append('<polyline fill="none" stroke="{}" stroke-width="2" stroke-dasharray="5 4" points="{}"/>'
-                   .format(BAR2, " ".join(f"{x:.1f},{y:.1f}" for x, y, _ in pts)))
-    for x, y, tps in pts:
+                   .format(BAR2, " ".join(f"{x:.1f},{y:.1f}" for x, y, _, _ in pts)))
+    for x, y, tps, bar_top in pts:
         out.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="4" fill="{BAR2}"/>')
-        out.append(f'<text x="{x:.1f}" y="{y-10:.1f}" text-anchor="middle" fill="{BAR2}">{tps:.0f} t/s</text>')
+        # above the dot unless that would hit the title or the bar's own label
+        below = y - 12 < pad_t + 6 or abs(y - bar_top) < 26
+        ly = y + 18 if below else y - 11
+        out.append(f'<text x="{x:.1f}" y="{ly:.1f}" text-anchor="middle" fill="{BAR2}">{tps:.0f} tok/s</text>')
 
     out.append(f'<text x="{pad_l}" y="16" fill="{INK}" font-weight="bold">'
                f'accuracy (bars) and speed (dots) as devices join</text>')

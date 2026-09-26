@@ -1,0 +1,78 @@
+{
+  "label": "bigger model, 1.7B",
+  "note": "Qwen3-1.7B Q8_0, same laptop, same tasks",
+  "url": "http://127.0.0.1:8080/v1",
+  "when": "2026-09-27 00:52",
+  "tasks": 8,
+  "passed": 5,
+  "accuracy": 62.5,
+  "median_tps": 9.0,
+  "median_seconds": 12.6,
+  "total_seconds": 96.4,
+  "results": [
+    {
+      "id": "running_max",
+      "ok": true,
+      "why": "",
+      "seconds": 12.6,
+      "tokens": 71,
+      "tps": 9.1
+    },
+    {
+      "id": "balanced_brackets",
+      "ok": true,
+      "why": "",
+      "seconds": 13.1,
+      "tokens": 102,
+      "tps": 9.0
+    },
+    {
+      "id": "word_frequencies",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 10.4,
+      "tokens": 74,
+      "tps": 9.1
+    },
+    {
+      "id": "merge_intervals",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 16.3,
+      "tokens": 115,
+      "tps": 8.9
+    },
+    {
+      "id": "roman_to_int",
+      "ok": true,
+      "why": "",
+      "seconds": 17.0,
+      "tokens": 131,
+      "tps": 8.6
+    },
+    {
+      "id": "flatten_nested",
+      "ok": true,
+      "why": "",
+      "seconds": 7.0,
+      "tokens": 45,
+      "tps": 8.8
+    },
+    {
+      "id": "group_anagrams",
+      "ok": false,
+      "why": "AssertionError",
+      "seconds": 10.4,
+      "tokens": 76,
+      "tps": 9.0
+    },
+    {
+      "id": "binary_search_insert",
+      "ok": true,
+      "why": "",
+      "seconds": 9.6,
+      "tokens": 69,
+      "tps": 9.0
+    }
+  ]
+}
