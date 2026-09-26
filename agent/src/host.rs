@@ -269,9 +269,9 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
         if let Some(mut m) = m {
             // a vision model sees through its projector: mmproj-<same name without the quant>.gguf
             let base = m.file.trim_end_matches(".gguf").rsplit_once('-').map(|x| x.0.to_string()).unwrap_or_default();
-            m.proj = fs::read_dir(&dir).into_iter().flatten().flatten()
+            m.proj = if base.is_empty() { None } else { fs::read_dir(&dir).into_iter().flatten().flatten()
                 .find(|e| e.file_name().to_string_lossy().starts_with(&format!("mmproj-{base}")))
-                .and_then(|e| Some((e.path().to_string_lossy().to_string(), e.metadata().ok()?.len())));
+                .and_then(|e| Some((e.path().to_string_lossy().to_string(), e.metadata().ok()?.len()))) };
             out.push(m);
         }
     }
@@ -732,20 +732,20 @@ fn tell_phones(hub: &Hub) {
         .map(|s| format!("{}-{}", s["from"], s["to"].as_u64().unwrap_or(1).saturating_sub(1))).unwrap_or_default();
     let me = laptop_specs();
     let mut devices = vec![json!({"name": me["name"], "kind": "laptop", "role": "host", "layers": layers("laptop"), "rtt": 0})];
+    let tps = hub.chats.lock().unwrap().iter().rev().find_map(|c| c["tps"].as_f64());
     let peers = hub.peers.lock().unwrap();
     for (id, p) in peers.iter() {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         devices.push(json!({"name": p.name, "kind": "phone", "role": "helper", "layers": layers(id), "rtt": r.get(r.len() / 2)}));
     }
-    let tps = hub.chats.lock().unwrap().iter().rev().find_map(|c| c["tps"].as_f64());
     let m = json!({"t": "mesh", "devices": devices, "model": run.model, "status": run.status, "tps": tps});
     for p in peers.values() { let _ = send(&p.wire, m.clone()); }
 }
 
 /// A phone's USB tethering offers itself as this laptop's way to the internet, and a cable beats Wi-Fi, so all
 /// browsing would go through the phone. Keep tether links local: they carry the mesh (layers, chat) only.
-fn keep_wifi_default(hub: &Hub) {
+fn keep_wifi_default(hub: &Hub, said: &mut std::collections::HashSet<String>) {
     let routes = Command::new("ip").args(["-4", "route", "show", "default"]).output()
         .map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
     for line in routes.lines() {
@@ -753,8 +753,10 @@ fn keep_wifi_default(hub: &Hub) {
         if !(dev.starts_with("enx") || dev.starts_with("usb") || dev.starts_with("rndis")) { continue; }
         let ok = Command::new("nmcli").args(["device", "modify", dev, "ipv4.never-default", "yes", "ipv6.never-default", "yes"])
             .output().map(|o| o.status.success()).unwrap_or(false);
-        hub.say(if ok { format!("{dev}: tether link kept local, internet stays on Wi-Fi") }
-                else { format!("{dev}: could not keep the tether link local (nmcli)") });
+        if said.insert(format!("{dev}:{ok}")) {
+            hub.say(if ok { format!("{dev}: tether link kept local, internet stays on Wi-Fi") }
+                    else { format!("{dev}: could not keep the tether link local (nmcli)") });
+        }
     }
 }
 
@@ -801,7 +803,7 @@ pub fn host(port: u16) -> Result<(), String> {
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
     { let h = hub.clone(); thread::spawn(move || loop { tell_phones(&h); thread::sleep(Duration::from_secs(2)); }); }
-    { let h = hub.clone(); thread::spawn(move || loop { keep_wifi_default(&h); thread::sleep(Duration::from_secs(5)); }); }
+    { let h = hub.clone(); thread::spawn(move || { let mut said = std::collections::HashSet::new(); loop { keep_wifi_default(&h, &mut said); thread::sleep(Duration::from_secs(5)); } }); }
     // all addresses: the page and API for this laptop; other machines on the link may use /v1 with the key
     let l = TcpListener::bind(("0.0.0.0", port)).map_err(|e| format!("port {port}: {e}"))?;
     hub.say(format!("MeshAI host on http://localhost:{port}/  (phones join on port {CONTROL_PORT})"));
@@ -834,6 +836,13 @@ fn state(hub: &Hub) -> Value {
         let tokens: u64 = c.iter().filter_map(|x| x["tokens"].as_u64()).sum();
         json!({"answers": t.len(), "avg_tps": avg, "best_tps": t.iter().cloned().fold(0.0, f64::max), "tokens": tokens})
     };
+    // Every lock is taken and released before the json! below: guards inside one expression stay alive
+    // until the whole statement ends, and advice() locks peers, which tell_phones() locks before chats.
+    let chats: Vec<Value> = hub.chats.lock().unwrap().iter().cloned().collect();
+    let activity: Vec<Value> = hub.activity.lock().unwrap().iter().rev().map(|(t, l)| json!({"t": t, "line": l})).collect();
+    let advice = advice(hub);
+    let last_run = hub.last_run.lock().unwrap().clone();
+    let caps: serde_json::Map<String, Value> = hub.caps.lock().unwrap().iter().map(|(k, v)| (k.clone(), json!(v / GB))).collect();
     let qr = qrcode::QrCode::new(invite.to_string().as_bytes()).map(|c| c.render::<qrcode::render::svg::Color>()
         .min_dimensions(240, 240).quiet_zone(true).build()).unwrap_or_default();
     json!({
@@ -841,13 +850,13 @@ fn state(hub: &Hub) -> Value {
         "laptop": {"specs": me, "usable_gb": usable(&me) / GB},
         "peers": peers, "models": models,
         "pool_gb": devs.iter().map(|d| d.usable).sum::<f64>() / GB,
-        "activity": hub.activity.lock().unwrap().iter().rev().map(|(t, l)| json!({"t": t, "line": l})).collect::<Vec<_>>(),
-        "chats": hub.chats.lock().unwrap().iter().cloned().collect::<Vec<_>>(),
+        "activity": activity,
+        "chats": chats,
         "stats": stats,
-        "advice": advice(hub),
-        "last_run": *hub.last_run.lock().unwrap(),
-        "caps": hub.caps.lock().unwrap().iter().map(|(k, v)| (k.clone(), json!(v / GB))).collect::<serde_json::Map<String, Value>>(),
-        "api": {"key": hub.api_key, "urls": laptop_ips().iter().map(|(ip, _)| format!("http://{ip}:8080/v1")).collect::<Vec<_>>()},
+        "advice": advice,
+        "last_run": last_run,
+        "caps": caps,
+        "api": {"key": hub.api_key, "urls": laptop_ips().iter().map(|(ip, _)| format!("http://{ip}:{}/v1", hub.api_port)).collect::<Vec<_>>()},
         "run": {"status": run.status, "step": run.step, "model": run.model, "plan": run.plan,
                 "seconds": run.started.map(|t| t.elapsed().as_secs())},
     })
