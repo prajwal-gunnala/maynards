@@ -81,7 +81,10 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                 1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap)) { runner.run(it); tab = 2 }
                 2 -> {
                     val run by runner.state.collectAsState()
-                    UseTab(runner, canSee = run.plan?.model?.let { shelf.projector(it) } != null, onPickModel = { tab = 1 }) { a ->
+                    UseTab(
+                        runner, canSee = run.plan?.model?.let { shelf.projector(it) } != null, onPickModel = { tab = 1 },
+                        system = { meshNote(run.plan, me, peers.values) },
+                    ) { a ->
                         run.plan?.let { stats.add(it, a, me.heat) }
                     }
                 }
@@ -145,6 +148,25 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
         if (peers.isEmpty()) Small("No helpers yet. Scan the QR from another phone.")
 
         NButton("Change role", fill = Paper, onClick = onChangeRole)
+    }
+}
+
+/**
+ * A short note for the model about where it is running, so "what am I running on?" gets a real answer.
+ * Only this mesh's own device specs go in; nothing leaves the devices.
+ */
+private fun meshNote(plan: ai.maynards.mesh.brain.Plan?, me: ai.maynards.mesh.engine.Specs, peers: Collection<Peer>): String {
+    fun line(name: String, s: ai.maynards.mesh.engine.Specs, id: String) = buildString {
+        append("- $name: ${s.chip}, ${s.cores} cores up to ${"%.1f".format(s.maxGhz)} GHz, ")
+        append("${gb(s.totalBytes)} GB RAM (${gb(s.freeBytes)} GB free), battery ${s.battery}%${if (s.charging) " charging" else ""}")
+        plan?.slices?.firstOrNull { it.deviceId == id }?.let { append(", holding layers ${it.from}-${it.to - 1} (${gb(it.bytes)} GB)") }
+    }
+    return buildString {
+        appendLine("You are ${plan?.model?.name ?: "a local model"}, running inside MeshAI: fully offline, on the user's own devices, no cloud.")
+        appendLine("The model is ${plan?.reason?.lowercase() ?: "running"}. Devices:")
+        appendLine(line("This phone (${me.name}, the Host)", me, me.id))
+        peers.forEach { appendLine(line("${it.specs.name} (Helper, link ${"%.0f".format(it.rttMs)} ms)", it.specs, it.id)) }
+        append("Answer briefly. Use these facts when asked about the devices or where you run.")
     }
 }
 

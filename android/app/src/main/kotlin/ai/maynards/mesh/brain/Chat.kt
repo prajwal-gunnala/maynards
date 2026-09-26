@@ -17,8 +17,9 @@ data class Answer(val text: String, val tokens: Int, val tokPerSec: Double, val 
 class Chat(private val endpoint: String) {
     private val http = OkHttpClient.Builder().readTimeout(10, TimeUnit.MINUTES).build()
 
-    fun ask(history: List<Turn>, onText: (String) -> Unit, image: String? = null): Answer {
+    fun ask(history: List<Turn>, onText: (String) -> Unit, image: String? = null, system: String? = null): Answer {
         val msgs = JSONArray()
+        if (system != null) msgs.put(JSONObject().put("role", "system").put("content", system))
         history.forEachIndexed { i, t ->
             val last = i == history.lastIndex
             val content: Any = if (last && image != null) JSONArray()

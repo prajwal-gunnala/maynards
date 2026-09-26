@@ -62,7 +62,7 @@ import kotlinx.coroutines.withContext
 data class Bubble(val mine: Boolean, val text: String, val stats: Answer? = null, val photo: android.graphics.Bitmap? = null)
 
 @Composable
-fun UseTab(runner: Runner, canSee: Boolean, onPickModel: () -> Unit, onAnswer: (Answer) -> Unit = {}) {
+fun UseTab(runner: Runner, canSee: Boolean, onPickModel: () -> Unit, system: () -> String? = { null }, onAnswer: (Answer) -> Unit = {}) {
     val run by runner.state.collectAsState()
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(16.dp))
@@ -70,7 +70,7 @@ fun UseTab(runner: Runner, canSee: Boolean, onPickModel: () -> Unit, onAnswer: (
             RunState.Status.IDLE -> Empty(onPickModel)
             RunState.Status.STARTING, RunState.Status.LOADING -> Loading(run, runner)
             RunState.Status.FAILED -> Failed(run, onPickModel)
-            RunState.Status.READY -> ChatView(run, runner, canSee, onAnswer)
+            RunState.Status.READY -> ChatView(run, runner, canSee, system, onAnswer)
         }
     }
 }
@@ -116,7 +116,7 @@ private fun Failed(run: RunState, onPickModel: () -> Unit) {
 }
 
 @Composable
-private fun ChatView(run: RunState, runner: Runner, canSee: Boolean, onAnswer: (Answer) -> Unit) {
+private fun ChatView(run: RunState, runner: Runner, canSee: Boolean, system: () -> String?, onAnswer: (Answer) -> Unit) {
     val chat = remember { Chat(runner.endpoint) }
     val bubbles = remember { mutableStateListOf<Bubble>() }
     var input by remember { mutableStateOf("") }
@@ -143,7 +143,7 @@ private fun ChatView(run: RunState, runner: Runner, canSee: Boolean, onAnswer: (
         scope.launch {
             val a = runCatching {
                 withContext(Dispatchers.IO) {
-                    chat.ask(history, onText = { t -> scope.launch { bubbles[bubbles.lastIndex] = Bubble(false, t) } }, image = shot?.second)
+                    chat.ask(history, onText = { t -> scope.launch { bubbles[bubbles.lastIndex] = Bubble(false, t) } }, image = shot?.second, system = system())
                 }
             }
             a.onSuccess { bubbles[bubbles.lastIndex] = Bubble(false, it.text, it); onAnswer(it) }

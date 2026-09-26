@@ -15,6 +15,7 @@ object EngineArgs {
         val a = mutableListOf(
             "-m", modelPath, "-c", "$ctx", "-t", "$threads",
             "--jinja", "--fit", "off", "--reasoning", "off",
+            "-np", "1",   // one conversation slot: every message reuses the cached history
             "-ctk", "q8_0", "-ctv", "q8_0", "-fa", "on",
         )
         if (mmproj != null) a += listOf("--mmproj", mmproj, "--no-mmproj-offload")
