@@ -21,6 +21,9 @@ class MeshApp : Application() {
     /** Test switch: pretend the Host has at most this much memory for models (0 = off). */
     var hostCapBytes: Long = 0
 
+    /** Scripted runs: start this model (part of its file name) as soon as the Host is up. */
+    var autoRun: String? = null
+
     override fun onCreate() {
         super.onCreate()
         engine = Engine(this)

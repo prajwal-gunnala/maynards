@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
                     when (val r = role) {
                         null -> RolePicker(onPick = pick)
                         Role.HELPER -> HelperScreen(app.engine, app.client, onChangeRole = { pick(null) })
-                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.hostCapBytes, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
+                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.hostCapBytes, app.autoRun.also { app.autoRun = null }, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
                     }
                 }
             }
@@ -65,12 +65,14 @@ class MainActivity : ComponentActivity() {
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --ez start true
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --es join '<invite json>'
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HOST --es cap_gb 3   (test: Host pretends to have 3 GB)
+ *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HOST --es run Qwen3-8B   (plan and run that model)
  */
 private fun ComponentActivity.handleAdbExtras(i: android.content.Intent?) {
     val role = i?.getStringExtra("role")?.let { runCatching { Role.valueOf(it) }.getOrNull() } ?: return
     RoleStore.save(this, role)
     val app = application as MeshApp
     i.getStringExtra("cap_gb")?.toDoubleOrNull()?.let { app.hostCapBytes = (it * 1e9).toLong() }
+    app.autoRun = i.getStringExtra("run")
     if (role == Role.HELPER && i.getBooleanExtra("start", false)) {
         val ip = ai.maynards.mesh.engine.Net.best()?.ip ?: return
         MeshService.start(this, "Helper ready")

@@ -2,7 +2,10 @@
 //!
 //!   mesh join '<invite json from the Host QR>'   lend this laptop's memory to the Host phone
 //!   mesh ask  "question"  [--host IP]           ask the model running on the Host
-//!   mesh review FILE      [--host IP]           ask the model to review a file
+//!   mesh review FILE...   [--host IP]           review files
+//!   mesh tests FILE [--out PATH] [--host IP]    write unit tests for a file
+//!   mesh diff             [--host IP]           review staged git changes (or unstaged if none)
+//!   mesh hook                                   run `mesh diff` before every git commit (advice only)
 //!
 //! The Host phone runs the brain; this agent only follows it. Control messages are JSON lines
 //! over TCP port 7070 (same as a Helper phone); layers travel over ggml RPC.
@@ -23,10 +26,13 @@ fn main() {
     let host_flag = flag(&args, "--host");
     let result = match args.first().map(String::as_str) {
         Some("join") if args.len() >= 2 => join(&args[1]),
-        Some("ask") if args.len() >= 2 => ask(&host(host_flag), &args[1]),
-        Some("review") if args.len() >= 2 => review(&host(host_flag), &args[1]),
+        Some("ask") if args.len() >= 2 => ask(&host(host_flag), &args[1]).map(|_| ()),
+        Some("review") if args.len() >= 2 => files(&args[1..]).iter().try_for_each(|f| review(&host(host_flag.clone()), f)),
+        Some("tests") if args.len() >= 2 => tests(&host(host_flag), &args[1], flag(&args, "--out")),
+        Some("diff") => diff(&host(host_flag)),
+        Some("hook") => hook(),
         _ => {
-            eprintln!("usage:\n  mesh join '<invite json>'\n  mesh ask \"question\" [--host IP]\n  mesh review FILE [--host IP]");
+            eprintln!("usage:\n  mesh join '<invite json>'\n  mesh ask \"question\" [--host IP]\n  mesh review FILE... [--host IP]\n  mesh tests FILE [--out PATH] [--host IP]\n  mesh diff [--host IP]\n  mesh hook");
             std::process::exit(2);
         }
     };
@@ -219,13 +225,71 @@ fn specs() -> Value {
 
 // ---------------------------------------------------------------- ask
 
+/// The file arguments, without flags and their values.
+fn files(args: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut skip = false;
+    for a in args {
+        if skip { skip = false; continue; }
+        if a.starts_with("--") { skip = true; continue; }
+        out.push(a.clone());
+    }
+    out
+}
+
 fn review(host: &str, file: &str) -> Res<()> {
     let code = fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
-    ask(host, &format!("Review this file ({file}). List real bugs first, then risky spots, briefly.\n\n```\n{code}\n```"))
+    eprintln!("== {file}");
+    ask(host, &format!("Review this file ({file}). List real bugs first, then risky spots, briefly.\n\n```\n{code}\n```")).map(|_| ())
+}
+
+fn tests(host: &str, file: &str, out: Option<String>) -> Res<()> {
+    let code = fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+    let framework = match file.rsplit('.').next().unwrap_or("") {
+        "py" => "pytest", "rs" => "Rust #[test] functions", "js" | "ts" => "Jest", "kt" => "JUnit", "go" => "Go testing",
+        _ => "the usual test framework for this language",
+    };
+    let text = ask(host, &format!(
+        "Write unit tests for this file ({file}) using {framework}. Cover normal cases, edge cases and errors. \
+         Reply with one code block only.\n\n```\n{code}\n```"))?;
+    if let Some(path) = out {
+        let body = text.split("```").nth(1).map(|b| b.split_once('\n').map(|x| x.1).unwrap_or(b)).unwrap_or(&text);
+        fs::write(&path, body).map_err(|e| format!("{path}: {e}"))?;
+        eprintln!("wrote {path}");
+    }
+    Ok(())
+}
+
+fn diff(host: &str) -> Res<()> {
+    let git = |args: &[&str]| Command::new("git").args(args).output().map(|o| String::from_utf8_lossy(&o.stdout).to_string());
+    let mut d = git(&["diff", "--cached"]).map_err(|e| format!("git: {e}"))?;
+    if d.trim().is_empty() { d = git(&["diff"]).map_err(|e| format!("git: {e}"))?; }
+    if d.trim().is_empty() { eprintln!("nothing to review"); return Ok(()); }
+    let d: String = d.chars().take(24_000).collect();   // keep the prompt inside the context window
+    ask(host, &format!("Review this change. List real bugs first, then risky spots. Be brief; say 'looks fine' if it is.\n\n```diff\n{d}\n```")).map(|_| ())
+}
+
+/// Installs a pre-commit hook that prints a review of the staged change. It never blocks the commit.
+fn hook() -> Res<()> {
+    let dir = Command::new("git").args(["rev-parse", "--git-path", "hooks"]).output().map_err(|e| e.to_string())?;
+    let dir = String::from_utf8_lossy(&dir.stdout).trim().to_string();
+    if dir.is_empty() { return Err("not inside a git repository".into()); }
+    let path = std::path::Path::new(&dir).join("pre-commit");
+    if path.exists() { return Err(format!("{} already exists; add `mesh diff || true` to it yourself", path.display())); }
+    let me = env::current_exe().map_err(|e| e.to_string())?;
+    fs::write(&path, format!("#!/bin/sh\n# MeshAI: review the staged change on your own devices (advice only)\n\"{}\" diff || true\n", me.display()))
+        .map_err(|e| e.to_string())?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    }
+    println!("installed {}", path.display());
+    Ok(())
 }
 
 /// Streams an answer from the Host's OpenAI-compatible API and prints it as it arrives.
-fn ask(host: &str, question: &str) -> Res<()> {
+fn ask(host: &str, question: &str) -> Res<String> {
     let body = json!({
         "messages": [{"role": "user", "content": question}],
         "stream": true, "max_tokens": 1024,
@@ -243,12 +307,14 @@ fn ask(host: &str, question: &str) -> Res<()> {
     }
     let mut stdout = std::io::stdout();
     let mut timings = Value::Null;
+    let mut text = String::new();
     for line in r.lines() {
         let line = line.map_err(|e| e.to_string())?;
         let Some(data) = line.strip_prefix("data: ") else { continue };
         if data == "[DONE]" { break; }
         let Ok(v) = serde_json::from_str::<Value>(data) else { continue };
         if let Some(t) = v["choices"][0]["delta"]["content"].as_str() {
+            text.push_str(t);
             print!("{t}");
             let _ = stdout.flush();
         }
@@ -258,5 +324,5 @@ fn ask(host: &str, question: &str) -> Res<()> {
     if let Some(tps) = timings["predicted_per_second"].as_f64() {
         eprintln!("[{:.1} tok/s, {} tokens]", tps, timings["predicted_n"]);
     }
-    Ok(())
+    Ok(text)
 }

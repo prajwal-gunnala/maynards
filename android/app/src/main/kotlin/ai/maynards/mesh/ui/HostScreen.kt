@@ -65,15 +65,25 @@ private val TABS = listOf(
 )
 
 @Composable
-fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, hostCap: Long = 0, onChangeRole: () -> Unit) {
+fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, hostCap: Long = 0, autoRun: String? = null, onChangeRole: () -> Unit) {
     val ctx = LocalContext.current
-    LaunchedEffect(Unit) {
-        runCatching { host.start() }
-        MeshService.start(ctx, "Host running")
-    }
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val peers by host.peers.collectAsState()
     val me = rememberSpecs()
+    LaunchedEffect(Unit) {
+        runCatching { host.start() }
+        MeshService.start(ctx, "Host running")
+        if (autoRun != null) {
+            kotlinx.coroutines.delay(4_000)              // give Helpers a moment to rejoin
+            val m = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { shelf.scan() }
+                .firstOrNull { it.file.contains(autoRun, ignoreCase = true) }
+            if (m != null) {
+                val p = ai.maynards.mesh.brain.Planner.plan(m, meshDevices(ai.maynards.mesh.engine.Specs.read(ctx), host.peers.value.values, hostCap),
+                    hostExtra = shelf.projector(m)?.length() ?: 0)
+                if (p.verdict != ai.maynards.mesh.brain.Verdict.NOT_POSSIBLE) { runner.run(p); tab = 2 }
+            }
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f)) {
             when (tab) {
