@@ -37,6 +37,7 @@ import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.flow.first
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -65,7 +66,7 @@ private val TABS = listOf(
 )
 
 @Composable
-fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, downloads: ai.maynards.mesh.brain.Downloads, hostCap: Long = 0, autoRun: String? = null, onChangeRole: () -> Unit) {
+fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, downloads: ai.maynards.mesh.brain.Downloads, hostCap: Long = 0, autoRun: String? = null, autoRunHelpers: Int = 0, onChangeRole: () -> Unit) {
     val ctx = LocalContext.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val peers by host.peers.collectAsState()
@@ -75,6 +76,9 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
         MeshService.start(ctx, "Host running")
         if (autoRun != null) {
             kotlinx.coroutines.delay(4_000)              // give Helpers a moment to rejoin
+            kotlinx.coroutines.withTimeoutOrNull(60_000) {
+                host.peers.first { it.size >= autoRunHelpers && it.values.all { p -> p.rttMs >= 0 } }
+            }
             val m = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { shelf.scan() }
                 .firstOrNull { it.file.contains(autoRun, ignoreCase = true) }
             if (m != null) {

@@ -6,6 +6,9 @@
 //!   mesh tests FILE [--out PATH] [--host IP]    write unit tests for a file
 //!   mesh diff             [--host IP]           review staged git changes (or unstaged if none)
 //!   mesh hook                                   run `mesh diff` before every git commit (advice only)
+//!   mesh route --text IP:PORT --vision IP:PORT [--port 8080] [--lan]
+//!                                               one address for several phones: photos go to the vision phone,
+//!                                               text to the text phone; a chat page at http://localhost:8080/
 //!
 //! The Host phone runs the brain; this agent only follows it. Control messages are JSON lines
 //! over TCP port 7070 (same as a Helper phone); layers travel over ggml RPC.
@@ -32,6 +35,8 @@ fn main() {
         Some("tests") if args.len() >= 2 => tests(&host(host_flag), &args[1], flag(&args, "--out")),
         Some("diff") => diff(&host(host_flag)),
         Some("hook") => hook(),
+        Some("route") => route(flag(&args, "--text"), flag(&args, "--vision"),
+            flag(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(API_PORT), args.iter().any(|a| a == "--lan")),
         _ => {
             eprintln!("usage:\n  mesh join '<invite json>'\n  mesh ask \"question\" [--host IP]\n  mesh review FILE... [--host IP]\n  mesh tests FILE [--out PATH] [--host IP]\n  mesh diff [--host IP]\n  mesh hook");
             std::process::exit(2);
@@ -190,6 +195,95 @@ fn stop(engine: &mut Option<Child>) {
         let _ = c.kill();
         let _ = c.wait();
     }
+}
+
+// ---------------------------------------------------------------- routing between phones
+
+const CHAT_PAGE: &str = include_str!("chat.html");
+
+/// One front door for several single-model phones. Requests with an image go to the vision phone,
+/// everything else to the text phone; the answer streams straight back. Adds `X-Mesh-Route: role:addr`.
+fn route(text: Option<String>, vision: Option<String>, port: u16, lan: bool) -> Res<()> {
+    if text.is_none() && vision.is_none() { return Err("give --text IP:PORT and/or --vision IP:PORT".into()); }
+    let bind = if lan { "0.0.0.0" } else { "127.0.0.1" };
+    let l = std::net::TcpListener::bind((bind, port)).map_err(|e| format!("port {port}: {e}"))?;
+    println!("MeshAI router on http://{bind}:{port}/  text -> {}  vision -> {}",
+        text.as_deref().unwrap_or("-"), vision.as_deref().unwrap_or("-"));
+    let targets = std::sync::Arc::new((text, vision));
+    for s in l.incoming().flatten() {
+        let t = targets.clone();
+        thread::spawn(move || { if let Err(e) = route_one(s, &t.0, &t.1) { eprintln!("route: {e}"); } });
+    }
+    Ok(())
+}
+
+fn route_one(mut s: TcpStream, text: &Option<String>, vision: &Option<String>) -> std::io::Result<()> {
+    let mut r = BufReader::new(s.try_clone()?);
+    let mut first = String::new();
+    r.read_line(&mut first)?;
+    let mut headers = Vec::new();
+    let mut len = 0usize;
+    loop {
+        let mut h = String::new();
+        if r.read_line(&mut h)? == 0 || h == "\r\n" { break; }
+        let lower = h.to_ascii_lowercase();
+        if let Some(v) = lower.strip_prefix("content-length:") { len = v.trim().parse().unwrap_or(0); }
+        if !lower.starts_with("host:") && !lower.starts_with("connection:") { headers.push(h); }
+    }
+    let mut body = vec![0u8; len];
+    r.read_exact(&mut body)?;
+    let path = first.split_whitespace().nth(1).unwrap_or("/").to_string();
+    let reply = |s: &mut TcpStream, ctype: &str, b: &[u8]| -> std::io::Result<()> {
+        write!(s, "HTTP/1.1 200 OK\r\nContent-Type: {ctype}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", b.len())?;
+        s.write_all(b)
+    };
+    if first.starts_with("GET") && (path == "/" || path == "/index.html") {
+        return reply(&mut s, "text/html; charset=utf-8", CHAT_PAGE.as_bytes());
+    }
+    if path == "/api/status" {
+        let probe = |role: &str, addr: &Option<String>| -> Option<Value> {
+            let a = addr.as_ref()?;
+            let ok = http_get(a, "/health").map(|(c, _)| c == 200).unwrap_or(false);
+            let model = http_get(a, "/v1/models").ok().and_then(|(_, b)| serde_json::from_str::<Value>(&b).ok())
+                .and_then(|v| v["data"][0]["id"].as_str().map(|m| m.rsplit('/').next().unwrap_or(m).to_string()));
+            Some(json!({"role": role, "name": format!("{role} phone ({a})"), "ok": ok, "model": model}))
+        };
+        let v: Vec<Value> = [probe("text", text), probe("vision", vision)].into_iter().flatten().collect();
+        return reply(&mut s, "application/json", Value::Array(v).to_string().as_bytes());
+    }
+    // photos go to the vision phone, everything else to the text phone (or whichever exists)
+    let wants_vision = String::from_utf8_lossy(&body).contains("\"image_url\"");
+    let (role, target) = match (wants_vision, text, vision) {
+        (true, _, Some(v)) => ("vision", v),
+        (_, Some(t), _) => ("text", t),
+        (_, None, Some(v)) => ("vision", v),
+        _ => unreachable!(),
+    };
+    let mut up = TcpStream::connect(target.as_str())?;
+    write!(up, "{first}Host: {target}\r\nConnection: close\r\n")?;
+    for h in &headers { up.write_all(h.as_bytes())?; }
+    up.write_all(b"\r\n")?;
+    up.write_all(&body)?;
+    let mut ur = BufReader::new(up);
+    let mut status = String::new();
+    ur.read_line(&mut status)?;
+    s.write_all(status.as_bytes())?;
+    write!(s, "X-Mesh-Route: {role}:{target}\r\nAccess-Control-Expose-Headers: X-Mesh-Route\r\n")?;
+    std::io::copy(&mut ur, &mut s)?;
+    Ok(())
+}
+
+/// Minimal GET for status checks: (status code, body).
+fn http_get(addr: &str, path: &str) -> std::io::Result<(u16, String)> {
+    let sa: SocketAddr = addr.parse().map_err(|_| std::io::Error::other("bad address"))?;
+    let mut s = TcpStream::connect_timeout(&sa, Duration::from_secs(2))?;
+    s.set_read_timeout(Some(Duration::from_secs(3)))?;
+    write!(s, "GET {path} HTTP/1.1\r\nHost: {addr}\r\nConnection: close\r\n\r\n")?;
+    let mut buf = String::new();
+    s.read_to_string(&mut buf)?;
+    let code = buf.split_whitespace().nth(1).and_then(|c| c.parse().ok()).unwrap_or(0);
+    let body = buf.split_once("\r\n\r\n").map(|x| x.1.to_string()).unwrap_or_default();
+    Ok((code, body))
 }
 
 // ---------------------------------------------------------------- sharing models

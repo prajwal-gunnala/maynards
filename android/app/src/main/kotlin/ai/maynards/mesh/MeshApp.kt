@@ -25,6 +25,8 @@ class MeshApp : Application() {
 
     /** Scripted runs: start this model (part of its file name) as soon as the Host is up. */
     var autoRun: String? = null
+    /** ...after this many Helpers have joined (up to a minute). */
+    var autoRunHelpers: Int = 0
 
     override fun onCreate() {
         super.onCreate()

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeshAI</title>
+<style>
+  :root { --ink:#0a0a0a; --paper:#fff; --cream:#f3f1ea; --yellow:#ffd60a; --green:#b8f0c6; --purple:#cfc3ff; --red:#ff8a80; --muted:#55555c; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--cream); color:var(--ink); font:16px/1.45 system-ui, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 140px; }
+  header { display:flex; gap:14px; align-items:center; margin-bottom:16px; }
+  .logo { width:52px; height:52px; background:var(--yellow); border:3px solid var(--ink); border-radius:12px;
+          box-shadow:4px 4px 0 var(--ink); display:grid; place-items:center; font-weight:900; font-size:26px; }
+  h1 { margin:0; font-size:26px; font-weight:900; letter-spacing:-.5px; text-transform:uppercase; }
+  .sub { color:var(--muted); }
+  .devices { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .dev { border:3px solid var(--ink); border-radius:10px; padding:8px 12px; box-shadow:3px 3px 0 var(--ink); background:var(--paper); font-weight:700; }
+  .dev.on { background:var(--green); } .dev.off { background:var(--red); }
+  .dev small { display:block; font:600 11px ui-monospace, monospace; color:var(--muted); }
+  .msg { border:2px solid var(--ink); border-radius:12px; padding:12px; margin:10px 0; max-width:88%; background:var(--paper); white-space:pre-wrap; }
+  .me { background:var(--yellow); margin-left:auto; }
+  .meta { font:600 11px ui-monospace, monospace; color:var(--muted); margin-top:6px; }
+  .tag { display:inline-block; border:2px solid var(--ink); border-radius:4px; padding:0 6px; font:900 10px system-ui; letter-spacing:1px; text-transform:uppercase; margin-right:6px; }
+  .tag.vision { background:var(--purple); } .tag.text { background:var(--green); }
+  .msg img { max-width:220px; border:2px solid var(--ink); border-radius:8px; display:block; margin-bottom:8px; }
+  pre { background:var(--ink); color:var(--yellow); padding:10px; border-radius:6px; overflow-x:auto; white-space:pre; }
+  form { position:fixed; left:0; right:0; bottom:0; background:var(--paper); border-top:3px solid var(--ink); padding:12px 16px; }
+  .row { max-width:860px; margin:0 auto; display:flex; gap:8px; align-items:center; }
+  textarea { flex:1; border:3px solid var(--ink); border-radius:10px; padding:10px; font:inherit; resize:none; height:52px; }
+  button, label.btn { border:3px solid var(--ink); border-radius:10px; background:var(--yellow); font-weight:900; padding:0 16px; height:52px;
+          box-shadow:3px 3px 0 var(--ink); cursor:pointer; text-transform:uppercase; display:grid; place-items:center; }
+  label.btn { background:var(--paper); }
+  button:disabled { background:var(--cream); box-shadow:none; }
+  #preview { max-width:860px; margin:0 auto 8px; font:600 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">M</div>
+    <div><h1>MeshAI</h1><div class="sub">Text goes to one phone, photos to the other. Nothing leaves your devices.</div></div>
+  </header>
+  <div class="devices" id="devices"></div>
+  <div id="log"></div>
+</div>
+<form id="f">
+  <div id="preview"></div>
+  <div class="row">
+    <label class="btn" title="Attach a photo">📷<input type="file" id="img" accept="image/*" hidden></label>
+    <textarea id="q" placeholder="Ask anything"></textarea>
+    <button id="send">Send</button>
+  </div>
+</form>
+<script>
+const log = document.getElementById('log'), q = document.getElementById('q'), send = document.getElementById('send');
+const imgInput = document.getElementById('img'), preview = document.getElementById('preview');
+let history = [], image = null;
+
+async function status() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    document.getElementById('devices').innerHTML = s.map(d =>
+      `<div class="dev ${d.ok ? 'on' : 'off'}">${d.role === 'vision' ? '📷' : '💬'} ${d.name}<small>${d.model || 'not running'}</small></div>`).join('');
+  } catch (e) {}
+}
+status(); setInterval(status, 5000);
+
+imgInput.onchange = () => {
+  const f = imgInput.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    // shrink to at most 768 px so the phone's vision model is not slowed by huge photos
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 768 / Math.max(im.width, im.height));
+      const c = document.createElement('canvas'); c.width = im.width * k; c.height = im.height * k;
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      image = c.toDataURL('image/jpeg', 0.85);
+      preview.textContent = '📷 photo attached (' + c.width + '×' + c.height + ') — goes to the vision phone';
+    };
+    im.src = r.result;
+  };
+  r.readAsDataURL(f);
+};
+
+function md(t) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return t.split('```').map((p, i) => i % 2 ? '<pre>' + esc(p.replace(/^[^\n]*\n/, '')) + '</pre>'
+    : esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')).join('');
+}
+
+function bubble(cls, html) {
+  const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; log.appendChild(d);
+  window.scrollTo(0, document.body.scrollHeight); return d;
+}
+
+document.getElementById('f').onsubmit = async e => {
+  e.preventDefault();
+  const text = q.value.trim(); if (!text) return;
+  q.value = ''; send.disabled = true;
+  bubble('me', (image ? `<img src="${image}">` : '') + md(text));
+  const content = image ? [{type: 'text', text}, {type: 'image_url', image_url: {url: image}}] : text;
+  const msgs = image ? [{role: 'user', content}] : [...history, {role: 'user', content}];
+  image = null; preview.textContent = ''; imgInput.value = '';
+  const out = bubble('', '…');
+  const t0 = performance.now(); let first = 0, acc = '', timings = null;
+  try {
+    const r = await fetch('/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json'},
+      body: JSON.stringify({messages: msgs, stream: true, max_tokens: 1024})});
+    const route = r.headers.get('x-mesh-route') || '';
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const {done, value} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        const j = JSON.parse(line.slice(6));
+        if (j.timings) timings = j.timings;
+        const piece = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+        if (piece) { if (!first) first = performance.now() - t0; acc += piece; out.innerHTML = md(acc); }
+      }
+    }
+    const [role, dev] = route.split(':');
+    out.innerHTML = md(acc) + `<div class="meta"><span class="tag ${role}">${role || '?'}</span>${dev || ''}` +
+      (timings ? ` · ${timings.predicted_per_second.toFixed(1)} tok/s · first word ${(first / 1000).toFixed(1)}s · ${timings.predicted_n} tokens` : '') + '</div>';
+    if (!content.map) history.push({role: 'user', content: text}, {role: 'assistant', content: acc});
+  } catch (err) { out.textContent = 'Error: ' + err; }
+  send.disabled = false; q.focus();
+};
+q.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('f').requestSubmit(); } });
+</script>
+</body>
+</html>
