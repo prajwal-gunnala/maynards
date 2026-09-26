@@ -39,6 +39,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import ai.maynards.mesh.engine.Offer
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
 
 /** This phone's specs, refreshed every 2 seconds. */
 @Composable
@@ -52,7 +56,7 @@ fun rememberSpecs(): Specs {
 }
 
 @Composable
-fun SpecsCard(s: Specs, fill: Color = Paper) {
+fun SpecsCard(s: Specs, fill: Color = Paper, offerControl: Boolean = true) {
     NBox(fill = fill, shadow = 5.dp, pad = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -70,6 +74,42 @@ fun SpecsCard(s: Specs, fill: Color = Paper) {
                 Stat(if (s.charging) Icons.Outlined.BatteryChargingFull else Icons.Outlined.BatteryFull,
                     "Battery", "${s.battery}%", Modifier.weight(1f),
                     if (!s.charging && s.battery < 20) Danger else if (s.charging) HostGreen else Paper)
+            }
+            if (offerControl && s.kind == "phone") OfferControl(s)
+        }
+    }
+}
+
+/**
+ * How much of this phone the owner is lending. Auto means everything free except what Android needs
+ * to stay responsive; any other choice is a ceiling this device will not cross, hosting or helping.
+ * It takes effect on the next specs report, which is within two seconds.
+ */
+@Composable
+private fun OfferControl(s: Specs) {
+    val ctx = LocalContext.current
+    var gb by remember { mutableStateOf(Offer.gb(ctx)) }
+    val maxGb = s.totalBytes / 1_000_000_000L
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Rule()
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Label("Memory you lend")
+            Spacer(Modifier.weight(1f))
+            Mono(if (gb == 0L) "auto · ${gb(s.usableBytes)} GB" else "$gb GB", 11, if (gb == 0L) Muted else Term)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Offer.choices.filter { it == 0L || it < maxGb }.forEach { c ->
+                val on = c == gb
+                Text(
+                    if (c == 0L) "auto" else "$c",
+                    fontSize = 12.sp, fontFamily = FontFamily.Monospace,
+                    color = if (on) Cream else Muted,
+                    modifier = Modifier.clip(RoundedCornerShape(6.dp))
+                        .background(if (on) Term else Raised)
+                        .border(Border, if (on) Term else Line, RoundedCornerShape(6.dp))
+                        .clickable { gb = c; Offer.set(ctx, c) }
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
             }
         }
     }

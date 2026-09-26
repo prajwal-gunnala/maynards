@@ -51,6 +51,7 @@ data class Specs(
                 (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)
             }
             val kernel = meminfo()
+            val offer = Offer.bytes(ctx)   // what the owner of this phone has agreed to lend
             val bat = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val plugged = (bat?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
@@ -63,8 +64,14 @@ data class Specs(
                 cores = Runtime.getRuntime().availableProcessors(),
                 maxGhz = maxCpuGhz(),
                 totalBytes = kernel?.first ?: mem.totalMem,
-                // never report less than either source says: Android's own figure is the pessimistic one
-                freeBytes = maxOf(kernel?.second ?: 0L, mem.availMem),
+                // Never report less than either source says: Android's own figure is the pessimistic one.
+                // A cap set by the phone's owner is applied here, so both the Kotlin planner and the Rust
+                // host see the same, smaller, honest offer without either needing to know about the setting.
+                freeBytes = maxOf(kernel?.second ?: 0L, mem.availMem).let { free ->
+                    val total = kernel?.first ?: mem.totalMem
+                    val reserve = (total * 15 / 100).coerceIn(800_000_000L, 2_500_000_000L)
+                    if (offer > 0) minOf(free, offer + reserve) else free
+                },
                 heat = runCatching { pm.getThermalHeadroom(10) }.getOrDefault(Float.NaN).let { if (it.isNaN()) -1f else it },
                 battery = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY),
                 charging = plugged,
