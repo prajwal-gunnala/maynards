@@ -515,7 +515,7 @@ function renderRun() {
   } else {
     $('runbox').innerHTML = `<div class="row between"><div><div class="name">${esc(r.model || 'Nothing running')}</div>
         <div class="mono" style="color:var(--ink)">${esc(r.step || '')}${busy && r.seconds != null ? ' · ' + r.seconds + ' s' : ''}</div></div>
-       <div class="row">${r.status === 'idle' || r.status === 'failed' ? (S.last_run ? `<button id="again">${ic('redo')}Start again</button>` : '') + '<button class="plain" data-go2="2">Pick a model</button>' : `<button class="plain" id="stopbtn">${ic('stop')}Stop</button>`}${r.status === 'ready' ? `<button class="plain" id="benchbtn" title="Ask this setup the same coding problems every time, and run the answers against their tests">${ic('chart')}Measure this setup</button>` : ''}</div></div>
+       <div class="row">${r.status === 'idle' || r.status === 'failed' ? (S.last_run ? `<button id="again">${ic('redo')}Start again</button>` : '') + '<button class="plain" data-go2="2">Pick a model</button>' : `<button class="plain" id="stopbtn">${ic('stop')}Stop</button>`}${r.status === 'ready' ? `<button class="plain" id="benchbtn"${S.benching ? ' disabled' : ''} title="Ask this setup the same coding problems every time, and run the answers against their tests">${ic('chart')}${S.benching ? 'measuring, watch the feed…' : 'Measure this setup'}</button>` : ''}</div></div>
        ${r.status !== 'idle' ? track(r) : ''}
        ${r.plan && r.plan.slices ? '<div style="margin-top:12px">' + layerBar(r.plan) + '</div>' : ''}`;
   }
@@ -523,8 +523,9 @@ function renderRun() {
   const ag = $('again'); if (ag) ag.onclick = () => fetch('/api/again', {method: 'POST'}).then(poll);
   const bb = $('benchbtn');
   if (bb) bb.onclick = () => {
+    // the server owns this state, so the next poll cannot hand the button back mid-measurement
     bb.disabled = true; bb.textContent = 'measuring, watch the feed…';
-    fetch('/api/bench', {method: 'POST', headers: {'content-type': 'application/json'}, body: '{}'});
+    fetch('/api/bench', {method: 'POST', headers: {'content-type': 'application/json'}, body: '{}'}).then(poll);
   };
   scores();
   document.querySelectorAll('[data-go2]').forEach(b => b.onclick = () => go(2));

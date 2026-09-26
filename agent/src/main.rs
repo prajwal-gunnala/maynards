@@ -156,7 +156,9 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
                 // answer needs room too. If we cut the patch, say so rather than review half of it silently.
                 let (d, cut) = working_diff(6_000);
                 println!("sent {} characters of diff to the Host{}", d.len(), if cut { " (truncated)" } else { "" });
-                let new = untracked();
+                // the count, not the paths: a line on this link has a size limit, and a tree without a
+                // .gitignore could otherwise produce one long enough to break the helper's read loop
+                let new = untracked().len();
                 send(&out, json!({"t": "diff", "text": d, "cut": cut, "repo": repo_name(), "untracked": new,
                                   "dir": env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()}))?;
             }

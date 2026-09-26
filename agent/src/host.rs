@@ -52,6 +52,7 @@ pub struct Hub {
     usb_ports: crate::Ports,
     models: Mutex<HashMap<String, (u64, Model)>>,
     run_gen: Mutex<u64>,
+    benching: std::sync::atomic::AtomicBool,   // one measurement at a time: two would spoil each other's numbers
     chats: Mutex<VecDeque<Value>>,   // every question the mesh answered, from any client
     caps: Mutex<HashMap<String, f64>>, // per-device memory cap in bytes, set on the page ("laptop" = this laptop)
     api_key: String,                  // other machines on the link use the API with this key
@@ -157,6 +158,10 @@ fn usable(specs: &Value) -> f64 {
 }
 
 // ---------------------------------------------------------------- model files (GGUF header only)
+
+/// Files in the models folder that are not models we can run: a projector belongs to a vision model,
+/// the rest are other kinds of network entirely. The scanner and the pre-flight checks share this list.
+const SKIP: [&str; 6] = ["mmproj", "tts", "asr", "whisper", "diffusion", "embed"];
 
 #[derive(Clone)]
 struct Model {
@@ -272,7 +277,7 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
     for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         let low = name.to_ascii_lowercase();
-        if !name.ends_with(".gguf") || ["mmproj", "tts", "asr", "whisper", "diffusion", "embed"].iter().any(|x| low.contains(x)) { continue; }
+        if !name.ends_with(".gguf") || SKIP.iter().any(|x| low.contains(x)) { continue; }
         let len = e.metadata().map(|m| m.len()).unwrap_or(0);
         let cached = hub.models.lock().unwrap().get(&name).filter(|(l, _)| *l == len).map(|(_, m)| m.clone());
         let m = cached.or_else(|| read_gguf(&e.path()).inspect(|m| { hub.models.lock().unwrap().insert(name.clone(), (len, m.clone())); }));
@@ -463,6 +468,13 @@ fn lost_layers(hub: &Hub, id: &str, name: &str, m: &Value) {
 /// The engine's flags differ between llama.cpp builds, and one it does not know makes it exit immediately with
 /// status 0: on the page that looks exactly like a crash, with nothing in the log to explain it. So ask the
 /// binary what it supports and leave out the optional flags it has never heard of.
+/// Does this build really have that flag? A plain substring test says yes to `--reasoning` for a build
+/// that only has `--reasoning-format`, and the engine then exits on the argument we passed it, which is
+/// the exact failure this check exists to prevent.
+fn has_flag(help: &str, flag: &str) -> bool {
+    help.split(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_')).any(|w| w == flag)
+}
+
 fn engine_help(bin: &str) -> String {
     static HELP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     HELP.get_or_init(|| Command::new(format!("{bin}/llama-server")).arg("--help").output()
@@ -501,6 +513,10 @@ fn bench(hub: Arc<Hub>, label: String) {
         format!("{} on {} device{}", r.model, n, if n == 1 { "" } else { "s" })
     } else { label };
 
+    if hub.benching.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        hub.say("a measurement is already running".into());
+        return;
+    }
     thread::spawn(move || {
         hub.say(format!("measuring {label} …"));
         let root = std::env::current_dir().unwrap_or_default();
@@ -509,10 +525,15 @@ fn bench(hub: Arc<Hub>, label: String) {
             .arg("-u")
             .arg(root.join("scripts/bench.py"))
             .args(["--label", &label, "--url", &format!("http://127.0.0.1:{}/v1", hub.api_port)])
-            .stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()
+            // stderr is not piped: nothing reads it, and a full pipe would hang the child for good
+            .stdout(Stdio::piped()).stderr(Stdio::null()).spawn()
         {
             Ok(c) => c,
-            Err(e) => { hub.say(format!("failed: cannot run the benchmark: {e}")); return; }
+            Err(e) => {
+                hub.say(format!("failed: cannot run the benchmark: {e}"));
+                hub.benching.store(false, std::sync::atomic::Ordering::SeqCst);
+                return;
+            }
         };
         if let Some(out) = child.stdout.take() {
             for line in BufReader::new(out).lines().map_while(Result::ok) {
@@ -527,6 +548,7 @@ fn bench(hub: Arc<Hub>, label: String) {
             Ok(st) if st.success() => hub.say(format!("✓ measured {label}")),
             _ => hub.say("failed: the benchmark did not finish".into()),
         }
+        hub.benching.store(false, std::sync::atomic::Ordering::SeqCst);
     });
 }
 
@@ -612,7 +634,7 @@ fn start(hub: Arc<Hub>, file: String) {
                             // read the file once, front to back: with mmap, sending layers to phones reads it in scattered pieces
                             ("--load-mode", &["none"])] {
             // an empty help text means the probe itself failed, and then the old behaviour is the safer guess
-            if help.is_empty() || help.contains(flag) {
+            if help.is_empty() || has_flag(&help, flag) {
                 args.push(flag.into());
                 args.extend(val.iter().map(|v| v.to_string()));
             } else {
@@ -621,7 +643,7 @@ fn start(hub: Arc<Hub>, file: String) {
         }
         if let Some((path, _)) = &m.proj {
             args.extend(["--mmproj".into(), path.clone()]);
-            if help.is_empty() || help.contains("--no-mmproj-offload") { args.push("--no-mmproj-offload".into()); }
+            if help.is_empty() || has_flag(&help, "--no-mmproj-offload") { args.push("--no-mmproj-offload".into()); }
         }
         if helpers.is_empty() {
             args.extend(["-ngl".into(), "0".into()]);
@@ -774,14 +796,19 @@ fn tell_phones(hub: &Hub) {
     let me = laptop_specs();
     let mut devices = vec![json!({"name": me["name"], "kind": "laptop", "role": "host", "layers": layers("laptop"), "rtt": 0})];
     let tps = hub.chats.lock().unwrap().iter().rev().find_map(|c| c["tps"].as_f64());
-    let peers = hub.peers.lock().unwrap();
-    for (id, p) in peers.iter() {
-        let mut r: Vec<f64> = p.rtts.iter().copied().collect();
-        r.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        devices.push(json!({"name": p.name, "kind": "phone", "role": "helper", "layers": layers(id), "rtt": r.get(r.len() / 2)}));
-    }
+    // take a copy of the wires and let the lock go: send() blocks if a phone stops reading its socket,
+    // and holding the peer map across that would stop the page, the planner and the checks together
+    let wires: Vec<Arc<Mutex<TcpStream>>> = {
+        let peers = hub.peers.lock().unwrap();
+        for (id, p) in peers.iter() {
+            let mut r: Vec<f64> = p.rtts.iter().copied().collect();
+            r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            devices.push(json!({"name": p.name, "kind": "phone", "role": "helper", "layers": layers(id), "rtt": r.get(r.len() / 2)}));
+        }
+        peers.values().map(|p| p.wire.clone()).collect()
+    };
     let m = json!({"t": "mesh", "devices": devices, "model": run.model, "status": run.status, "tps": tps});
-    for p in peers.values() { let _ = send(&p.wire, m.clone()); }
+    for w in &wires { let _ = send(w, m.clone()); }
 }
 
 /// A phone's USB tethering offers itself as this laptop's way to the internet, and a cable beats Wi-Fi, so all
@@ -833,7 +860,7 @@ fn checks(hub: &Hub) -> Vec<Value> {
     if std::path::Path::new(&engine).exists() {
         let help = engine_help(&bin);
         let missing: Vec<&str> = ["--jinja", "--fit", "--reasoning", "-np", "-ctk", "-fa", "--load-mode"]
-            .into_iter().filter(|f| !help.contains(f)).collect();
+            .into_iter().filter(|f| !has_flag(&help, f)).collect();
         add(true, "engine", if missing.is_empty() { format!("{engine}, every flag we use") }
                             else { format!("{engine}, without {}", missing.join(" ")) });
     } else {
@@ -848,8 +875,11 @@ fn checks(hub: &Hub) -> Vec<Value> {
     // the models: how many, how big, and whether their headers actually read
     let dir = crate::models_dir();
     let models = scan_models(hub);
+    // scan_models deliberately ignores projectors and non-text models; counting them here would put a
+    // red cross on the one screen whose job is to reassure the person about to present
     let files = fs::read_dir(&dir).into_iter().flatten().flatten()
-        .filter(|e| e.file_name().to_string_lossy().ends_with(".gguf")).count();
+        .filter(|e| { let n = e.file_name().to_string_lossy().to_lowercase();
+                      n.ends_with(".gguf") && !SKIP.iter().any(|k| n.contains(k)) }).count();
     let gb: f64 = models.iter().map(|m| m.bytes as f64).sum::<f64>() / GB;
     add(files > 0 && models.len() == files,
         "models",
@@ -911,6 +941,7 @@ pub fn host(port: u16) -> Result<(), String> {
         mesh: mesh.trim().into(), token: Mutex::new(random_hex(16)), secrets: Mutex::new(secrets), peers: Default::default(),
         replies: Default::default(), activity: Default::default(), run: Mutex::new(Run { status: "idle".into(), ..Default::default() }),
         engine: Default::default(), usb_ports: Default::default(), models: Default::default(), run_gen: Default::default(),
+        benching: Default::default(),
         chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
         api_port: port,
     });
@@ -968,6 +999,7 @@ fn state(hub: &Hub) -> Value {
         "chats": chats,
         "stats": stats,
         "online": internet(),
+        "benching": hub.benching.load(std::sync::atomic::Ordering::SeqCst),
         "advice": advice,
         "last_run": last_run,
         "caps": caps,

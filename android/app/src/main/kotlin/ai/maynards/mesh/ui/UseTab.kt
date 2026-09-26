@@ -169,22 +169,28 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
         if (bubbles.isNotEmpty()) list.scrollToItem(bubbles.lastIndex)
     }
 
-    fun ask(question: String, shown: String = question, image: Pair<android.graphics.Bitmap, String>? = null) {
+    fun ask(question: String, shown: String = question, image: Pair<android.graphics.Bitmap, String>? = null,
+            fresh: Boolean = false) {
         if (busy) return
         busy = true
         val shot = image
         photo = null
         bubbles += Bubble(true, shown, photo = shot?.first)
         bubbles += Bubble(false, "")
-        // the model sees the real question; the bubble may show a shorter version of it
-        val history = bubbles.dropLast(1).map { Turn(if (it.mine) "user" else "assistant", it.text) }
+        // the model sees the real question; the bubble may show a shorter version of it.
+        // A review carries a patch worth well over a thousand tokens, so it goes on its own: replaying
+        // the conversation as well (and a previous patch with it) would not fit the 4096 context.
+        val history = if (fresh) listOf(Turn("user", question))
+        else bubbles.dropLast(1).map { Turn(if (it.mine) "user" else "assistant", it.text) }
             .toMutableList().also { if (question != shown) it[it.lastIndex] = Turn("user", question) }
         scope.launch {
             val a = runCatching {
                 withContext(Dispatchers.IO) {
                     chat.ask(history, onText = { t ->
-                        words = t.length / 4          // a word is about four characters: good enough to animate
-                        scope.launch { bubbles[bubbles.lastIndex] = Bubble(false, t) }
+                        scope.launch {
+                            words = t.length / 4      // about four characters to the word: enough to animate
+                            bubbles[bubbles.lastIndex] = Bubble(false, t)
+                        }
                     }, image = shot?.second, system = system())
                 }
             }
@@ -220,15 +226,19 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
             return
         }
         busy = true
+        bubbles += Bubble(false, "Asking ${laptop.specs.name} what you have changed…")
         scope.launch {
-            val reply = withTimeoutOrNull(8_000) {
+            // the laptop forks three git commands and may be mid-probe on its own helper port,
+            // so this waits well past the point where a judge would assume it is broken
+            val reply = withTimeoutOrNull(25_000) {
                 val wanted = host.events.onSubscription { host.send(laptop.id, msg("diff")) }
                 wanted.first { (id, m) -> id == laptop.id && m.optString("t") == "diff" }.second
             }
             busy = false
+            bubbles.removeAt(bubbles.lastIndex)      // drop the "asking…" line
             val text = reply?.optString("text").orEmpty()
             // git cannot see a file it is not tracking, so a brand new file looks like no change at all
-            val newFiles = reply?.optJSONArray("untracked")?.length() ?: 0
+            val newFiles = reply?.optInt("untracked") ?: 0
             val alsoNew = if (newFiles > 0) " ($newFiles new file(s) not tracked yet: git add them to include them)" else ""
             when {
                 reply == null -> bubbles += Bubble(false, "${laptop.specs.name} did not answer in time.")
@@ -244,7 +254,8 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                     // the laptop trims a large patch to fit the context: never review half of it silently
                     val cut = if (reply.optBoolean("cut")) ", first part only" else ""
                     ask("$REVIEW_PROMPT\n\n```diff\n$text\n```",
-                        "Review my changes in $repo ($lines lines$cut, from ${laptop.specs.name})$alsoNew")
+                        "Review my changes in $repo ($lines lines$cut, from ${laptop.specs.name})$alsoNew",
+                        fresh = true)
                 }
             }
         }
@@ -280,7 +291,7 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                 if (voice.listening) voice.stop() else voice.start()
             }
             Spacer(Modifier.width(6.dp))
-            SquareButton(Icons.Outlined.RateReview, Paper) { reviewChanges() }
+            SquareButton(Icons.Outlined.RateReview, if (busy) Cream else Paper) { reviewChanges() }
             Spacer(Modifier.width(6.dp))
             if (canSee) {
                 SquareButton(Icons.Outlined.Image, if (photo != null) HostGreen else Paper) { gallery() }
@@ -348,12 +359,13 @@ private fun kb(b: Long): String = when {
 private fun statusLine(run: RunState, route: String?, online: Boolean): String {
     val plan = run.plan ?: return run.step
     val n = plan.slices.size
-    val mine = plan.slices.firstOrNull()?.let { "layers ${it.from}-${it.to - 1} here" }
+    val mine = plan.slices.firstOrNull()?.takeIf { it.to > it.from }?.let { "layers ${it.from}-${it.to - 1} here" }
     return listOfNotNull(
         if (n > 1) "$n devices" else "1 device",
         mine,
         if (online) null else "OFFLINE",
         route?.substringAfter(':')?.takeIf { it.isNotBlank() }?.let { "answered by $it" },
+        plan.slices.drop(1).joinToString(" + ") { it.name.take(10) }.takeIf { it.isNotEmpty() }?.let { "with $it" },
     ).joinToString(" · ")
 }
 
@@ -373,6 +385,7 @@ private fun BubbleView(b: Bubble) {
                     Spacer(Modifier.width(4.dp))
                     Mono("%.1f tok/s · first word %.1fs · %d tokens%s".format(
                         s.tokPerSec, s.firstTokenMs / 1000.0, s.tokens,
+                        // only a request routed by the agent carries this; a local engine does not
                         s.route?.substringAfter(':')?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), 10, Muted)
                 }
             }
