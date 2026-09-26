@@ -6,6 +6,7 @@
 //!   mesh tests FILE [--out PATH] [--host IP]    write unit tests for a file
 //!   mesh diff             [--host IP]           review staged git changes (or unstaged if none)
 //!   mesh hook                                   run `mesh diff` before every git commit (advice only)
+//!   mesh host [--port 8080]                     the laptop as the brain: QR pairing, models, split runs, chat
 //!   mesh panel [--port 8080]                    web app: see the USB phones, run a model on each, chat with them
 //!   mesh route --text IP:PORT --vision IP:PORT [--port 8080] [--lan]
 //!                                               one address for several phones: photos go to the vision phone,
@@ -13,6 +14,8 @@
 //!
 //! The Host phone runs the brain; this agent only follows it. Control messages are JSON lines
 //! over TCP port 7070 (same as a Helper phone); layers travel over ggml RPC.
+
+mod host;
 
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -36,6 +39,7 @@ fn main() {
         Some("tests") if args.len() >= 2 => tests(&host(host_flag), &args[1], flag(&args, "--out")),
         Some("diff") => diff(&host(host_flag)),
         Some("hook") => hook(),
+        Some("host") => host::host(flag(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(API_PORT)),
         Some("panel") => panel(flag(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(API_PORT)),
         Some("route") => route(flag(&args, "--text"), flag(&args, "--vision"),
             flag(&args, "--port").and_then(|p| p.parse().ok()).unwrap_or(API_PORT), args.iter().any(|a| a == "--lan")),
@@ -317,30 +321,32 @@ fn panel_one(mut s: TcpStream, ports: &Ports) -> std::io::Result<()> {
             }).collect();
             json_reply(&mut s, Value::Array(list))
         }
-        _ if path.starts_with("/v1/") => {
-            // photos to a phone running a vision model, everything else to a phone running a text model
-            let wants_vision = String::from_utf8_lossy(&body).contains("\"image_url\"");
-            let mut text = None;
-            let mut vision = None;
-            for p in phones() {
-                let port = port_for(ports, &p);
-                if let Some(m) = running_model(port) {
-                    let t = format!("127.0.0.1:{port}");
-                    if is_vision(&m) { vision.get_or_insert((t, p)); } else { text.get_or_insert((t, p)); }
-                }
-            }
-            let pick = if wants_vision { vision.clone().map(|v| ("vision", v)) } else { None }
-                .or_else(|| text.clone().map(|t| ("text", t)))
-                .or_else(|| vision.clone().map(|v| ("vision", v)));
-            match pick {
-                Some((role, (target, serial))) => forward(s, &first, &headers, &body, role, &target, &serial),
-                None => {
-                    let msg = json!({"error": {"message": "no phone is running a model: open the Devices tab and press Run"}}).to_string();
-                    write!(s, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{msg}", msg.len())
-                }
-            }
-        }
+        _ if path.starts_with("/v1/") => route_to_phones(s, &first, &headers, &body, ports),
         _ => write!(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+    }
+}
+
+/// Photos to a USB phone running a vision model, everything else to one running a text model.
+fn route_to_phones(mut s: TcpStream, first: &str, headers: &[String], body: &[u8], ports: &Ports) -> std::io::Result<()> {
+    let wants_vision = String::from_utf8_lossy(body).contains("\"image_url\"");
+    let mut text = None;
+    let mut vision = None;
+    for p in phones() {
+        let port = port_for(ports, &p);
+        if let Some(m) = running_model(port) {
+            let t = format!("127.0.0.1:{port}");
+            if is_vision(&m) { vision.get_or_insert((t, p)); } else { text.get_or_insert((t, p)); }
+        }
+    }
+    let pick = if wants_vision { vision.clone().map(|v| ("vision", v)) } else { None }
+        .or_else(|| text.clone().map(|t| ("text", t)))
+        .or_else(|| vision.clone().map(|v| ("vision", v)));
+    match pick {
+        Some((role, (target, serial))) => forward(s, first, headers, body, role, &target, &serial),
+        None => {
+            let msg = json!({"error": {"message": "no model is running: start one first"}}).to_string();
+            write!(s, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{msg}", msg.len())
+        }
     }
 }
 

@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MeshAI</title>
+<style>
+  :root { --ink:#0a0a0a; --paper:#fff; --cream:#f3f1ea; --yellow:#ffd60a; --green:#b8f0c6; --purple:#cfc3ff; --red:#ff8a80; --tight:#ffe08a; --blue:#bfe3ff; --muted:#55555c; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--cream); color:var(--ink); font:16px/1.45 system-ui, sans-serif; }
+  .wrap { max-width:1000px; margin:0 auto; padding:20px 16px 150px; }
+  header { display:flex; gap:14px; align-items:center; margin-bottom:16px; }
+  .logo { width:52px; height:52px; background:var(--yellow); border:3px solid var(--ink); border-radius:12px; box-shadow:4px 4px 0 var(--ink); display:grid; place-items:center; font-weight:900; font-size:26px; }
+  h1 { margin:0; font-size:26px; font-weight:900; letter-spacing:-.5px; }
+  h2 { font-size:12px; letter-spacing:2px; text-transform:uppercase; font-weight:900; margin:24px 0 10px; }
+  .mono { font:600 12px ui-monospace, monospace; color:var(--muted); }
+  .banner { background:var(--yellow); border:3px solid var(--ink); border-radius:12px; box-shadow:6px 6px 0 var(--ink); padding:14px 16px; margin-bottom:18px; }
+  .banner .k { font:900 11px system-ui; letter-spacing:2px; text-transform:uppercase; }
+  .banner .v { font-size:20px; font-weight:900; }
+  .steps { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+  .step { border:3px solid var(--ink); border-radius:10px; padding:10px 16px; font-weight:900; letter-spacing:1px; text-transform:uppercase; background:var(--paper);
+          box-shadow:4px 4px 0 var(--ink); cursor:pointer; user-select:none; }
+  .step.on { background:var(--ink); color:var(--yellow); box-shadow:none; transform:translate(4px,4px); }
+  .step.locked { opacity:.45; cursor:not-allowed; }
+  .box { background:var(--paper); border:3px solid var(--ink); border-radius:12px; box-shadow:6px 6px 0 var(--ink); padding:16px; margin-bottom:18px; }
+  .box h3 { margin:0 0 10px; font:900 13px system-ui; letter-spacing:2px; text-transform:uppercase; border-bottom:3px solid var(--ink); padding-bottom:8px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .between { justify-content:space-between; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:18px; }
+  .qr { background:var(--paper); border:3px solid var(--ink); border-radius:10px; padding:8px; width:260px; }
+  .qr svg { width:100%; height:auto; display:block; }
+  .dash { border-top:2px dashed var(--ink); margin:12px 0; }
+  .name { font-weight:900; font-size:19px; }
+  .sticker { display:inline-block; border:2px solid var(--ink); border-radius:4px; padding:1px 8px; font:900 10px system-ui; letter-spacing:1.5px; text-transform:uppercase;
+             background:var(--paper); box-shadow:2px 2px 0 var(--ink); }
+  .host { background:var(--green); } .helper { background:var(--purple); } .bad { background:var(--red); } .tightc { background:var(--tight); }
+  .bar { height:18px; border:3px solid var(--ink); border-radius:6px; background:var(--paper); overflow:hidden; display:flex; }
+  .bar i { display:block; height:100%; }
+  .layers { display:flex; height:30px; border:3px solid var(--ink); border-radius:6px; padding:3px; gap:3px; background:var(--paper); }
+  .layers div { border:2px solid var(--ink); border-radius:3px; display:grid; place-items:center; font:900 11px system-ui; min-width:24px; }
+  button, label.btn { border:3px solid var(--ink); border-radius:8px; background:var(--yellow); font-weight:900; padding:9px 16px; cursor:pointer; box-shadow:3px 3px 0 var(--ink);
+          text-transform:uppercase; letter-spacing:1px; font-size:13px; }
+  button.plain { background:var(--paper); } button:disabled { background:var(--cream); color:var(--muted); box-shadow:none; cursor:default; }
+  button.big { font-size:16px; padding:12px 22px; }
+  .feed { font:600 13px ui-monospace, monospace; max-height:220px; overflow:auto; }
+  .feed div { padding:3px 0; border-bottom:1px dashed #ccc; }
+  .ok { color:#0a7a2f; } .no { color:#b3261e; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { background:var(--ink); color:var(--paper); text-align:left; padding:8px; font:900 11px system-ui; letter-spacing:1.5px; text-transform:uppercase; }
+  td { padding:8px; border-bottom:2px solid var(--ink); }
+  .chip { display:inline-flex; gap:6px; align-items:center; border:3px solid var(--ink); border-radius:999px; padding:4px 12px; font-weight:800; font-size:13px; }
+  .chip.y { background:var(--green); } .chip.n { background:var(--red); }
+  select { border:3px solid var(--ink); border-radius:8px; padding:8px; font:inherit; background:var(--paper); flex:1; min-width:0; }
+  .hide { display:none !important; }
+  .msg { border:2px solid var(--ink); border-radius:12px; padding:12px; margin:10px 0; max-width:88%; background:var(--paper); white-space:pre-wrap; }
+  .me { background:var(--yellow); margin-left:auto; }
+  .meta { font:600 11px ui-monospace, monospace; color:var(--muted); margin-top:6px; }
+  .tag { display:inline-block; border:2px solid var(--ink); border-radius:4px; padding:0 6px; font:900 10px system-ui; letter-spacing:1px; text-transform:uppercase; margin-right:6px; background:var(--green); }
+  .tag.vision { background:var(--purple); }
+  .msg img { max-width:240px; border:2px solid var(--ink); border-radius:8px; display:block; margin-bottom:8px; }
+  pre { background:var(--ink); color:var(--yellow); padding:10px; border-radius:6px; overflow-x:auto; white-space:pre; }
+  form { position:fixed; left:0; right:0; bottom:0; background:var(--paper); border-top:3px solid var(--ink); padding:12px 16px; }
+  form .row { max-width:1000px; margin:0 auto; flex-wrap:nowrap; }
+  textarea { flex:1; border:3px solid var(--ink); border-radius:10px; padding:10px; font:inherit; resize:none; height:52px; }
+  #preview { max-width:1000px; margin:0 auto 8px; font:600 12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">M</div>
+    <div><h1>MeshAI</h1><div class="mono" id="meshid"></div></div>
+  </header>
+
+  <div class="banner"><div class="k">Right now</div><div class="v" id="now">…</div><div class="mono" style="color:var(--ink)" id="nowsub"></div></div>
+
+  <div class="steps">
+    <div class="step on" data-s="1">1 Devices</div>
+    <div class="step" data-s="2">2 Models</div>
+    <div class="step" data-s="3">3 Prepare</div>
+    <div class="step" data-s="4">4 Use</div>
+  </div>
+
+  <!-- 1 DEVICES -->
+  <section data-p="1">
+    <div class="box">
+      <h3>Connect a phone</h3>
+      <div class="row" style="align-items:flex-start; gap:22px">
+        <div class="qr" id="qr"></div>
+        <div style="flex:1; min-width:240px">
+          <ol style="margin:0 0 10px; padding-left:20px; line-height:1.8">
+            <li>Plug the phone into this laptop and turn on <b>USB tethering</b> on the phone (fastest link), or put both on the phone's hotspot.</li>
+            <li>On the phone open <b>MeshAI → Helper → Scan to join</b>.</li>
+            <li>Point it at this QR. The phone appears below.</li>
+          </ol>
+          <div class="mono">Each QR works once. <a href="#" id="newqr">New QR</a></div>
+          <div class="mono" id="links" style="margin-top:6px"></div>
+        </div>
+      </div>
+      <div class="dash"></div>
+      <h3 style="border:0; margin-bottom:4px">Activity</h3>
+      <div class="feed" id="feed"></div>
+    </div>
+    <h2>Your devices</h2>
+    <div class="grid" id="devices"></div>
+    <div class="row" style="justify-content:flex-end; margin-top:18px"><button class="big" data-go="2">Next: pick a model ▶</button></div>
+  </section>
+
+  <!-- 2 MODELS -->
+  <section data-p="2" class="hide">
+    <div class="mono" id="pool" style="margin-bottom:10px"></div>
+    <div id="models"></div>
+    <h2>Or: one model per phone (USB)</h2>
+    <div class="box" style="background:var(--yellow)">
+      <div class="row between">
+        <div><div class="name">Vision + 8B</div><div>Each phone runs its own model: one reads photos, the other answers text.</div></div>
+        <button class="plain" id="preset">Start both</button>
+      </div>
+      <div class="grid" id="usb" style="margin-top:14px"></div>
+    </div>
+  </section>
+
+  <!-- 3 PREPARE -->
+  <section data-p="3" class="hide">
+    <div class="box">
+      <div class="row between"><h3 style="border:0; margin:0">Prepare</h3><div class="mono" id="pmodel"></div></div>
+      <div class="row" id="checks" style="margin:10px 0"></div>
+    </div>
+    <div class="box" id="verdict"></div>
+    <div class="box">
+      <h3>Who holds what</h3>
+      <div class="layers" id="pbar"></div>
+      <div class="mono" style="margin:8px 0 12px">Embeddings and the output head always stay on this laptop.</div>
+      <table><thead><tr><th>Device</th><th>Layers</th><th>Memory</th><th>Link</th></tr></thead><tbody id="ptable"></tbody></table>
+      <div class="mono" id="skipped" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:16px"><button class="big" id="start">▶ Start</button><button class="plain" data-go="2">◀ Models</button></div>
+    </div>
+  </section>
+
+  <!-- 4 USE -->
+  <section data-p="4" class="hide">
+    <div class="box" id="runbox"></div>
+    <div id="log"></div>
+  </section>
+</div>
+
+<form id="f" class="hide">
+  <div id="preview"></div>
+  <div class="row">
+    <label class="btn" title="Upload a photo">🖼<input type="file" id="img" accept="image/*" hidden></label>
+    <textarea id="q" placeholder="Ask anything"></textarea>
+    <button id="send" style="height:52px">Send</button>
+  </div>
+</form>
+
+<script>
+const $ = id => document.getElementById(id);
+let S = null, step = 1, chosen = null, usb = [];
+const gb = x => (x || 0).toFixed(1);
+
+// ---------- steps
+function go(n) {
+  step = n;
+  document.querySelectorAll('.step').forEach(s => s.classList.toggle('on', +s.dataset.s === n));
+  document.querySelectorAll('section').forEach(p => p.classList.toggle('hide', +p.dataset.p !== n));
+  $('f').classList.toggle('hide', n !== 4);
+  render();
+}
+document.querySelectorAll('.step').forEach(s => s.onclick = () => { if (!s.classList.contains('locked')) go(+s.dataset.s); });
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(+b.dataset.go));
+
+// ---------- data
+async function poll() {
+  try { S = await (await fetch('/api/state')).json(); } catch (e) { return; }
+  render();
+}
+async function pollUsb() { try { usb = await (await fetch('/api/usb/devices')).json(); if (step === 2) renderUsb(); } catch (e) {} }
+setInterval(poll, 2000); poll(); setInterval(pollUsb, 5000); pollUsb();
+
+function render() {
+  if (!S) return;
+  $('meshid').textContent = 'mesh-' + S.mesh;
+  const n = S.peers.length + 1, run = S.run;
+  $('now').textContent = run.status === 'ready' ? `Running ${run.model} — ask on Use`
+    : run.status === 'starting' || run.status === 'loading' ? `Starting ${run.model}…`
+    : run.status === 'failed' ? `Stopped: ${run.step}`
+    : S.peers.length ? 'Devices connected — pick a model' : 'Connect your phones';
+  $('nowsub').textContent = `${n} device${n > 1 ? 's' : ''} online · ${gb(S.pool_gb)} GB for models`;
+  document.querySelector('.step[data-s="3"]').classList.toggle('locked', !chosen);
+  document.querySelector('.step[data-s="4"]').classList.toggle('locked', run.status === 'idle' && !usb.some(d => d.running));
+  if (step === 1) renderDevices();
+  if (step === 2) renderModels();
+  if (step === 3) renderPrepare();
+  if (step === 4) renderRun();
+}
+
+// ---------- 1 devices
+function renderDevices() {
+  $('qr').innerHTML = S.qr;
+  $('links').textContent = 'Phones reach this laptop at ' + S.invite.hosts.join(' · ') + ' (port ' + S.invite.port + ')';
+  $('feed').innerHTML = S.activity.map(a => `<div class="${a.line.startsWith('✓') ? 'ok' : a.line.startsWith('✗') || a.line.startsWith('refused') || a.line.startsWith('failed') ? 'no' : ''}">${a.t}  ${a.line}</div>`).join('') || '<div class="mono">Waiting for phones…</div>';
+  const L = S.laptop.specs;
+  const cards = [card(L.name, 'laptop', `${L.chip} · ${L.cores} cores · ${gb(L.totalBytes / 1e9)} GB RAM`, S.laptop.usable_gb, L.totalBytes, L.freeBytes, 'host', 'Host · holds the model file', '')]
+    .concat(S.peers.map(p => card(p.specs.name, 'phone', `${p.specs.chip} · ${p.specs.cores} cores · 🔋 ${p.specs.battery}%${p.specs.charging ? ' ⚡' : ''} · ${p.addr}`,
+      p.usable_gb, p.specs.totalBytes, p.specs.freeBytes, 'helper', 'Helper', p.rtt_ms == null ? 'measuring link…' :
+      `link ${Math.round(p.rtt_ms)} ms (worst ${Math.round(p.rtt_worst_ms)})${p.rtt_ms > 60 ? ' · too slow to split' : ''}`, p.id)));
+  $('devices').innerHTML = cards.join('');
+  document.querySelectorAll('[data-forget]').forEach(b => b.onclick = () => fetch('/api/forget', {method: 'POST', body: JSON.stringify({id: b.dataset.forget})}));
+}
+function card(name, kind, line, usable, total, free, cls, role, link, id) {
+  const used = total ? 100 * (total - free) / total : 0, room = total ? 100 * usable * 1e9 / total : 0;
+  return `<div class="box ${cls}">
+    <div class="row between"><div class="name">${kind === 'laptop' ? '💻' : '📱'} ${name}</div><span class="sticker">${role}</span></div>
+    <div class="mono" style="color:var(--ink)">${line}</div>
+    <div class="dash"></div>
+    <div class="mono" style="color:var(--ink)">ROOM FOR MODELS: ${gb(usable)} GB</div>
+    <div class="bar" style="margin:6px 0"><i style="width:${used}%; background:#d8d4c8"></i><i style="width:${Math.max(0, 100 - used - room)}%; background:var(--red)"></i><i style="width:${room}%; background:var(--yellow)"></i></div>
+    <div class="mono">${link || 'grey: in use · red: kept for the system · yellow: for models'}</div>
+    ${id ? `<div class="row" style="margin-top:10px"><button class="plain" data-forget="${id}">Forget</button></div>` : ''}
+  </div>`;
+}
+
+// ---------- 2 models
+const look = v => v === 'doable' ? ['Doable', 'host'] : v === 'tight' ? ['Tight', 'tightc'] : ['Not possible', 'bad'];
+function layerBar(p, total) {
+  return `<div class="layers">${p.slices.map(s => `<div class="${s.host ? 'host' : 'helper'}" style="flex:${Math.max(1, s.to - s.from)}">${s.to - s.from}</div>`).join('')}</div>`;
+}
+function renderModels() {
+  $('pool').textContent = `${S.peers.length + 1} devices · ${gb(S.pool_gb)} GB for models · models in the laptop's folder`;
+  $('models').innerHTML = S.models.map((m, i) => {
+    const [label, cls] = look(m.plan.verdict);
+    return `<div class="box ${cls}">
+      <div class="row between"><div><div class="name">${m.name}</div><div class="mono" style="color:var(--ink)">${gb(m.gb)} GB · ${m.layers} layers · needs ${gb(m.plan.need_gb)} GB</div></div><span class="sticker">${label}</span></div>
+      <div style="font-weight:800; margin:8px 0">${m.plan.reason}</div>
+      ${m.plan.slices.length ? layerBar(m.plan) + '<div class="mono" style="margin-top:6px; color:var(--ink)">' + m.plan.slices.map(s => `${s.name}: layers ${s.from}–${s.to - 1} · ${gb(s.gb)} GB`).join(' &nbsp;·&nbsp; ') + '</div>' : ''}
+      ${m.plan.verdict !== 'not_possible' ? `<div class="row" style="margin-top:10px"><button data-pick="${i}">Select</button></div>` : ''}
+    </div>`;
+  }).join('') || '<div class="box">No models in the laptop\'s model folder.</div>';
+  document.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => { chosen = S.models[+b.dataset.pick].file; go(3); });
+  renderUsb();
+}
+const isVision = f => /-vl|vision|llava/i.test(f);
+function renderUsb() {
+  $('usb').innerHTML = usb.map(d => `<div class="box ${d.running ? (d.vision ? 'helper' : 'host') : ''}" style="margin:0">
+      <div class="row between"><b>📱 ${d.name}</b><span class="sticker">${d.running ? (d.vision ? 'photos' : 'text') : 'idle'}</span></div>
+      <div class="mono">${d.serial} · ${d.memFreeGb} / ${d.memTotalGb} GB free · 🔋 ${d.battery}%</div>
+      <div class="mono">${d.running ? '▶ ' + d.running : 'no model running'}</div>
+      <div class="row" style="margin-top:8px"><select id="u-${d.serial}">${d.models.filter(m => !/30B/i.test(m.file) || m.gb >= 18.5).map(m => `<option value="${m.file}">${m.file.replace(/\.gguf$/, '')} · ${m.gb} GB</option>`).join('')}</select>
+      <button data-urun="${d.serial}">Run</button><button class="plain" data-ustop="${d.serial}">Stop</button></div></div>`).join('')
+    || '<div class="mono" style="color:var(--ink)">No phones on USB with debugging on.</div>';
+  document.querySelectorAll('[data-urun]').forEach(b => b.onclick = () => usbRun(b.dataset.urun, $('u-' + b.dataset.urun).value));
+  document.querySelectorAll('[data-ustop]').forEach(b => b.onclick = () => fetch('/api/usb/stop', {method: 'POST', body: JSON.stringify({serial: b.dataset.ustop})}).then(pollUsb));
+}
+function usbRun(serial, model) { return fetch('/api/usb/run', {method: 'POST', body: JSON.stringify({serial, model: model.replace(/\.gguf$/, '')})}).then(() => setTimeout(pollUsb, 12000)); }
+$('preset').onclick = () => {
+  const vis = usb.find(d => d.models.some(m => isVision(m.file)));
+  if (vis) usbRun(vis.serial, vis.models.find(m => isVision(m.file)).file);
+  const txt = usb.find(d => d !== vis && d.models.some(m => /8B/i.test(m.file)));
+  if (txt) usbRun(txt.serial, txt.models.find(m => /8B/i.test(m.file)).file);
+  if (!vis && !txt) alert('Plug in the phones with USB debugging on.');
+};
+
+// ---------- 3 prepare
+function renderPrepare() {
+  const m = S.models.find(x => x.file === chosen); if (!m) return;
+  const p = m.plan, helpers = p.slices.filter(s => !s.host);
+  $('pmodel').textContent = m.name;
+  const slow = S.peers.filter(x => x.rtt_ms > 60);
+  const chk = (ok, t) => `<span class="chip ${ok ? 'y' : 'n'}">${ok ? '■' : '✗'} ${t}</span>`;
+  $('checks').innerHTML = chk(true, 'model on this laptop') + chk(helpers.every(h => S.peers.some(x => x.id === h.id)), 'helpers online')
+    + chk(p.verdict !== 'not_possible', 'memory ok') + chk(!slow.length, 'links fast');
+  const [label, cls] = look(p.verdict);
+  $('verdict').className = 'box ' + cls;
+  $('verdict').innerHTML = `<div class="name">${p.verdict === 'not_possible' ? 'Cannot run.' : helpers.length ? `Runs split across ${p.slices.length} devices.` : 'Runs on this laptop alone.'}</div>
+    <div class="mono" style="color:var(--ink)">${m.name}: needs ${gb(p.need_gb)} GB (weights ${gb(m.gb)} GB + conversation memory at 4k + working buffers), pooled ${gb(S.pool_gb)} GB · ${label}</div>`;
+  $('pbar').outerHTML = layerBar(p).replace('class="layers"', 'class="layers" id="pbar"');
+  $('ptable').innerHTML = p.slices.map(s => {
+    const peer = S.peers.find(x => x.id === s.id);
+    return `<tr><td><b>${s.name}</b> <span class="sticker ${s.host ? 'host' : 'helper'}">${s.host ? 'host' : 'helper'}</span></td>
+      <td>${s.from}–${s.to - 1} (${s.to - s.from})</td><td>${gb(s.gb)} GB</td><td>${s.host ? '—' : peer && peer.rtt_ms != null ? Math.round(peer.rtt_ms) + ' ms' : '…'}</td></tr>`;
+  }).join('');
+  const sk = Object.entries(p.skipped || {});
+  $('skipped').textContent = sk.length ? 'Not used: ' + sk.map(([k, v]) => `${k} (${v})`).join(', ') : '';
+  $('start').disabled = p.verdict === 'not_possible';
+}
+$('start').onclick = async () => { await fetch('/api/run', {method: 'POST', body: JSON.stringify({model: chosen})}); go(4); poll(); };
+
+// ---------- 4 use
+function renderRun() {
+  const r = S.run, usbRunning = usb.filter(d => d.running);
+  const busy = r.status === 'starting' || r.status === 'loading';
+  $('runbox').className = 'box ' + (r.status === 'ready' ? 'host' : r.status === 'failed' ? 'bad' : busy ? 'tightc' : '');
+  $('runbox').innerHTML = r.status === 'idle' && usbRunning.length
+    ? `<div class="name">One model per phone</div><div class="mono" style="color:var(--ink)">${usbRunning.map(d => (d.vision ? '🖼 photos → ' : '💬 text → ') + d.name + ' · ' + d.running).join(' &nbsp; ')}</div>`
+    : `<div class="row between"><div><div class="name">${r.model || 'Nothing running'}</div><div class="mono" style="color:var(--ink)">${r.step || ''}${busy && r.seconds != null ? ' · ' + r.seconds + ' s' : ''}</div></div>
+       ${r.status !== 'idle' ? '<button class="plain" id="stopbtn">■ Stop</button>' : '<button data-go2="2">Pick a model</button>'}</div>
+       ${r.plan && r.plan.slices ? '<div style="margin-top:10px">' + layerBar(r.plan) + '</div>' : ''}`;
+  const sb = $('stopbtn'); if (sb) sb.onclick = () => fetch('/api/stop', {method: 'POST'}).then(poll);
+  document.querySelectorAll('[data-go2]').forEach(b => b.onclick = () => go(2));
+}
+
+// ---------- chat
+let history = [], image = null;
+$('img').onchange = () => {
+  const f = $('img').files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { const im = new Image(); im.onload = () => {
+    const k = Math.min(1, 768 / Math.max(im.width, im.height)); const c = document.createElement('canvas');
+    c.width = im.width * k; c.height = im.height * k; c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    image = c.toDataURL('image/jpeg', 0.85); $('preview').textContent = '🖼 photo attached (' + c.width + '×' + c.height + ')';
+    if (!$('q').value) $('q').value = 'What is in this photo?';
+  }; im.src = rd.result; };
+  rd.readAsDataURL(f);
+};
+function md(t) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  return t.split('```').map((p, i) => i % 2 ? '<pre>' + esc(p.replace(/^[^\n]*\n/, '')) + '</pre>' : esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')).join('');
+}
+function bubble(cls, html) { const d = document.createElement('div'); d.className = 'msg ' + cls; d.innerHTML = html; $('log').appendChild(d); window.scrollTo(0, document.body.scrollHeight); return d; }
+$('f').onsubmit = async e => {
+  e.preventDefault();
+  const text = $('q').value.trim(); if (!text) return;
+  $('q').value = ''; $('send').disabled = true;
+  bubble('me', (image ? `<img src="${image}">` : '') + md(text));
+  const content = image ? [{type: 'text', text}, {type: 'image_url', image_url: {url: image}}] : text;
+  const msgs = image ? [{role: 'user', content}] : [...history, {role: 'user', content}];
+  const hadImage = !!image; image = null; $('preview').textContent = ''; $('img').value = '';
+  const out = bubble('', '…'); const t0 = performance.now(); let first = 0, acc = '', timings = null;
+  try {
+    const r = await fetch('/v1/chat/completions', {method: 'POST', headers: {'content-type': 'application/json'}, body: JSON.stringify({messages: msgs, stream: true, max_tokens: 1024})});
+    if (!r.ok) { out.textContent = (await r.json()).error.message; throw 0; }
+    const route = (r.headers.get('x-mesh-route') || '').split(':');
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const {done, value} = await reader.read(); if (done) break;
+      buf += dec.decode(value, {stream: true});
+      let i; while ((i = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+        if (!line.startsWith('data: ') || line === 'data: [DONE]') continue;
+        const j = JSON.parse(line.slice(6)); if (j.timings) timings = j.timings;
+        const piece = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+        if (piece) { if (!first) first = performance.now() - t0; acc += piece; out.innerHTML = md(acc); }
+      }
+    }
+    const who = route[0] === 'mesh' ? (S.run.plan && S.run.plan.slices ? S.run.plan.slices.map(s => s.name.split(' (')[0]).join(' + ') : 'mesh') : ((usb.find(d => d.serial === route[1]) || {}).name || route[1]);
+    out.innerHTML = md(acc) + `<div class="meta"><span class="tag ${route[0] === 'vision' ? 'vision' : ''}">${route[0] === 'mesh' ? 'split' : route[0]}</span>${who}` +
+      (timings ? ` · ${timings.predicted_per_second.toFixed(1)} tok/s · first word ${(first / 1000).toFixed(1)}s · ${timings.predicted_n} tokens` : '') + '</div>';
+    if (!hadImage) history.push({role: 'user', content: text}, {role: 'assistant', content: acc});
+  } catch (err) { if (err) out.textContent = 'Error: ' + err; }
+  $('send').disabled = false; $('q').focus();
+};
+$('q').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } });
+$('newqr').onclick = e => { e.preventDefault(); fetch('/api/newqr', {method: 'POST'}).then(poll); };
+</script>
+</body>
+</html>
