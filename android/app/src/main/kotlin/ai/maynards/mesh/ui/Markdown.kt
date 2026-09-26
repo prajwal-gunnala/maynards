@@ -30,9 +30,9 @@ fun Markdown(text: String) {
                 val shape = RoundedCornerShape(6.dp)
                 Text(
                     body.trimEnd(),
-                    Modifier.fillMaxWidth().background(Ink, shape).border(2.dp, Ink, shape)
+                    Modifier.fillMaxWidth().background(Cream, shape).border(Border, Ink.copy(alpha = 0.4f), shape)
                         .horizontalScroll(rememberScrollState()).padding(10.dp),
-                    fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Yellow, softWrap = false,
+                    fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Term, softWrap = false,
                 )
             } else {
                 Text(inline(body.trim('\n')), fontSize = 15.sp, color = Ink, lineHeight = 21.sp)

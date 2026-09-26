@@ -53,11 +53,11 @@ fun MeshWeb(nodes: List<WebNode>, modifier: Modifier = Modifier, lineColor: Colo
         helpers.forEachIndexed { i, n ->
             val a = angleFor(i, helpers.size)
             val p = Offset(c.x + cos(a) * r * 0.78f, c.y + sin(a) * r * 0.78f)
-            drawLine(Ink, c, p, strokeWidth = 5f, cap = StrokeCap.Round)
+            drawLine(Term.copy(alpha = 0.5f), c, p, strokeWidth = 3f, cap = StrokeCap.Round)
             // a bead of data travelling along the thread
             val bead = Offset(c.x + (p.x - c.x) * pulse, c.y + (p.y - c.y) * pulse)
-            drawCircle(Yellow, 9f, bead)
-            drawCircle(Ink, 9f, bead, style = Stroke(3f))
+            drawCircle(Term, 8f, bead)
+            drawCircle(Cream, 8f, bead, style = Stroke(2f))
             drawNode(p, r * 0.13f, n.fill)
             drawLabel(text, n, Offset(p.x, p.y + r * 0.13f + 8f))
         }
@@ -84,9 +84,9 @@ private fun DrawScope.drawLabel(tm: TextMeasurer, n: WebNode, top: Offset) {
     val w = layout.size.width + 16f
     val h = layout.size.height + 8f
     val tl = Offset(top.x - w / 2, top.y)
-    drawRoundRect(Ink, Offset(tl.x + 3f, tl.y + 3f), Size(w, h), CornerRadius(8f))
+    drawRoundRect(Shadow, Offset(tl.x + 3f, tl.y + 3f), Size(w, h), CornerRadius(8f))
     drawRoundRect(Paper, tl, Size(w, h), CornerRadius(8f))
-    drawRoundRect(Ink, tl, Size(w, h), CornerRadius(8f), style = Stroke(3f))
+    drawRoundRect(Ink.copy(alpha = 0.45f), tl, Size(w, h), CornerRadius(8f), style = Stroke(1.5f))
     drawText(layout, topLeft = Offset(tl.x + 8f, tl.y + 4f))
 }
 
@@ -119,9 +119,9 @@ private fun DrawScope.drawWeb(c: Offset, r: Float, color: Color) {
 }
 
 private fun DrawScope.drawNode(p: Offset, radius: Float, fill: Color) {
-    drawCircle(Ink, radius, Offset(p.x + 6f, p.y + 6f))   // hard shadow
+    drawCircle(Shadow, radius, Offset(p.x + 6f, p.y + 6f))   // a shadow, darker than the page
     drawCircle(fill, radius, p)
-    drawCircle(Ink, radius, p, style = Stroke(6f))
+    drawCircle(Term, radius, p, style = Stroke(3f))
 }
 
 private fun DrawScope.drawSpider(c: Offset, s: Float) {
@@ -135,6 +135,6 @@ private fun DrawScope.drawSpider(c: Offset, s: Float) {
     }
     drawCircle(Ink, s * 0.85f, Offset(c.x, c.y + s * 0.35f))  // abdomen
     drawCircle(Ink, s * 0.5f, Offset(c.x, c.y - s * 0.7f))    // head
-    drawCircle(Yellow, s * 0.14f, Offset(c.x - s * 0.18f, c.y - s * 0.78f))
-    drawCircle(Yellow, s * 0.14f, Offset(c.x + s * 0.18f, c.y - s * 0.78f))
+    drawCircle(Cream, s * 0.14f, Offset(c.x - s * 0.18f, c.y - s * 0.78f))
+    drawCircle(Cream, s * 0.14f, Offset(c.x + s * 0.18f, c.y - s * 0.78f))
 }

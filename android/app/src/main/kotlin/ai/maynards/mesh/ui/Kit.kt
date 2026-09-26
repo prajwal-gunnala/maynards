@@ -42,7 +42,7 @@ fun NBox(
 ) {
     val shape = RoundedCornerShape(radius)
     Box(modifier.padding(end = shadow, bottom = shadow)) {
-        Box(Modifier.matchParentSize().offset(shadow, shadow).background(Ink, shape))
+        Box(Modifier.matchParentSize().offset(shadow, shadow).background(Shadow, shape))
         Box(Modifier.fillMaxWidth().background(fill, shape).border(Border, Ink, shape).padding(pad)) { content() }
     }
 }
@@ -61,17 +61,17 @@ fun NButton(
     val lift = if (pressed || !enabled) 0.dp else 4.dp
     val shape = RoundedCornerShape(8.dp)
     Box(modifier.padding(end = 4.dp, bottom = 4.dp)) {
-        Box(Modifier.matchParentSize().offset(4.dp, 4.dp).background(if (enabled) Ink else Color.Transparent, shape))
+        Box(Modifier.matchParentSize().offset(4.dp, 4.dp).background(if (enabled) Shadow else Color.Transparent, shape))
         Box(
             Modifier.offset(4.dp - lift, 4.dp - lift).fillMaxWidth()
                 .background(if (enabled) fill else Cream, shape)
-                .border(Border, if (enabled) Ink else Muted, shape)
+                .border(Border, if (enabled) Term else Muted, shape)
                 .clickable(source, indication = null, enabled = enabled, onClick = onClick)
                 .padding(vertical = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(text.uppercase(), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp,
-                color = if (enabled) Ink else Muted)
+                color = if (enabled) Term else Muted)
         }
     }
 }
@@ -81,10 +81,10 @@ fun NButton(
 fun Sticker(text: String, fill: Color = Yellow, tilt: Float = -3f) {
     val shape = RoundedCornerShape(4.dp)
     Box(Modifier.rotate(tilt).padding(end = 2.dp, bottom = 2.dp)) {
-        Box(Modifier.matchParentSize().offset(2.dp, 2.dp).background(Ink, shape))
+        Box(Modifier.matchParentSize().offset(2.dp, 2.dp).background(Shadow, shape))
         Text(
             text.uppercase(),
-            Modifier.background(fill, shape).border(2.dp, Ink, shape).padding(horizontal = 9.dp, vertical = 3.dp),
+            Modifier.background(fill, shape).border(Border, Ink, shape).padding(horizontal = 9.dp, vertical = 3.dp),
             fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.5.sp, color = Ink,
         )
     }

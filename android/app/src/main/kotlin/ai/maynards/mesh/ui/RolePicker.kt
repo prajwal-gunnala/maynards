@@ -55,7 +55,7 @@ fun RolePicker(onPick: (Role) -> Unit) {
 fun Header() {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box {
-            Box(Modifier.size(52.dp).offset(4.dp, 4.dp).background(Ink, RoundedCornerShape(12.dp)))
+            Box(Modifier.size(52.dp).offset(4.dp, 4.dp).background(Shadow, RoundedCornerShape(12.dp)))
             Box(
                 Modifier.size(52.dp).background(Yellow, RoundedCornerShape(12.dp))
                     .border(Border, Ink, RoundedCornerShape(12.dp)),

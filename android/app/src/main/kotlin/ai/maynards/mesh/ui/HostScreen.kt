@@ -256,16 +256,16 @@ private fun TabBar(selected: Int, onSelect: (Int) -> Unit) {
             val on = i == selected
             val shape = RoundedCornerShape(10.dp)
             Box(Modifier.weight(1f).padding(end = 3.dp, bottom = 3.dp)) {
-                if (!on) Box(Modifier.matchParentSize().offset(3.dp, 3.dp).background(Ink, shape))
+                if (!on) Box(Modifier.matchParentSize().offset(3.dp, 3.dp).background(Shadow, shape))
                 Column(
                     Modifier.offset(if (on) 3.dp else 0.dp, if (on) 3.dp else 0.dp).fillMaxWidth()
-                        .background(if (on) Ink else Paper, shape).border(Border, Ink, shape)
+                        .background(if (on) Term else Paper, shape).border(Border, if (on) Term else Ink, shape)
                         .clickable { onSelect(i) }.padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Icon(t.icon, null, Modifier.size(20.dp), tint = if (on) Yellow else Ink)
+                    Icon(t.icon, null, Modifier.size(20.dp), tint = if (on) Cream else Ink)
                     Text(t.label.uppercase(), fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.sp,
-                        color = if (on) Paper else Ink)
+                        color = if (on) Cream else Ink)
                 }
             }
         }
