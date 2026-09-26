@@ -11,7 +11,10 @@ import java.util.concurrent.TimeUnit
 data class Turn(val role: String, val text: String)
 
 /** How one answer went. */
-data class Answer(val text: String, val tokens: Int, val tokPerSec: Double, val promptPerSec: Double, val firstTokenMs: Long)
+data class Answer(
+    val text: String, val tokens: Int, val tokPerSec: Double, val promptPerSec: Double, val firstTokenMs: Long,
+    val route: String? = null,   // which device answered, from the X-Mesh-Route header
+)
 
 /** Streams a chat answer from the local llama-server (OpenAI-compatible /v1/chat/completions). */
 class Chat(private val endpoint: String) {
@@ -37,7 +40,9 @@ class Chat(private val endpoint: String) {
         var first = -1L
         val out = StringBuilder()
         var timings: JSONObject? = null
+        var route: String? = null
         http.newCall(req).execute().use { resp ->
+            route = resp.header("X-Mesh-Route")   // which device actually answered
             check(resp.isSuccessful) { "HTTP ${resp.code}" }
             val src = resp.body!!.source()
             while (!src.exhausted()) {
@@ -63,6 +68,7 @@ class Chat(private val endpoint: String) {
             tokPerSec = t?.optDouble("predicted_per_second") ?: 0.0,
             promptPerSec = t?.optDouble("prompt_per_second") ?: 0.0,
             firstTokenMs = first,
+            route = route,
         )
     }
 }

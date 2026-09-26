@@ -16,6 +16,8 @@ data class ModelInfo(
     val otherBytes: Long,            // embeddings, output head, norms: these stay on the Host
     val kvBytesPerToken: Long,       // KV cache per token at 16-bit, all layers together
     val contextMax: Int,
+    /** One token's hidden state at 16-bit: the only thing that crosses the link per word. 0 if unknown. */
+    val hiddenBytes: Long = 0,
 ) {
     val layers: Int get() = layerBytes.size
     val weightBytes: Long get() = layerBytes.sum() + otherBytes
@@ -122,6 +124,7 @@ object Gguf {
             layerBytes = layerBytes.toList(),
             otherBytes = other,
             kvBytesPerToken = nLayer * nHeadKv * (kDim + vDim) * 2,
+            hiddenBytes = embd * 2,   // what actually travels between devices, once per word
             contextMax = num("context_length")?.toInt() ?: 4096,
         )
     }

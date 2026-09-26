@@ -97,7 +97,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                 2 -> {
                     val run by runner.state.collectAsState()
                     UseTab(
-                        runner, canSee = run.plan?.model?.let { shelf.projector(it) } != null, onPickModel = { tab = 1 },
+                        runner, host, canSee = run.plan?.model?.let { shelf.projector(it) } != null, onPickModel = { tab = 1 },
                         system = { meshNote(run.plan, me, peers.values) },
                     ) { a ->
                         run.plan?.let { stats.add(it, a, me.heat) }

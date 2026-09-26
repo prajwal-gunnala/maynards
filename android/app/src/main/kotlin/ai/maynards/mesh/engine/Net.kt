@@ -15,6 +15,18 @@ data class LinkAddr(val ip: String, val iface: String) {
 }
 
 object Net {
+    /**
+     * Is there a working way out to the internet right now? The demo turns it off on purpose, so the
+     * screen should say so rather than leave a judge guessing. VALIDATED means Android actually
+     * reached the internet on that network, not merely that an interface is up.
+     */
+    fun online(ctx: android.content.Context): Boolean = runCatching {
+        val cm = ctx.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
+            caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }.getOrDefault(false)
+
     /** Private-link addresses first: our own hotspot, then USB, then Wi-Fi. Mobile data is skipped. */
     fun addresses(): List<LinkAddr> = runCatching {
         NetworkInterface.getNetworkInterfaces().toList()

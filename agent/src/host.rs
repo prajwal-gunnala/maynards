@@ -130,6 +130,14 @@ fn link_kind(iface_ip: &str) -> &'static str {
 
 // ---------------------------------------------------------------- the laptop's own specs
 
+/// Is there a way out to the internet from this laptop? The demo turns it off on purpose, and a judge
+/// should be able to read that off the screen. A tether link is kept never-default, so a default route
+/// here means Wi-Fi or ethernet, not the phone's cable.
+fn internet() -> bool {
+    Command::new("ip").args(["-4", "route", "show", "default"]).output()
+        .map(|o| !String::from_utf8_lossy(&o.stdout).trim().is_empty()).unwrap_or(false)
+}
+
 fn laptop_specs() -> Value {
     let mut v = crate::specs();
     // hottest thermal zone, in °C (the CPU package on most laptops)
@@ -959,6 +967,7 @@ fn state(hub: &Hub) -> Value {
         "activity": activity,
         "chats": chats,
         "stats": stats,
+        "online": internet(),
         "advice": advice,
         "last_run": last_run,
         "caps": caps,

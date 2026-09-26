@@ -39,9 +39,19 @@ private const val RINGS = 5
  * every Helper hangs on a spoke, and a thread pulses from the centre to each Helper.
  */
 @Composable
-fun MeshWeb(nodes: List<WebNode>, modifier: Modifier = Modifier, lineColor: Color = Ink.copy(alpha = 0.35f)) {
+fun MeshWeb(
+    nodes: List<WebNode>,
+    modifier: Modifier = Modifier,
+    lineColor: Color = Ink.copy(alpha = 0.35f),
+    /** True while the mesh is generating: the beads are the hidden state crossing the link, one per word. */
+    busy: Boolean = true,
+    /** Words per second, so the beads travel at the speed the mesh is actually working. */
+    rate: Double = 0.0,
+) {
+    // one bead per word: at 6.6 tok/s a bead takes about 150 ms to cross, which is what you are seeing
+    val ms = if (rate > 0.1) (1000.0 / rate).coerceIn(120.0, 2000.0).toInt() else 1600
     val pulse by rememberInfiniteTransition(label = "pulse").animateFloat(
-        0f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Restart), label = "t",
+        0f, 1f, infiniteRepeatable(tween(ms), RepeatMode.Restart), label = "t",
     )
     val text = rememberTextMeasurer()
     Canvas(modifier) {
@@ -55,9 +65,14 @@ fun MeshWeb(nodes: List<WebNode>, modifier: Modifier = Modifier, lineColor: Colo
             val p = Offset(c.x + cos(a) * r * 0.78f, c.y + sin(a) * r * 0.78f)
             drawLine(Term.copy(alpha = 0.5f), c, p, strokeWidth = 3f, cap = StrokeCap.Round)
             // a bead of data travelling along the thread
-            val bead = Offset(c.x + (p.x - c.x) * pulse, c.y + (p.y - c.y) * pulse)
-            drawCircle(Term, 8f, bead)
-            drawCircle(Cream, 8f, bead, style = Stroke(2f))
+            // out on the first half of the beat, back on the second: a token leaves and its result returns
+            if (busy) {
+                val out = pulse <= 0.5f
+                val t = if (out) pulse * 2f else (1f - pulse) * 2f
+                val bead = Offset(c.x + (p.x - c.x) * t, c.y + (p.y - c.y) * t)
+                drawCircle(if (out) Term else HelperPurple.copy(alpha = 1f), 8f, bead)
+                drawCircle(Cream, 8f, bead, style = Stroke(2f))
+            }
             drawNode(p, r * 0.13f, n.fill)
             drawLabel(text, n, Offset(p.x, p.y + r * 0.13f + 8f))
         }

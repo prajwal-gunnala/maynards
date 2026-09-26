@@ -29,6 +29,11 @@ pub const API_PORT: u16 = 8080;
 const FILES_PORT: u16 = 8088;
 const RPC_PORTS: [u16; 5] = [50052, 50062, 50070, 50080, 50100];
 
+/// The one wording used to review a change, whether it is asked for from this terminal, from the
+/// pre-commit hook, or by a phone over the link.
+pub const REVIEW_PROMPT: &str =
+    "Review this change. List real bugs first, then risky spots. Be brief; say 'looks fine' if it is.";
+
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let host_flag = flag(&args, "--host");
@@ -144,6 +149,12 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
                     }
                     Err(e) => { send(&out, json!({"t": "failed", "reason": e}))?; }
                 }
+            }
+            // the Host (a phone) asking this laptop what it has changed and not committed
+            "diff" => {
+                let d = working_diff();
+                println!("sent {} characters of diff to the Host", d.len());
+                send(&out, json!({"t": "diff", "text": d, "repo": repo_name(), "dir": env::current_dir().map(|p| p.display().to_string()).unwrap_or_default()}))?;
             }
             "stop" => { stop(&mut engine); println!("stopped"); }
             "bye" => break Err(format!("refused: {}", m["reason"].as_str().unwrap_or("?"))),
@@ -631,13 +642,28 @@ fn tests(host: &str, file: &str, out: Option<String>) -> Res<()> {
     Ok(())
 }
 
+/// What this machine has changed and not committed: staged if there is anything staged, otherwise the
+/// working tree. Truncated so the prompt stays inside the context window. Empty means nothing to review.
+pub fn working_diff() -> String {
+    let git = |args: &[&str]| Command::new("git").args(args).output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).to_string()).unwrap_or_default();
+    let mut d = git(&["diff", "--cached"]);
+    if d.trim().is_empty() { d = git(&["diff"]); }
+    d.chars().take(24_000).collect()
+}
+
+/// The repository this agent is sitting in, by name, so the phone can say what it is reviewing.
+pub fn repo_name() -> String {
+    Command::new("git").args(["rev-parse", "--show-toplevel"]).output().ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .and_then(|p| p.rsplit('/').next().map(String::from))
+        .unwrap_or_default()
+}
+
 fn diff(host: &str) -> Res<()> {
-    let git = |args: &[&str]| Command::new("git").args(args).output().map(|o| String::from_utf8_lossy(&o.stdout).to_string());
-    let mut d = git(&["diff", "--cached"]).map_err(|e| format!("git: {e}"))?;
-    if d.trim().is_empty() { d = git(&["diff"]).map_err(|e| format!("git: {e}"))?; }
+    let d = working_diff();
     if d.trim().is_empty() { eprintln!("nothing to review"); return Ok(()); }
-    let d: String = d.chars().take(24_000).collect();   // keep the prompt inside the context window
-    ask(host, &format!("Review this change. List real bugs first, then risky spots. Be brief; say 'looks fine' if it is.\n\n```diff\n{d}\n```")).map(|_| ())
+    ask(host, &format!("{REVIEW_PROMPT}\n\n```diff\n{d}\n```")).map(|_| ())
 }
 
 /// Installs a pre-commit hook that prints a review of the staged change. It never blocks the commit.
