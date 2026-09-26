@@ -35,15 +35,14 @@ import androidx.compose.ui.unit.sp
 fun NBox(
     modifier: Modifier = Modifier,
     fill: Color = Paper,
-    shadow: Dp = 6.dp,
-    radius: Dp = 12.dp,
-    pad: Dp = 16.dp,
+    shadow: Dp = 0.dp,          // kept in the signature; the design has no shadows
+    radius: Dp = 8.dp,
+    pad: Dp = 14.dp,
     content: @Composable () -> Unit,
 ) {
     val shape = RoundedCornerShape(radius)
-    Box(modifier.padding(end = shadow, bottom = shadow)) {
-        Box(Modifier.matchParentSize().offset(shadow, shadow).background(Shadow, shape))
-        Box(Modifier.fillMaxWidth().background(fill, shape).border(Border, Ink, shape).padding(pad)) { content() }
+    Box(modifier) {
+        Box(Modifier.fillMaxWidth().background(fill, shape).border(Border, Line, shape).padding(pad)) { content() }
     }
 }
 
@@ -58,44 +57,46 @@ fun NButton(
 ) {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val lift = if (pressed || !enabled) 0.dp else 4.dp
-    val shape = RoundedCornerShape(8.dp)
-    Box(modifier.padding(end = 4.dp, bottom = 4.dp)) {
-        Box(Modifier.matchParentSize().offset(4.dp, 4.dp).background(if (enabled) Shadow else Color.Transparent, shape))
+    val shape = RoundedCornerShape(7.dp)
+    val primary = fill == Term
+    val bg = when {
+        !enabled -> Raised
+        primary -> if (pressed) Color.White else Ink
+        pressed -> Line
+        else -> Raised
+    }
+    Box(modifier) {
         Box(
-            Modifier.offset(4.dp - lift, 4.dp - lift).fillMaxWidth()
-                .background(if (enabled) fill else Cream, shape)
-                .border(Border, if (enabled) Term else Muted, shape)
+            Modifier.fillMaxWidth().background(bg, shape)
+                .border(Border, if (primary && enabled) bg else Line, shape)
                 .clickable(source, indication = null, enabled = enabled, onClick = onClick)
-                .padding(vertical = 14.dp),
+                .padding(vertical = 12.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text.uppercase(), fontWeight = FontWeight.Black, fontSize = 14.sp, letterSpacing = 1.sp,
-                color = if (enabled) Term else Muted)
+            Text(text, fontWeight = FontWeight.Medium, fontSize = 13.5.sp,
+                color = if (!enabled) Faint else if (primary) Cream else Ink)
         }
     }
 }
 
 /** A small tilted label, like a sticker slapped on the card. */
 @Composable
-fun Sticker(text: String, fill: Color = Yellow, tilt: Float = -3f) {
-    val shape = RoundedCornerShape(4.dp)
-    Box(Modifier.rotate(tilt).padding(end = 2.dp, bottom = 2.dp)) {
-        Box(Modifier.matchParentSize().offset(2.dp, 2.dp).background(Shadow, shape))
-        Text(
-            text.uppercase(),
-            Modifier.background(fill, shape).border(Border, Ink, shape).padding(horizontal = 9.dp, vertical = 3.dp),
-            fontWeight = FontWeight.Black, fontSize = 10.sp, letterSpacing = 1.5.sp, color = Ink,
-        )
-    }
+fun Sticker(text: String, fill: Color = Raised, tilt: Float = 0f) {
+    val shape = RoundedCornerShape(999.dp)
+    Text(
+        text,
+        Modifier.background(Raised, shape).border(Border, Line, shape).padding(horizontal = 9.dp, vertical = 2.dp),
+        fontSize = 11.sp, color = when (fill) { HostGreen -> Term; HelperPurple -> Helper; Danger -> Bad; Tight -> Warn; else -> Muted },
+        fontFamily = FontFamily.Monospace,
+    )
 }
 
 /** A square icon tile with a thick border, like an app badge. */
 @Composable
-fun BigIcon(icon: ImageVector, fill: Color = Yellow, size: Dp = 48.dp) {
-    val shape = RoundedCornerShape(10.dp)
-    Box(Modifier.size(size).background(fill, shape).border(Border, Ink, shape), contentAlignment = Alignment.Center) {
-        Icon(icon, null, Modifier.size(size * 0.58f), tint = Ink)
+fun BigIcon(icon: ImageVector, fill: Color = Raised, size: Dp = 40.dp) {
+    val shape = RoundedCornerShape(8.dp)
+    Box(Modifier.size(size).background(Raised, shape).border(Border, Line, shape), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(size * 0.5f), tint = when (fill) { HostGreen -> Term; HelperPurple -> Helper; else -> Muted })
     }
 }
 
@@ -110,18 +111,19 @@ fun IconLabel(icon: ImageVector, text: String, color: Color = Ink) {
 }
 
 @Composable
-fun Label(text: String, color: Color = Ink) =
-    Text(text.uppercase(), fontSize = 11.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Black, color = color)
+fun Label(text: String, color: Color = Faint) =
+    Text(text.uppercase(), fontSize = 10.5.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Normal,
+        fontFamily = FontFamily.Monospace, color = color)
 
 @Composable
-fun Title(text: String, size: Int = 30) =
-    Text(text.uppercase(), fontSize = size.sp, fontWeight = FontWeight.Black, letterSpacing = (-0.5).sp, color = Ink,
-        lineHeight = (size + 2).sp)
+fun Title(text: String, size: Int = 20) =
+    Text(text, fontSize = size.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.4).sp, color = Ink,
+        lineHeight = (size + 5).sp)
 
 @Composable
 fun Small(text: String, color: Color = Muted) =
     Text(text, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = color)
 
 @Composable
-fun Mono(text: String, size: Int = 12, color: Color = Ink) =
-    Text(text, fontFamily = FontFamily.Monospace, fontSize = size.sp, fontWeight = FontWeight.Bold, color = color)
+fun Mono(text: String, size: Int = 12, color: Color = Muted) =
+    Text(text, fontFamily = FontFamily.Monospace, fontSize = size.sp, fontWeight = FontWeight.Normal, color = color)

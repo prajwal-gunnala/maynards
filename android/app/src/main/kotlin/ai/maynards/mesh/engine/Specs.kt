@@ -50,6 +50,7 @@ data class Specs(
             val mem = ActivityManager.MemoryInfo().also {
                 (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)
             }
+            val kernel = meminfo()
             val bat = ctx.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
             val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
             val plugged = (bat?.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) ?: 0) != 0
@@ -61,13 +62,35 @@ data class Specs(
                 chip = Build.SOC_MODEL.takeIf { it.isNotBlank() && it != Build.UNKNOWN } ?: Build.HARDWARE,
                 cores = Runtime.getRuntime().availableProcessors(),
                 maxGhz = maxCpuGhz(),
-                totalBytes = mem.totalMem,
-                freeBytes = mem.availMem,
+                totalBytes = kernel?.first ?: mem.totalMem,
+                // never report less than either source says: Android's own figure is the pessimistic one
+                freeBytes = maxOf(kernel?.second ?: 0L, mem.availMem),
                 heat = runCatching { pm.getThermalHeadroom(10) }.getOrDefault(Float.NaN).let { if (it.isNaN()) -1f else it },
                 battery = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY),
                 charging = plugged,
             )
         }
+
+        /**
+         * What the kernel itself says, as MemTotal and MemAvailable in bytes.
+         *
+         * ActivityManager.availMem is deliberately conservative, and on ROMs with memory extension it
+         * can report many gigabytes less than the kernel will actually hand out, which made the planner
+         * refuse models that fit comfortably. /proc/meminfo is world readable on Android, and
+         * MemAvailable is the kernel's own estimate of what can be allocated without swapping.
+         */
+        private fun meminfo(): Pair<Long, Long>? = runCatching {
+            var total = 0L
+            var avail = 0L
+            File("/proc/meminfo").forEachLine { line ->
+                val kb = line.substringAfter(':', "").trim().substringBefore(' ').toLongOrNull()
+                if (kb != null) when {
+                    line.startsWith("MemTotal:") -> total = kb * 1024
+                    line.startsWith("MemAvailable:") -> avail = kb * 1024
+                }
+            }
+            if (total > 0 && avail > 0) total to avail else null
+        }.getOrNull()
 
         private fun maxCpuGhz(): Double = (0 until 16).maxOfOrNull { i ->
             runCatching { File("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq").readText().trim().toLong() }

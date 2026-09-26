@@ -9,18 +9,30 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 
-// A developer's console: a dark page, hairline rules, one accent that carries the state.
-// The names are unchanged, so every screen keeps reading the same way.
-val Ink = Color(0xFFD3DBD7)        // text, and every rule
-val Paper = Color(0xFF11171A)      // a card
-val Cream = Color(0xFF0A0E10)      // the page, and a recessed panel
-val Muted = Color(0xFF7C8B86)
-val Term = Color(0xFF8EE6A8)       // the accent: anything you can act on
-val Yellow = Color(0xFF3A2E0C)     // attention, without shouting
-val HostGreen = Color(0xFF12321F)
-val HelperPurple = Color(0xFF201C3A)
-val Danger = Color(0xFF3C1618)
-val Tight = Color(0xFF33280D)
+// The same surfaces the laptop panel uses, so the two are visibly one product:
+// near-black page, one card level, hairline rules, and colour only where it means something.
+// The names are unchanged, so every screen keeps reading the way it did.
+val Ink = Color(0xFFEDEDED)        // primary text
+val Muted = Color(0xFF8B8B93)      // secondary text
+val Faint = Color(0xFF63636B)      // the quietest detail
+val Paper = Color(0xFF111113)      // a card
+val Raised = Color(0xFF18181B)     // a control, or a card on a card
+val Cream = Color(0xFF09090B)      // the page
+val Line = Color(0xFF26262A)       // every rule, one pixel
+val LineSoft = Color(0xFF1C1C20)
+
+val Term = Color(0xFF4ADE80)       // live, good, yours
+val Warn = Color(0xFFFBBF24)       // attention
+val Bad = Color(0xFFF87171)        // failed
+val Helper = Color(0xFFA78BFA)     // the helper side of the mesh
+val Info = Color(0xFF60A5FA)
+
+// kept so older screens still compile and read the same
+val Yellow = Color(0xFF2A2210)     // an attention surface, not a shout
+val HostGreen = Color(0xFF10231A)
+val HelperPurple = Color(0xFF1A1730)
+val Danger = Color(0xFF2A1416)
+val Tight = Color(0xFF2A2210)
 val Shadow = Color(0xFF000000)
 
 val Border = 1.dp

@@ -88,7 +88,32 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
             }
         }
     }
+    val runNow by runner.state.collectAsState()
+    val ctxNow = LocalContext.current
+    var online by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) { while (true) { online = ai.maynards.mesh.engine.Net.online(ctxNow); kotlinx.coroutines.delay(4_000) } }
     Column(Modifier.fillMaxSize()) {
+        // the one line that says, from across a room, what this phone is doing
+        StatusStrip(
+            state = when (runNow.status) {
+                ai.maynards.mesh.brain.RunState.Status.READY -> "ready"
+                ai.maynards.mesh.brain.RunState.Status.LOADING -> "loading"
+                ai.maynards.mesh.brain.RunState.Status.STARTING -> "starting"
+                ai.maynards.mesh.brain.RunState.Status.FAILED -> "stopped"
+                else -> "idle"
+            },
+            stateColor = when (runNow.status) {
+                ai.maynards.mesh.brain.RunState.Status.READY -> Term
+                ai.maynards.mesh.brain.RunState.Status.FAILED -> Bad
+                ai.maynards.mesh.brain.RunState.Status.IDLE -> Faint
+                else -> Warn
+            },
+            model = runNow.plan?.model?.name,
+            devices = 1 + peers.size,
+            layers = runNow.plan?.slices?.firstOrNull()?.takeIf { it.to > it.from }?.let { "layers ${it.from}-${it.to - 1} here" },
+            offline = !online,
+            tps = null,
+        )
         Box(Modifier.weight(1f)) {
             when (tab) {
                 0 -> MeshTab(host, runner, onChangeRole)
@@ -107,7 +132,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                 else -> Soon(TABS[tab])
             }
         }
-        TabBar(tab) { tab = it }
+        NavBar(TABS.map { it.label to it.icon }, tab) { tab = it }
     }
 }
 
