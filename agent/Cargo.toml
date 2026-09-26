@@ -1,0 +1,12 @@
+[package]
+name = "mesh"
+version = "0.1.0"
+edition = "2021"
+description = "MeshAI laptop agent: join a Host phone as a helper, or ask its model from the terminal"
+
+[dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+strip = true
