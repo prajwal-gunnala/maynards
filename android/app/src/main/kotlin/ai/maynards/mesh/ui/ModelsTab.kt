@@ -29,7 +29,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -54,12 +56,23 @@ fun meshDevices(me: Specs, peers: Collection<Peer>, hostCap: Long = 0): List<Dev
         peers.map { Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging) }
 
 @Composable
-fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit) {
+fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit,
+              peers: Collection<Peer> = emptyList(), downloads: ai.maynards.mesh.brain.Downloads? = null) {
     var models by remember { mutableStateOf<List<ModelInfo>>(emptyList()) }
     LaunchedEffect(Unit) {
         while (true) { models = withContext(Dispatchers.IO) { shelf.scan() }; delay(5000) }
     }
     val onPhone = models.map { it.file }.toSet()
+    val active by (downloads?.active ?: kotlinx.coroutines.flow.MutableStateFlow(emptyMap())).collectAsState()
+    // who can hand us a file we don't have: file -> the laptop offering it
+    // a catalog model is only offered if the laptop's copy is complete (a half-downloaded file would not load)
+    val offers = peers.flatMap { p -> p.models.keys.map { it to p } }.toMap().filter { (f, p) ->
+        val want = Catalog.all.firstOrNull { it.info.file == f }?.info?.fileBytes
+        want == null || p.models[f] == want
+    }
+    val get: (String) -> (() -> Unit)? = { file ->
+        offers[file]?.takeIf { downloads != null }?.let { p -> { downloads!!.get(p.modelUrl(file), file, p.models.getValue(file)) } }
+    }
     val plans = models.map { Planner.plan(it, devices, hostExtra = shelf.projector(it)?.length() ?: 0) } +
         Catalog.all.filter { it.info.file !in onPhone }.map { Planner.plan(it.info, devices) }
 
@@ -71,9 +84,26 @@ fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit) {
         Title("Models", 30)
         Mono("${devices.size} device${if (devices.size == 1) "" else "s"} · ${gb(devices.sumOf { it.usableBytes })} GB for models", 12, Muted)
 
-        Section(Verdict.DOABLE, plans, onPhone, onRun)
-        Section(Verdict.TIGHT, plans, onPhone, onRun)
-        Section(Verdict.NOT_POSSIBLE, plans, onPhone, onRun)
+        Section(Verdict.DOABLE, plans, onPhone, onRun, get, active)
+        Section(Verdict.TIGHT, plans, onPhone, onRun, get, active)
+        Section(Verdict.NOT_POSSIBLE, plans, onPhone, onRun, get, active)
+        // files a laptop offers that we know nothing about yet: get them, then they are planned like the rest
+        val notChat = listOf("mmproj", "tts", "asr", "whisper", "diffusion", "embed")
+        val unknown = offers.keys.filter { f ->
+            f !in onPhone && Catalog.all.none { it.info.file == f } && notChat.none { f.contains(it, ignoreCase = true) }
+        }
+        if (unknown.isNotEmpty()) {
+            IconLabel(Icons.Outlined.Laptop, "On a laptop · ${unknown.size}")
+            unknown.sorted().forEach { f ->
+                NBox(fill = Paper, shadow = 4.dp, pad = 12.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(f.removeSuffix(".gguf"), fontWeight = FontWeight.Black, fontSize = 15.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Mono("${gb(offers.getValue(f).models.getValue(f))} GB · ${offers.getValue(f).specs.name}", 11, Muted)
+                        GetRow(f, get(f), active[f])
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -84,16 +114,18 @@ private fun look(v: Verdict) = when (v) {
 }
 
 @Composable
-private fun Section(v: Verdict, plans: List<Plan>, onPhone: Set<String>, onRun: (Plan) -> Unit) {
+private fun Section(v: Verdict, plans: List<Plan>, onPhone: Set<String>, onRun: (Plan) -> Unit,
+                    get: (String) -> (() -> Unit)?, active: Map<String, ai.maynards.mesh.brain.Download>) {
     val mine = plans.filter { it.verdict == v }
     if (mine.isEmpty()) return
     val (label, color, icon) = look(v)
     IconLabel(icon, "$label · ${mine.size}")
-    mine.forEach { ModelCard(it, color, it.model.file in onPhone, onRun) }
+    mine.forEach { ModelCard(it, color, it.model.file in onPhone, onRun, get(it.model.file), active[it.model.file]) }
 }
 
 @Composable
-private fun ModelCard(p: Plan, color: Color, onPhone: Boolean, onRun: (Plan) -> Unit) {
+private fun ModelCard(p: Plan, color: Color, onPhone: Boolean, onRun: (Plan) -> Unit,
+                      get: (() -> Unit)?, progress: ai.maynards.mesh.brain.Download?) {
     val m = p.model
     NBox(fill = color, shadow = 5.dp, pad = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -107,13 +139,29 @@ private fun ModelCard(p: Plan, color: Color, onPhone: Boolean, onRun: (Plan) -> 
             Text(p.reason, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ink)
             if (p.slices.isNotEmpty()) LayerBar(p)
             when {
-                !onPhone -> Row(verticalAlignment = Alignment.CenterVertically) {
-                    Sticker("not on phone", Cream, 0f)
-                    Spacer(Modifier.width(8.dp))
-                    Mono("push it to run", 11, Ink)
-                }
+                !onPhone -> GetRow(p.model.file, get, progress)
                 p.verdict != Verdict.NOT_POSSIBLE -> NButton("Run", fill = Paper) { onRun(p) }
             }
+        }
+    }
+}
+
+/** Not on the phone: get it from a laptop that has it, with a progress bar while it copies. */
+@Composable
+private fun GetRow(file: String, get: (() -> Unit)?, d: ai.maynards.mesh.brain.Download?) {
+    when {
+        d != null && d.error.isBlank() -> Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            val shape = RoundedCornerShape(6.dp)
+            Box(Modifier.fillMaxWidth().height(18.dp).background(Paper, shape).border(Border, Ink, shape)) {
+                Box(Modifier.fillMaxWidth(d.fraction.coerceIn(0.02f, 1f)).fillMaxHeight().background(Yellow, shape).border(Border, Ink, shape))
+            }
+            Mono("${gb(d.done)} / ${gb(d.total)} GB · ${"%.0f".format(d.mbPerSec)} MB/s", 11, Ink)
+        }
+        get != null -> NButton(if (d != null) "Retry from laptop" else "Get from laptop", fill = Yellow, onClick = get)
+        else -> Row(verticalAlignment = Alignment.CenterVertically) {
+            Sticker("not on phone", Cream, 0f)
+            Spacer(Modifier.width(8.dp))
+            Mono("join a laptop that has it", 11, Ink)
         }
     }
 }

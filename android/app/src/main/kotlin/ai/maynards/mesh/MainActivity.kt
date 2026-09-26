@@ -52,7 +52,7 @@ class MainActivity : ComponentActivity() {
                     when (val r = role) {
                         null -> RolePicker(onPick = pick)
                         Role.HELPER -> HelperScreen(app.engine, app.client, onChangeRole = { pick(null) })
-                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.hostCapBytes, app.autoRun.also { app.autoRun = null }, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
+                        Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.downloads, app.hostCapBytes, app.autoRun.also { app.autoRun = null }, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
                     }
                 }
             }

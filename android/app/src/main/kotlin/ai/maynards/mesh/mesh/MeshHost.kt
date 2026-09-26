@@ -28,7 +28,11 @@ data class Peer(
     val addr: String,          // the Helper's IP, as seen from the Host
     val rttMs: Double = -1.0,  // median of the last 10 pings (Wi-Fi spikes would skew an average)
     val rttWorstMs: Double = -1.0,
-)
+    val models: Map<String, Long> = emptyMap(),  // model files this device offers (laptops), name -> bytes
+    val filesPort: Int = 0,
+) {
+    fun modelUrl(file: String) = "http://$addr:$filesPort/models/$file"
+}
 
 /**
  * The Host side of the mesh: listens on port 7070, lets Helpers join with a one-time token
@@ -115,7 +119,10 @@ class MeshHost(private val ctx: Context) {
         conns.put(id, wire)?.close()                          // a reconnect replaces the old link
         wire.send(msg("welcome", "secret" to secret, "host" to android.os.Build.MODEL, "mesh" to meshId))
         val addr = sock.inetAddress.hostAddress ?: ""
-        _peers.update { it + (id to Peer(id, specs, addr)) }
+        val offered = hello.optJSONArray("models")?.let { a ->
+            (0 until a.length()).associate { a.getJSONObject(it).getString("file") to a.getJSONObject(it).getLong("bytes") }
+        } ?: emptyMap()
+        _peers.update { it + (id to Peer(id, specs, addr, models = offered, filesPort = hello.optInt("files_port"))) }
         sock.soTimeout = 15_000                               // pongs arrive every 2 s
 
         val rtts = ArrayDeque<Double>()

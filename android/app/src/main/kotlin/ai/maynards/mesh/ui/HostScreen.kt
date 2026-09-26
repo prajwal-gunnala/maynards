@@ -65,7 +65,7 @@ private val TABS = listOf(
 )
 
 @Composable
-fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, hostCap: Long = 0, autoRun: String? = null, onChangeRole: () -> Unit) {
+fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, downloads: ai.maynards.mesh.brain.Downloads, hostCap: Long = 0, autoRun: String? = null, onChangeRole: () -> Unit) {
     val ctx = LocalContext.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val peers by host.peers.collectAsState()
@@ -88,7 +88,8 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
         Box(Modifier.weight(1f)) {
             when (tab) {
                 0 -> MeshTab(host, runner, onChangeRole)
-                1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap)) { runner.run(it); tab = 2 }
+                1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap), onRun = { runner.run(it); tab = 2 },
+                    peers = peers.values, downloads = downloads)
                 2 -> {
                     val run by runner.state.collectAsState()
                     UseTab(

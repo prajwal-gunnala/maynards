@@ -19,6 +19,7 @@ use std::time::Duration;
 use std::{env, fs, thread};
 
 const API_PORT: u16 = 8080;
+const FILES_PORT: u16 = 8088;
 const RPC_PORTS: [u16; 5] = [50052, 50062, 50070, 50080, 50100];
 
 fn main() {
@@ -69,6 +70,7 @@ fn join(invite_text: &str) -> Res<()> {
     let hosts: Vec<String> = invite["hosts"].as_array().ok_or("invite has no hosts")?
         .iter().filter_map(|h| h.as_str().map(String::from)).collect();
     let secret_file = config_dir().join(format!("secret-{mesh}"));
+    thread::spawn(serve_models);
     let mut backoff = 1;
     loop {
         match session(&hosts, port, &invite, &secret_file) {
@@ -94,7 +96,8 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
     let out = Arc::new(Mutex::new(sock.try_clone().map_err(|e| e.to_string())?));
     let mut lines = BufReader::new(sock).lines();
     let secret = fs::read_to_string(secret_file).ok();
-    send(&out, json!({"t": "hello", "id": device_id(), "token": invite["token"], "secret": secret, "specs": specs()}))?;
+    send(&out, json!({"t": "hello", "id": device_id(), "token": invite["token"], "secret": secret, "specs": specs(),
+        "models": shared_models(), "files_port": FILES_PORT}))?;
 
     let welcome: Value = next(&mut lines)?.ok_or("Host hung up")?;
     if welcome["t"] != "welcome" {
@@ -187,6 +190,67 @@ fn stop(engine: &mut Option<Child>) {
         let _ = c.kill();
         let _ = c.wait();
     }
+}
+
+// ---------------------------------------------------------------- sharing models
+
+/// The folder whose GGUF files this laptop offers to the Host (MESH_MODELS, default ~/models).
+fn models_dir() -> std::path::PathBuf {
+    env::var("MESH_MODELS").map(Into::into)
+        .unwrap_or_else(|_| std::path::PathBuf::from(env::var("HOME").unwrap_or_default()).join("models"))
+}
+
+fn shared_models() -> Value {
+    let mut v: Vec<Value> = fs::read_dir(models_dir()).into_iter().flatten().flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let len = e.metadata().ok()?.len();
+            name.ends_with(".gguf").then(|| json!({"file": name, "bytes": len}))
+        })
+        .collect();
+    v.sort_by_key(|m| m["file"].as_str().unwrap_or("").to_string());
+    Value::Array(v)
+}
+
+/// A tiny HTTP server so the Host phone can pull model files over the private link:
+/// GET /models/<file.gguf>, with Range for resuming. Only .gguf names, no paths.
+fn serve_models() {
+    let Ok(l) = std::net::TcpListener::bind(("0.0.0.0", FILES_PORT)) else {
+        eprintln!("cannot share models on port {FILES_PORT}");
+        return;
+    };
+    for s in l.incoming().flatten() {
+        thread::spawn(move || { let _ = serve_one(s); });
+    }
+}
+
+fn serve_one(mut s: TcpStream) -> std::io::Result<()> {
+    let mut r = BufReader::new(s.try_clone()?);
+    let mut first = String::new();
+    r.read_line(&mut first)?;
+    let mut start: u64 = 0;
+    loop {
+        let mut h = String::new();
+        if r.read_line(&mut h)? == 0 || h == "\r\n" { break; }
+        if let Some(v) = h.to_ascii_lowercase().strip_prefix("range: bytes=") {
+            start = v.trim().trim_end_matches('-').split('-').next().and_then(|n| n.parse().ok()).unwrap_or(0);
+        }
+    }
+    let name = first.split_whitespace().nth(1).and_then(|p| p.strip_prefix("/models/")).unwrap_or("");
+    let ok_name = name.ends_with(".gguf") && !name.contains('/') && !name.contains("..") && !name.contains('%');
+    let path = models_dir().join(name);
+    let Ok(mut f) = fs::File::open(&path).map_err(|_| ()).and_then(|f| if ok_name { Ok(f) } else { Err(()) }) else {
+        return s.write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    };
+    let total = f.metadata()?.len();
+    let start = start.min(total);
+    use std::io::Seek;
+    f.seek(std::io::SeekFrom::Start(start))?;
+    let status = if start > 0 { "206 Partial Content" } else { "200 OK" };
+    write!(s, "HTTP/1.1 {status}\r\nContent-Type: application/octet-stream\r\nContent-Length: {}\r\n\
+               Content-Range: bytes {start}-{}/{total}\r\nConnection: close\r\n\r\n", total - start, total.saturating_sub(1))?;
+    std::io::copy(&mut f, &mut s)?;
+    Ok(())
 }
 
 // ---------------------------------------------------------------- specs

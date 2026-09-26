@@ -1,5 +1,6 @@
 package ai.maynards.mesh
 
+import ai.maynards.mesh.brain.Downloads
 import ai.maynards.mesh.brain.Runner
 import ai.maynards.mesh.brain.Shelf
 import ai.maynards.mesh.brain.Stats
@@ -17,6 +18,7 @@ class MeshApp : Application() {
     val shelf: Shelf by lazy { Shelf(this) }
     val runner: Runner by lazy { Runner(host, engine, shelf) }
     val stats: Stats by lazy { Stats(this) }
+    val downloads: Downloads by lazy { Downloads(shelf) }
 
     /** Test switch: pretend the Host has at most this much memory for models (0 = off). */
     var hostCapBytes: Long = 0
