@@ -30,6 +30,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.HourglassTop
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MicOff
 import androidx.compose.material.icons.outlined.PhotoCamera
@@ -126,6 +127,7 @@ private fun ChatView(run: RunState, runner: Runner, canSee: Boolean, system: () 
     var photo by remember { mutableStateOf<Pair<android.graphics.Bitmap, String>?>(null) }
     val voice = rememberVoice { input = it }
     val camera = rememberCamera { bmp, url -> photo = bmp to url; if (input.isBlank()) input = "What is in this photo?" }
+    val gallery = rememberGallery { bmp, url -> photo = bmp to url; if (input.isBlank()) input = "What is in this photo?" }
     LaunchedEffect(bubbles.size, bubbles.lastOrNull()?.text?.length) {
         if (bubbles.isNotEmpty()) list.scrollToItem(bubbles.lastIndex)
     }
@@ -182,7 +184,9 @@ private fun ChatView(run: RunState, runner: Runner, canSee: Boolean, system: () 
             }
             Spacer(Modifier.width(6.dp))
             if (canSee) {
-                SquareButton(Icons.Outlined.PhotoCamera, if (photo != null) HostGreen else Paper) { camera() }
+                SquareButton(Icons.Outlined.Image, if (photo != null) HostGreen else Paper) { gallery() }
+                Spacer(Modifier.width(6.dp))
+                SquareButton(Icons.Outlined.PhotoCamera, Paper) { camera() }
                 Spacer(Modifier.width(6.dp))
             }
             Box(Modifier.weight(1f).background(Paper, shape).border(Border, Ink, shape).padding(12.dp)) {

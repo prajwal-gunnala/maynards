@@ -84,6 +84,26 @@ fun rememberCamera(onPhoto: (Bitmap, String) -> Unit): () -> Unit {
     }
 }
 
+/** Picks a photo from the gallery and hands it back shrunk to at most 768 px (fast for the vision model). */
+@Composable
+fun rememberGallery(onPhoto: (Bitmap, String) -> Unit): () -> Unit {
+    val ctx = LocalContext.current
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val bmp = runCatching {
+            ctx.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it) }
+        }.getOrNull() ?: return@rememberLauncherForActivityResult
+        val small = shrink(bmp, 768)
+        onPhoto(small, dataUrl(small))
+    }
+    return { pick.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+}
+
+fun shrink(b: Bitmap, max: Int): Bitmap {
+    val k = max.toFloat() / maxOf(b.width, b.height)
+    return if (k >= 1f) b else Bitmap.createScaledBitmap(b, (b.width * k).toInt(), (b.height * k).toInt(), true)
+}
+
 fun dataUrl(bmp: Bitmap): String {
     val out = ByteArrayOutputStream()
     bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
