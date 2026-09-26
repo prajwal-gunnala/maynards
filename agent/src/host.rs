@@ -86,7 +86,12 @@ impl Hub {
     }
 
     fn invite(&self) -> Value {
-        json!({"mesh": self.mesh, "hosts": laptop_ips().iter().map(|(ip, _)| ip).collect::<Vec<_>>(),
+        // mesh traffic goes over the USB tethering cables only; Wi-Fi stays for this laptop's internet.
+        // Before any cable is up, the Wi-Fi address is the only way in, so it is offered then.
+        let ips = laptop_ips();
+        let cables: Vec<&String> = ips.iter().filter(|(_, i)| i.starts_with("enx") || i.starts_with("usb") || i.starts_with("rndis")).map(|(ip, _)| ip).collect();
+        let hosts: Vec<&String> = if cables.is_empty() { ips.iter().map(|(ip, _)| ip).collect() } else { cables };
+        json!({"mesh": self.mesh, "hosts": hosts,
                "port": CONTROL_PORT, "token": *self.token.lock().unwrap()})
     }
 }
