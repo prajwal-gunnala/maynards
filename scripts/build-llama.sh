@@ -5,6 +5,7 @@
 #   scripts/build-llama.sh            # both
 #   scripts/build-llama.sh android    # phones only
 #   scripts/build-llama.sh host       # laptop only
+#   scripts/build-llama.sh emulator   # x86_64 Android, for testing on the emulator only
 set -euo pipefail
 
 LLAMA_SRC=${LLAMA_SRC:-/mnt/storage/meshai/build/third_party/llama.cpp}
@@ -59,6 +60,16 @@ build_android() {
   echo "android: $dir/bin"
 }
 
+build_emulator() {
+  local dir=$OUT/android-x86_64
+  cmake -S "$LLAMA_SRC" -B "$dir" -G "$GEN" "${COMMON[@]}" \
+    -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+    -DANDROID_ABI=x86_64 -DANDROID_PLATFORM=android-30 \
+    -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF -DGGML_LLAMAFILE=OFF
+  cmake --build "$dir" --target "${TARGETS[@]}" -j"$JOBS"
+  echo "emulator: $dir/bin"
+}
+
 build_host() {
   local dir=$OUT/host
   cmake -S "$LLAMA_SRC" -B "$dir" -G "$GEN" "${COMMON[@]}"
@@ -69,6 +80,7 @@ build_host() {
 case $WHAT in
   android) build_android ;;
   host) build_host ;;
+  emulator) build_emulator ;;
   all) build_android; build_host ;;
-  *) echo "usage: $0 [all|android|host]" >&2; exit 2 ;;
+  *) echo "usage: $0 [all|android|host|emulator]" >&2; exit 2 ;;
 esac
