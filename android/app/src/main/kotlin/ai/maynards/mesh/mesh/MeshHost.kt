@@ -72,7 +72,9 @@ class MeshHost(private val ctx: Context) {
         acceptJob = scope.launch {
             while (isActive) {
                 val sock = runCatching { s.accept() }.getOrNull() ?: break
-                launch { serve(sock) }
+                // serve() throws on a socket that dies during the handshake or on a malformed
+                // hello; unhandled, that cancels this accept loop and no phone can join again
+                launch { runCatching { serve(sock) }.onFailure { runCatching { sock.close() } } }
             }
         }
     }
@@ -123,7 +125,9 @@ class MeshHost(private val ctx: Context) {
             (0 until a.length()).associate { a.getJSONObject(it).getString("file") to a.getJSONObject(it).getLong("bytes") }
         } ?: emptyMap()
         _peers.update { it + (id to Peer(id, specs, addr, models = offered, filesPort = hello.optInt("files_port"))) }
-        sock.soTimeout = 15_000                               // pongs arrive every 2 s
+        // 60 s, matching the Helper: a phone busy loading several GB of layers can be quiet for
+        // a while, and treating that as a dead link ended runs mid-load
+        sock.soTimeout = 60_000                               // pongs arrive every 2 s
 
         val rtts = ArrayDeque<Double>()
         val pinger = scope.launch {
@@ -151,9 +155,14 @@ class MeshHost(private val ctx: Context) {
         } catch (_: Exception) {
         } finally {
             pinger.cancel()
-            if (conns.remove(id, wire)) _peers.update { it - id }
+            // Only announce "gone" if this connection is still the live one. A helper that
+            // reconnects replaces the entry above, and the old connection's teardown used to
+            // emit "gone" anyway, which Runner treats as "a helper left" and ends the run.
+            if (conns.remove(id, wire)) {
+                _peers.update { it - id }
+                _events.tryEmit(id to msg("gone"))
+            }
             wire.close()
-            _events.tryEmit(id to msg("gone"))
         }
     }
 }

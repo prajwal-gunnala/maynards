@@ -68,7 +68,8 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                 }
                 val m = reply?.second
                 if (m == null || m.optString("t") != "ready") return@launch fail("${s.name}: ${m?.optString("reason")?.ifBlank { null } ?: "no answer"}")
-                addrs += m.getString("addr")
+                val addr = m.optString("addr").ifBlank { return@launch fail("${s.name}: no address") }
+                addrs += addr
             }
             // 2. llama.cpp aborts on an unreachable helper, so check each one first
             for ((i, a) in addrs.withIndex()) {
@@ -95,9 +96,11 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
     }
 
     fun stop() {
-        job?.cancel()
-        stopAll()
+        // stopAll() waits on a process and writes to peer sockets; called from a tap handler it
+        // froze the screen for ~2 s, which Android shows as "isn't responding"
         _state.value = RunState()
+        job?.cancel()
+        scope.launch { stopAll() }
     }
 
     private fun stopAll() {
@@ -105,11 +108,12 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
         host.peers.value.keys.forEach { host.send(it, msg("stop")) }
     }
 
-    private fun reachable(addr: String): Boolean {
-        val (ip, port) = addr.substringBeforeLast(':') to addr.substringAfterLast(':').toInt()
+    private suspend fun reachable(addr: String): Boolean {
+        val ip = addr.substringBeforeLast(':')
+        val port = addr.substringAfterLast(':').toIntOrNull() ?: return false
         repeat(10) {
             if (runCatching { Socket().use { it.connect(InetSocketAddress(ip, port), 1000) } }.isSuccess) return true
-            Thread.sleep(500)
+            delay(500)      // suspends, so cancelling the run stops the wait immediately
         }
         return false
     }

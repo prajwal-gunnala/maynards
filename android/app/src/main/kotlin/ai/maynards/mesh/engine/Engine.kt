@@ -5,6 +5,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -33,8 +35,12 @@ class Engine(private val ctx: Context) {
     private val _state = MutableStateFlow(EngineState())
     val state: StateFlow<EngineState> = _state
 
+    // One start or stop at a time. Two overlapping starts used to leave the first child running,
+    // holding its port and several GB, and the second could not bind.
+    private val gate = Mutex()
+
     /** Helper: hold layers for a Host. Tries a few ports because Android sometimes reserves one. */
-    fun startHelper(bind: String, threads: Int, ports: List<Int> = HELPER_PORTS) = scope.launch {
+    fun startHelper(bind: String, threads: Int, ports: List<Int> = HELPER_PORTS) = scope.launch { gate.withLock {
         stop()
         for (port in ports) {
             val cmd = listOf(bin("libmesh_rpc.so"), "-H", bind, "-p", "$port", "-t", "$threads", "-c")
@@ -45,20 +51,22 @@ class Engine(private val ctx: Context) {
             stop()
         }
         update { it.copy(status = EngineState.Status.FAILED) }
-    }
+    } }
 
     /** Host: load the model and serve the OpenAI-compatible API. */
-    fun startHost(args: List<String>, bind: String, port: Int) = scope.launch {
+    fun startHost(args: List<String>, bind: String, port: Int) = scope.launch { gate.withLock {
         stop()
         val cmd = listOf(bin("libmesh_server.so")) + args + listOf("--host", bind, "--port", "$port")
         if (launch(cmd)) update { it.copy(status = EngineState.Status.RUNNING, address = "$bind:$port") }
         else update { it.copy(status = EngineState.Status.FAILED) }
-    }
+    } }
 
     fun stop() {
         proc?.let { p ->
             p.destroy()
-            if (!p.waitForExitSafely(2000)) p.destroyForcibly()
+            // wait after the forced kill too: the port is only free once the child is reaped,
+            // and the next start used to race a dying process and fail to bind
+            if (!p.waitForExitSafely(2000)) { p.destroyForcibly(); p.waitForExitSafely(2000) }
         }
         proc = null
         update { it.copy(status = EngineState.Status.IDLE, address = "") }
@@ -119,10 +127,21 @@ class Engine(private val ctx: Context) {
     companion object {
         val HELPER_PORTS = listOf(50052, 50062, 50070, 50080, 50100)
 
-        private fun pidOf(p: Process): Int? = runCatching {
-            val f = p.javaClass.getDeclaredField("pid").apply { isAccessible = true }
-            f.getInt(p)
-        }.getOrNull()
+        private val PID_IN_TOSTRING = Regex("pid=(\\d+)")
+
+        /**
+         * The process id, three ways. Reading the private ProcessImpl.pid field is blocked by
+         * the non-SDK interface restrictions on recent Android, so heldBytes() returned 0 and
+         * the Helper screen showed "Model memory 0.0 GB" while the phone held several GB.
+         * Process.pid() exists from API 33 and is called reflectively so this still builds
+         * against the older stub; toString() carries "pid=" on Android as the fallback.
+         */
+        private fun pidOf(p: Process): Long? =
+            runCatching { Process::class.java.getMethod("pid").invoke(p) as? Long }.getOrNull()
+                ?: PID_IN_TOSTRING.find(p.toString())?.groupValues?.getOrNull(1)?.toLongOrNull()
+                ?: runCatching {
+                    p.javaClass.getDeclaredField("pid").apply { isAccessible = true }.getInt(p).toLong()
+                }.getOrNull()
 
         private fun Process.waitForExitSafely(ms: Long): Boolean = runCatching {
             waitFor(ms, java.util.concurrent.TimeUnit.MILLISECONDS)

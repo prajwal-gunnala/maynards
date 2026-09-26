@@ -62,6 +62,22 @@ import kotlinx.coroutines.withContext
 /** One line of the conversation as shown on screen. */
 data class Bubble(val mine: Boolean, val text: String, val stats: Answer? = null, val photo: android.graphics.Bitmap? = null)
 
+/**
+ * The conversation outlives the tab. ChatView leaves composition whenever the presenter visits
+ * Models or Stats, and a plain remember { } meant the chat came back empty: Use -> Stats -> Use
+ * is exactly the sequence in a demo. Holding the client here also stops a fresh OkHttpClient,
+ * with its pool and threads, being created on every visit.
+ */
+object ChatState {
+    val bubbles = mutableStateListOf<Bubble>()
+    private var client: Chat? = null
+    private var endpoint: String = ""
+    fun chat(url: String): Chat {
+        if (client == null || endpoint != url) { client = Chat(url); endpoint = url }
+        return client!!
+    }
+}
+
 @Composable
 fun UseTab(runner: Runner, canSee: Boolean, onPickModel: () -> Unit, system: () -> String? = { null }, onAnswer: (Answer) -> Unit = {}) {
     val run by runner.state.collectAsState()
@@ -118,8 +134,8 @@ private fun Failed(run: RunState, onPickModel: () -> Unit) {
 
 @Composable
 private fun ChatView(run: RunState, runner: Runner, canSee: Boolean, system: () -> String?, onAnswer: (Answer) -> Unit) {
-    val chat = remember { Chat(runner.endpoint) }
-    val bubbles = remember { mutableStateListOf<Bubble>() }
+    val chat = ChatState.chat(runner.endpoint)
+    val bubbles = ChatState.bubbles
     var input by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()

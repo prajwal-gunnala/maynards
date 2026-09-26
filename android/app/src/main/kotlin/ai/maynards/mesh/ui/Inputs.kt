@@ -12,6 +12,10 @@ import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -88,13 +92,31 @@ fun rememberCamera(onPhoto: (Bitmap, String) -> Unit): () -> Unit {
 @Composable
 fun rememberGallery(onPhoto: (Bitmap, String) -> Unit): () -> Unit {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val bmp = runCatching {
-            ctx.contentResolver.openInputStream(uri).use { android.graphics.BitmapFactory.decodeStream(it) }
-        }.getOrNull() ?: return@rememberLauncherForActivityResult
-        val small = shrink(bmp, 768)
-        onPhoto(small, dataUrl(small))
+        // Decode downsampled and off the main thread. A full-size camera shot is ~200 MB as
+        // ARGB_8888; while the engine holds several GB that throws OutOfMemoryError, runCatching
+        // swallows it, and the photo silently never appears.
+        scope.launch {
+            val small = withContext(Dispatchers.IO) {
+                runCatching {
+                    val src = android.graphics.ImageDecoder.createSource(ctx.contentResolver, uri)
+                    android.graphics.ImageDecoder.decodeBitmap(src) { d, info, _ ->
+                        val longest = maxOf(info.size.width, info.size.height)
+                        d.setTargetSampleSize(maxOf(1, longest / 768))
+                        d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+                        d.isMutableRequired = false
+                    }
+                }.getOrNull()?.let { shrink(it, 768) }
+            }
+            if (small == null) {
+                android.widget.Toast.makeText(ctx, "Could not read that photo", android.widget.Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            val url = withContext(Dispatchers.IO) { dataUrl(small) }
+            onPhoto(small, url)
+        }
     }
     return { pick.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
 }
