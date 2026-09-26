@@ -50,6 +50,10 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
     val eng by engine.state.collectAsState()
     var scanError by remember { mutableStateOf("") }
     var held by remember { mutableLongStateOf(0L) }
+    // a phone that joined before rejoins by itself (its secret is saved), no rescan needed
+    LaunchedEffect(Unit) {
+        if (link.state == Link.State.IDLE) client.savedInvite?.let { MeshService.start(ctx, "Helper joined"); client.join(it) }
+    }
     LaunchedEffect(eng.status) {
         while (eng.status == Status.RUNNING) { held = engine.heldBytes(); delay(2000) }
         held = 0
@@ -87,9 +91,10 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
                     Spacer(Modifier.width(10.dp))
                     Sticker(sticker, color)
                 }
-                if (link.state == Link.State.JOINED || link.state == Link.State.CONNECTING) {
+                if (link.state == Link.State.JOINED) {
                     IconLabel(Icons.Outlined.Link, "Host: ${link.hostName.ifBlank { "…" }} ${link.hostIp}")
                 }
+                if (link.state == Link.State.CONNECTING) IconLabel(Icons.Outlined.Link, "Connecting to the Host…")
                 if (link.error.isNotBlank()) Mono(link.error, 11)
                 if (scanError.isNotBlank()) Mono(scanError, 11)
             }
