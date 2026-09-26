@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
 
 /**
  * Lets a laptop drive the phone without touching the screen:
- *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --ez start true
+ *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --ez start true [--es bind <ip>]
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HELPER --es join '<invite json>'
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HOST --es cap_gb 3   (test: Host pretends to have 3 GB)
  *   adb shell am start -n ai.maynards.mesh/.MainActivity --es role HOST --es run Qwen3-8B   (plan and run that model)
@@ -76,7 +76,8 @@ private fun ComponentActivity.handleAdbExtras(i: android.content.Intent?) {
     app.autoRun = i.getStringExtra("run")
     app.autoRunHelpers = i.getIntExtra("helpers", 0)
     if (role == Role.HELPER && i.getBooleanExtra("start", false)) {
-        val ip = ai.maynards.mesh.engine.Net.best()?.ip ?: return
+        // --es bind <ip> picks the link (e.g. the USB tether); otherwise the best private link
+        val ip = i.getStringExtra("bind") ?: ai.maynards.mesh.engine.Net.best()?.ip ?: return
         MeshService.start(this, "Helper ready")
         app.engine.startHelper(ip, ai.maynards.mesh.ui.helperThreads())
     }
