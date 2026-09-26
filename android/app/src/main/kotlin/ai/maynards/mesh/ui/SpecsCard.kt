@@ -1,0 +1,91 @@
+package ai.maynards.mesh.ui
+
+import ai.maynards.mesh.engine.Specs
+import ai.maynards.mesh.engine.gb
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+
+/** This phone's specs, refreshed every 2 seconds. */
+@Composable
+fun rememberSpecs(): Specs {
+    val ctx = LocalContext.current
+    var specs by remember { mutableStateOf(Specs.read(ctx)) }
+    LaunchedEffect(Unit) {
+        while (true) { delay(2000); specs = Specs.read(ctx) }
+    }
+    return specs
+}
+
+@Composable
+fun SpecsCard(s: Specs, fill: Color = Paper) {
+    NBox(fill = fill, shadow = 5.dp, pad = 14.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row {
+                Column(Modifier.weight(1f)) {
+                    Text(s.name, fontWeight = FontWeight.Black, fontSize = 17.sp, color = Ink)
+                    Mono("${s.chip} · ${s.cores} cores · ${"%.1f".format(s.maxGhz)} GHz", 11, Muted)
+                }
+            }
+            Meter("Memory", "${gb(s.freeBytes)} / ${gb(s.totalBytes)} GB free", s.freeBytes.toFloat() / s.totalBytes, HostGreen)
+            Meter("For the model", "${gb(s.usableBytes)} GB", s.usableBytes.toFloat() / s.totalBytes, Yellow)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Stat("Heat", heatLabel(s.heat), Modifier.weight(1f), if (s.heat >= 0.8f) Danger else Paper)
+                Stat("Battery", "${s.battery}%${if (s.charging) " ⚡" else ""}", Modifier.weight(1f),
+                    if (!s.charging && s.battery < 20) Danger else Paper)
+            }
+        }
+    }
+}
+
+private fun heatLabel(h: Float) = when {
+    h < 0 -> "—"
+    h < 0.5f -> "cool"
+    h < 0.8f -> "warm"
+    else -> "hot"
+}
+
+@Composable
+private fun Meter(label: String, value: String, frac: Float, color: Color) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row {
+            Box(Modifier.weight(1f)) { Label(label) }
+            Mono(value, 12)
+        }
+        val shape = RoundedCornerShape(6.dp)
+        Box(Modifier.fillMaxWidth().height(18.dp).background(Paper, shape).border(Border, Ink, shape)) {
+            Box(Modifier.fillMaxWidth(frac.coerceIn(0.02f, 1f)).fillMaxHeight().background(color, shape).border(Border, Ink, shape))
+        }
+    }
+}
+
+@Composable
+private fun Stat(label: String, value: String, modifier: Modifier, fill: Color) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(modifier.background(fill, shape).border(Border, Ink, shape).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        Label(label, Muted)
+        Text(value, fontWeight = FontWeight.Black, fontSize = 18.sp, color = Ink)
+    }
+}

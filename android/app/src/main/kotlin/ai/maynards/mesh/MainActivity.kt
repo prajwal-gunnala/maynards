@@ -83,12 +83,7 @@ private fun RoleHome(role: Role, onChangeRole: () -> Unit) {
                 Title(if (host) "The brain" else "Helper", 34)
             }
         }
-        NBox(pad = 8.dp) {
-            MeshWeb(
-                listOf(WebNode("me", if (host) HostGreen else HelperPurple, isHost = true)),
-                Modifier.fillMaxWidth().aspectRatio(1.4f),
-            )
-        }
+        ai.maynards.mesh.ui.SpecsCard(ai.maynards.mesh.ui.rememberSpecs())
         NButton("Change role", fill = Paper, onClick = onChangeRole)
     }
 }

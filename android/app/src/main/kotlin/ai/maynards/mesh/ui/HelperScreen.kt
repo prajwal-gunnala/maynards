@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -52,9 +51,7 @@ fun HelperScreen(engine: Engine, onChangeRole: () -> Unit) {
                 Mono(if (running) s.address else Net.best()?.let { "${it.ip} · ${it.kind}" } ?: "no network")
             }
         }
-        NBox(pad = 8.dp) {
-            MeshWeb(listOf(WebNode("me", HelperPurple, isHost = true)), Modifier.fillMaxWidth().aspectRatio(1.6f))
-        }
+        SpecsCard(rememberSpecs())
         if (running || s.status == Status.STARTING) {
             NButton("Stop", fill = Paper) { engine.stop(); MeshService.stop(ctx) }
         } else {
