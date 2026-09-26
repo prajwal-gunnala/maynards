@@ -452,6 +452,17 @@ fn lost_layers(hub: &Hub, id: &str, name: &str, m: &Value) {
 
 // ---------------------------------------------------------------- running a model
 
+/// The engine's flags differ between llama.cpp builds, and one it does not know makes it exit immediately with
+/// status 0: on the page that looks exactly like a crash, with nothing in the log to explain it. So ask the
+/// binary what it supports and leave out the optional flags it has never heard of.
+fn engine_help(bin: &str) -> String {
+    static HELP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    HELP.get_or_init(|| Command::new(format!("{bin}/llama-server")).arg("--help").output()
+        .map(|o| format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr)))
+        .unwrap_or_default()).clone()
+}
+
+
 fn set_run(hub: &Hub, status: &str, step: &str) {
     let mut r = hub.run.lock().unwrap();
     r.status = status.into();
@@ -576,14 +587,32 @@ fn start(hub: Arc<Hub>, file: String) {
         }
         // engine arguments: same rules as the phone app's EngineArgs
         let bin = std::env::var("MESH_LLAMA_BIN").unwrap_or_else(|_| "/mnt/storage/meshai/build/v3/host/bin".into());
+        if !std::path::Path::new(&format!("{bin}/llama-server")).exists() {
+            bail(&format!("failed: no llama-server in {bin} - set MESH_LLAMA_BIN to the folder holding it"));
+            return;
+        }
+        let help = engine_help(&bin);
         let threads = thread::available_parallelism().map(|n| n.get()).unwrap_or(4).saturating_sub(2).max(2);
         let mut args: Vec<String> = vec!["-m".into(), crate::models_dir().join(&m.file).to_string_lossy().into(), "-c".into(), "4096".into(),
-            "-t".into(), threads.to_string(), "--host".into(), "127.0.0.1".into(), "--port".into(), ENGINE_PORT.to_string(),
-            "--jinja".into(), "--fit".into(), "off".into(), "--reasoning".into(), "off".into(), "-np".into(), "1".into(),
-            "-ctk".into(), "q8_0".into(), "-ctv".into(), "q8_0".into(), "-fa".into(), "on".into(),
-            // read the file once, front to back: with mmap, sending layers to phones reads it in scattered pieces
-            "--load-mode".into(), "none".into()];
-        if let Some((path, _)) = &m.proj { args.extend(["--mmproj".into(), path.clone(), "--no-mmproj-offload".into()]); }
+            "-t".into(), threads.to_string(), "--host".into(), "127.0.0.1".into(), "--port".into(), ENGINE_PORT.to_string()];
+        // every one of these is a preference, not a requirement, so a build without it still runs
+        for (flag, val) in [("--jinja", &[][..]), ("--fit", &["off"]), ("--reasoning", &["off"]),
+                            ("-np", &["1"]),      // one conversation slot: every message reuses the cached history
+                            ("-ctk", &["q8_0"]), ("-ctv", &["q8_0"]), ("-fa", &["on"]),
+                            // read the file once, front to back: with mmap, sending layers to phones reads it in scattered pieces
+                            ("--load-mode", &["none"])] {
+            // an empty help text means the probe itself failed, and then the old behaviour is the safer guess
+            if help.is_empty() || help.contains(flag) {
+                args.push(flag.into());
+                args.extend(val.iter().map(|v| v.to_string()));
+            } else {
+                hub.say(format!("this llama-server has no {flag}: carrying on without it"));
+            }
+        }
+        if let Some((path, _)) = &m.proj {
+            args.extend(["--mmproj".into(), path.clone()]);
+            if help.is_empty() || help.contains("--no-mmproj-offload") { args.push("--no-mmproj-offload".into()); }
+        }
         if helpers.is_empty() {
             args.extend(["-ngl".into(), "0".into()]);
         } else {
