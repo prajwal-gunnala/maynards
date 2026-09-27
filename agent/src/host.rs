@@ -30,6 +30,7 @@ struct Peer {
     engine: Option<String>,   // the phone's report: its engine address, "" when not running, None if never said
     store: Value,             // layers the phone keeps on its own storage: {model, done, total, working, bytes}
     seen: Instant,            // when this device last told us anything: on a flaky link its numbers go stale
+    link: &'static str,       // "USB cable", "Wi-Fi" or "network": the laptop interface the phone joined on
 }
 
 #[derive(Clone, Default)]
@@ -420,7 +421,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     };
     send(&wire, json!({"t": "welcome", "secret": secret, "host": "laptop", "mesh": hub.mesh}))?;
     hub.say(format!("✓ {name} joined over {} ({peer_ip})", link_kind(&my_ip)));
-    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null, seen: Instant::now() });
+    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null, seen: Instant::now(), link: link_kind(&my_ip) });
     sock.set_read_timeout(Some(Duration::from_secs(60)))?;
     // models this laptop cannot hold alone will need helpers: each phone keeps their layers from its own copy,
     // so the engine asks for a layer by hash and nothing crosses the cable
@@ -998,7 +999,7 @@ fn state(hub: &Hub) -> Value {
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine, "store": p.store,
                "quiet_s": p.seen.elapsed().as_secs(),
-               "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last()})
+               "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last(), "link": p.link})
     }).collect();
     let devs = devices(hub);
     let models: Vec<Value> = scan_models(hub).iter().map(|m| {
@@ -1024,7 +1025,7 @@ fn state(hub: &Hub) -> Value {
     let qr = qrcode::QrCode::new(invite.to_string().as_bytes()).map(|c| c.render::<qrcode::render::svg::Color>()
         .min_dimensions(240, 240).quiet_zone(true).build()).unwrap_or_default();
     json!({
-        "mesh": hub.mesh, "invite": invite, "qr": qr,
+        "mesh": hub.mesh, "invite": invite, "qr": qr, "ctx": ctx_tokens(),
         "laptop": {"specs": me, "usable_gb": usable(&me) / GB},
         "peers": peers, "models": models,
         "pool_gb": devs.iter().map(|d| d.usable).sum::<f64>() / GB,
