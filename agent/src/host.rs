@@ -29,6 +29,7 @@ struct Peer {
     wire: Arc<Mutex<TcpStream>>,
     engine: Option<String>,   // the phone's report: its engine address, "" when not running, None if never said
     store: Value,             // layers the phone keeps on its own storage: {model, done, total, working, bytes}
+    seen: Instant,            // when this device last told us anything: on a flaky link its numbers go stale
 }
 
 #[derive(Clone, Default)]
@@ -410,7 +411,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     };
     send(&wire, json!({"t": "welcome", "secret": secret, "host": "laptop", "mesh": hub.mesh}))?;
     hub.say(format!("✓ {name} joined over {} ({peer_ip})", link_kind(&my_ip)));
-    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null });
+    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null, seen: Instant::now() });
     sock.set_read_timeout(Some(Duration::from_secs(60)))?;
     // models this laptop cannot hold alone will need helpers: each phone keeps their layers from its own copy,
     // so the engine asks for a layer by hash and nothing crosses the cable
@@ -428,6 +429,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         match m["t"].as_str().unwrap_or("") {
             "specs" => {
                 if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) {
+                    p.seen = Instant::now();
                     p.specs = m["specs"].clone();
                     p.engine = m.get("engine").and_then(|e| e.as_str()).map(String::from);
                     p.store = m["store"].clone();
@@ -435,6 +437,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
                 lost_layers(&hub, &id, &name, &m);
             }
             "pong" => if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) {
+                p.seen = Instant::now();
                 p.rtts.push_back(now_ms().saturating_sub(m["at"].as_u64().unwrap_or(0)) as f64);
                 while p.rtts.len() > 10 { p.rtts.pop_front(); }
             },
@@ -831,16 +834,36 @@ fn keep_wifi_default(hub: &Hub, said: &mut std::collections::HashSet<String>) {
 /// Plain warnings for the page, before they turn into a failed demo.
 fn advice(hub: &Hub) -> Vec<String> {
     let mut a = Vec::new();
+    // What the run is using is not a problem, it is the point. Take the run's devices first, with the
+    // lock released, so nothing below has to hold two at once.
+    let (running, held): (bool, Vec<String>) = {
+        let r = hub.run.lock().unwrap();
+        (matches!(r.status.as_str(), "ready" | "loading"),
+         r.plan["slices"].as_array().map(|v| v.iter().filter_map(|s| s["id"].as_str().map(String::from)).collect())
+            .unwrap_or_default())
+    };
     let me = laptop_specs();
-    if me["freeBytes"].as_f64().unwrap_or(0.0) < 3.0 * GB { a.push("This laptop is low on memory: close other apps".into()); }
+    if !running && me["freeBytes"].as_f64().unwrap_or(0.0) < 3.0 * GB {
+        a.push("This laptop is low on memory: close other apps".into());
+    }
     if me["temp_c"].as_f64().unwrap_or(0.0) > 90.0 { a.push("This laptop is hot".into()); }
-    for p in hub.peers.lock().unwrap().values() {
+    for (id, p) in hub.peers.lock().unwrap().iter() {
         let s = &p.specs;
+        let quiet_for = p.seen.elapsed().as_secs();
+        // A phone reports every two seconds. If it has gone quiet the numbers below are history, and
+        // warning about history is worse than saying nothing: say the true thing instead.
+        if quiet_for >= 10 {
+            a.push(format!("{} has not reported for {quiet_for} s: its link is dropping, use USB tethering", p.name));
+            continue;
+        }
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         if !s["charging"].as_bool().unwrap_or(true) { a.push(format!("{} is not charging", p.name)); }
         if s["battery"].as_i64().unwrap_or(100) < 30 { a.push(format!("{} battery is {}%", p.name, s["battery"])); }
-        if usable(s) < 1.5 * GB { a.push(format!("{} is low on memory: close its other apps", p.name)); }
+        // its memory being low while it holds part of the model is the model, not a warning
+        if usable(s) < 1.5 * GB && !(running && held.iter().any(|h| h == id)) {
+            a.push(format!("{} is low on memory: close its other apps", p.name));
+        }
         if s["heat"].as_f64().unwrap_or(0.0) >= 0.8 { a.push(format!("{} is hot: it will slow down", p.name)); }
         if r.get(r.len() / 2).copied().unwrap_or(0.0) > 60.0 { a.push(format!("{} has a slow link: use USB tethering", p.name)); }
     }
@@ -965,6 +988,7 @@ fn state(hub: &Hub) -> Value {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine, "store": p.store,
+               "quiet_s": p.seen.elapsed().as_secs(),
                "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last()})
     }).collect();
     let devs = devices(hub);
