@@ -32,8 +32,12 @@ fun RolePicker(onPick: (Role) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         WebBackdrop(Modifier.fillMaxSize())
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(18.dp))
             Header()
+            PageHeader(
+                "Which is this phone?",
+                "A model too big for any one device runs across several. One device plans and answers; the others hold layers.",
+            )
             NBox(fill = Paper, pad = 8.dp) {
                 MeshWeb(
                     listOf(
@@ -44,9 +48,9 @@ fun RolePicker(onPick: (Role) -> Unit) {
                     Modifier.fillMaxWidth().aspectRatio(1.4f),
                 )
             }
-            Label("Pick this phone's role")
-            RoleCard("Host", "the brain", "Runs the model. You chat here.", HostGreen) { onPick(Role.HOST) }
-            RoleCard("Helper", "lends memory", "Holds part of the model.", HelperPurple) { onPick(Role.HELPER) }
+            Section("Pick a role")
+            RoleCard("Host", "plans and answers", "Decides which device holds which layers, runs the model, and this is where you ask it things.", HostGreen) { onPick(Role.HOST) }
+            RoleCard("Helper", "lends memory", "Holds part of the model for a host on the other end of a cable. Nothing to configure.", HelperPurple) { onPick(Role.HELPER) }
         }
     }
 }

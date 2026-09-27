@@ -70,6 +70,7 @@ import androidx.compose.material.icons.outlined.RateReview
 import ai.maynards.mesh.brain.Plan
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.material.icons.outlined.Warning
 
 /** One line of the conversation as shown on screen. */
 data class Bubble(val mine: Boolean, val text: String, val stats: Answer? = null, val photo: android.graphics.Bitmap? = null)
@@ -109,24 +110,33 @@ fun UseTab(runner: Runner, host: MeshHost?, canSee: Boolean, onPickModel: () -> 
 
 @Composable
 private fun Empty(onPickModel: () -> Unit) {
-    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Title("Nothing running", 24)
-        Spacer(Modifier.height(12.dp))
-        NButton("Pick a model", onClick = onPickModel)
+    Column(Modifier.fillMaxSize()) {
+        PageHeader("Use", "Ask the mesh anything, by typing or by speaking. Photos go to a device running a vision model.")
+        NBox {
+            EmptyState(
+                "Nothing is running",
+                "Choose a model first. The planner works out which device holds which layers, and this is where you talk to it.",
+            ) { NButton("Choose a model", fill = Term, onClick = onPickModel) }
+        }
     }
 }
 
 @Composable
 private fun Loading(run: RunState, runner: Runner) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        NBox(fill = Yellow) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        PageHeader(
+            "Starting",
+            "Each device is being given its layers. A device that has held these layers before keeps them, " +
+                "so the second time is far quicker than the first.",
+        )
+        NBox {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(22.dp), color = Ink, strokeWidth = 3.dp)
-                    Spacer(Modifier.width(12.dp))
-                    Title(run.plan?.model?.name ?: "", 18)
+                    CircularProgressIndicator(Modifier.size(18.dp), color = Term, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Title(run.plan?.model?.name ?: "", 16)
                 }
-                IconLabel(Icons.Outlined.HourglassTop, "${run.step} · ${run.loadSeconds}s")
+                Mono("${run.step} · ${run.loadSeconds} s", 12, Muted)
             }
         }
         run.plan?.let { NBox(pad = 12.dp) { LayerBar(it) } }
@@ -136,14 +146,19 @@ private fun Loading(run: RunState, runner: Runner) {
 
 @Composable
 private fun Failed(run: RunState, onPickModel: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        PageHeader("Stopped", "The run ended. The reason below is the real one, not a guess.")
         NBox(fill = Danger) {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Title("Stopped", 24)
-                Text(run.step, fontWeight = FontWeight.Bold, color = Ink)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Warning, null, Modifier.size(16.dp), tint = Bad)
+                    Spacer(Modifier.width(8.dp))
+                    Title("It stopped", 16)
+                }
+                Text(run.step, fontSize = 13.sp, color = Ink)
             }
         }
-        NButton("Back to models", onClick = onPickModel)
+        NButton("Back to models", fill = Term, onClick = onPickModel)
     }
 }
 

@@ -85,12 +85,18 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Spacer(Modifier.height(16.dp))
-        Header()
+        PageHeader(
+            "Helper",
+            when (link.state) {
+                Link.State.JOINED -> "This phone is lending its memory to the mesh. It holds part of the model and answers the host, once per word."
+                Link.State.CONNECTING -> "Finding the host. It tries the cable first, because a cable is milliseconds and Wi-Fi is not."
+                else -> "This phone is not in a mesh yet. Scan the code shown on the host and it will join, and rejoin by itself after a restart."
+            },
+        )
         NBox(fill = HelperPurple) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Title("Helper", 22)
+                    Title("Link", 16)          // the page is already titled Helper; this card is the link
                     Spacer(Modifier.width(10.dp))
                     Sticker(sticker, color)
                 }
