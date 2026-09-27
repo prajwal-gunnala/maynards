@@ -49,10 +49,15 @@ fun StatsTab(stats: Stats) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Spacer(Modifier.height(16.dp))
-        Title("Stats", 30)
+        PageHeader("Stats", "Every answer this phone has produced: how fast it came, how long the first word took, " +
+            "and whether one device or several were holding the model.")
         if (rs.isEmpty()) {
-            Small("No answers yet. Run a model and ask something.")
+            NBox {
+                EmptyState(
+                    "No answers yet",
+                    "Run a model and ask it something. Each answer is timed here, so you can see what a split costs and what it buys.",
+                )
+            }
             return@Column
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

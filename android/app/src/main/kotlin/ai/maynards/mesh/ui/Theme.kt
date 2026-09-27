@@ -50,10 +50,9 @@ private val Colors = darkColorScheme(
 
 @Composable
 fun MeshTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = Colors) {
-        // one switch for the whole app: everything is typed in the font a terminal uses
-        CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace)) {
-            content()
-        }
-    }
+    // Prose in the system sans, and mono only where the content is a number, an id or a path.
+    // Everything in mono reads as a terminal toy; everything in sans reads as a document. The mix is
+    // what makes a developer tool look like one, so Mono(), Label() and the status strip ask for it
+    // explicitly and nothing else gets it.
+    MaterialTheme(colorScheme = Colors, content = content)
 }

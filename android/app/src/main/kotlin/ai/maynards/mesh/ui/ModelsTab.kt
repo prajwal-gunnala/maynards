@@ -80,9 +80,17 @@ fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit,
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Spacer(Modifier.height(16.dp))
-        Title("Models", 30)
-        Mono("${devices.size} device${if (devices.size == 1) "" else "s"} · ${gb(devices.sumOf { it.usableBytes })} GB for models", 12, Muted)
+        PageHeader(
+            "Models",
+            "Every model this phone can see, sorted by whether the devices you have can actually run it. " +
+                "${devices.size} device${if (devices.size == 1) "" else "s"} offering ${gb(devices.sumOf { it.usableBytes })} GB between them.",
+        )
+        if (plans.isEmpty()) NBox {
+            EmptyState(
+                "Nothing to run yet",
+                "Put a .gguf file in this phone's model folder, or join a laptop that has one and pull it across the cable.",
+            )
+        }
 
         Section(Verdict.DOABLE, plans, onPhone, onRun, get, active)
         Section(Verdict.TIGHT, plans, onPhone, onRun, get, active)
