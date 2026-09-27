@@ -1,0 +1,134 @@
+{
+  "label": "laptop + 2 phones, 30B",
+  "note": "",
+  "url": "http://127.0.0.1:8080/v1",
+  "when": "2026-09-27 09:04",
+  "tasks": 15,
+  "passed": 15,
+  "accuracy": 100.0,
+  "median_tps": 6.8,
+  "median_seconds": 20.7,
+  "total_seconds": 300.9,
+  "results": [
+    {
+      "id": "running_max",
+      "ok": true,
+      "why": "",
+      "seconds": 13.0,
+      "tokens": 62,
+      "tps": 7.4
+    },
+    {
+      "id": "balanced_brackets",
+      "ok": true,
+      "why": "",
+      "seconds": 11.8,
+      "tokens": 80,
+      "tps": 7.9
+    },
+    {
+      "id": "word_frequencies",
+      "ok": true,
+      "why": "",
+      "seconds": 15.2,
+      "tokens": 89,
+      "tps": 6.7
+    },
+    {
+      "id": "merge_intervals",
+      "ok": true,
+      "why": "",
+      "seconds": 25.2,
+      "tokens": 141,
+      "tps": 6.3
+    },
+    {
+      "id": "roman_to_int",
+      "ok": true,
+      "why": "",
+      "seconds": 23.9,
+      "tokens": 134,
+      "tps": 6.0
+    },
+    {
+      "id": "flatten_nested",
+      "ok": true,
+      "why": "",
+      "seconds": 8.1,
+      "tokens": 45,
+      "tps": 7.1
+    },
+    {
+      "id": "group_anagrams",
+      "ok": true,
+      "why": "",
+      "seconds": 23.4,
+      "tokens": 167,
+      "tps": 7.7
+    },
+    {
+      "id": "binary_search_insert",
+      "ok": true,
+      "why": "",
+      "seconds": 18.0,
+      "tokens": 88,
+      "tps": 5.5
+    },
+    {
+      "id": "parse_duration",
+      "ok": true,
+      "why": "",
+      "seconds": 29.8,
+      "tokens": 193,
+      "tps": 7.1
+    },
+    {
+      "id": "matrix_spiral",
+      "ok": true,
+      "why": "",
+      "seconds": 38.4,
+      "tokens": 246,
+      "tps": 6.7
+    },
+    {
+      "id": "longest_common_prefix",
+      "ok": true,
+      "why": "",
+      "seconds": 15.7,
+      "tokens": 98,
+      "tps": 6.9
+    },
+    {
+      "id": "csv_column_sum",
+      "ok": true,
+      "why": "",
+      "seconds": 20.7,
+      "tokens": 112,
+      "tps": 6.1
+    },
+    {
+      "id": "retry_backoff",
+      "ok": true,
+      "why": "",
+      "seconds": 10.8,
+      "tokens": 60,
+      "tps": 7.2
+    },
+    {
+      "id": "semver_compare",
+      "ok": true,
+      "why": "",
+      "seconds": 21.7,
+      "tokens": 128,
+      "tps": 6.6
+    },
+    {
+      "id": "chunk_text",
+      "ok": true,
+      "why": "",
+      "seconds": 25.2,
+      "tokens": 159,
+      "tps": 6.8
+    }
+  ]
+}
