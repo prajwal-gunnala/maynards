@@ -34,7 +34,7 @@ data class Plan(
 /**
  * Decides where a model runs. Rules:
  *  - never split a model that fits on the Host alone;
- *  - skip devices that are too slow to reach, too hot, or nearly flat and not charging;
+ *  - skip devices that are too slow to reach or nearly flat and not charging (heat only warns: the phone throttles itself);
  *  - every device gets one unbroken run of layers; the Host keeps embeddings and output head;
  *  - Doable means at least 15% memory to spare, Tight means less.
  */
@@ -59,7 +59,6 @@ object Planner {
         val helpers = devices.filter { !it.isHost }.filter { d ->
             val why = when {
                 d.rttMs > MAX_RTT_MS -> "link too slow (%.0f ms)".format(d.rttMs)
-                d.heat >= 0.95f -> "too hot"
                 !d.charging && d.battery < MIN_BATTERY -> "battery ${d.battery}%"
                 d.usableBytes - HELPER_RESERVE < biggest -> "too little memory"
                 else -> null

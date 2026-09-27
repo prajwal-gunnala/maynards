@@ -48,17 +48,22 @@ class PlannerTest {
         assertEquals(48, p.slices.last().to)
     }
 
-    @Test fun slowHotAndFlatDevicesAreSkipped() {
+    @Test fun slowAndFlatDevicesAreSkipped() {
         val p = Planner.plan(coder30b, listOf(
             host(10.5),
             helper("slow", 12.0, rtt = 120.0),
-            helper("hot", 12.0).copy(heat = 0.97f),
             helper("flat", 12.0).copy(battery = 10, charging = false),
         ))
         assertEquals(Verdict.NOT_POSSIBLE, p.verdict)
         assertTrue(p.skipped["slow"]!!.startsWith("link too slow"))
-        assertEquals("too hot", p.skipped["hot"])
         assertEquals("battery 10%", p.skipped["flat"])
+    }
+
+    @Test fun aHotPhoneIsStillUsed() {
+        // no heat cap: the phone throttles itself; the Host only warns that it will be slower
+        val p = Planner.plan(coder30b, listOf(host(10.5), helper("hot", 12.0).copy(heat = 0.97f)))
+        assertTrue(p.skipped.isEmpty())
+        assertTrue(p.slices.any { it.deviceId == "hot" })
     }
 
     @Test fun argsForTwoHelpersMatchTheVerifiedSplit() {

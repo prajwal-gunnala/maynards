@@ -297,7 +297,7 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
 
 // ---------------------------------------------------------------- the planner (same rules as the phone app)
 
-struct Dev { id: String, name: String, usable: f64, rtt: f64, heat: f64, battery: i64, charging: bool, host: bool }
+struct Dev { id: String, name: String, usable: f64, rtt: f64, battery: i64, charging: bool, host: bool }
 
 const HOST_RESERVE: f64 = 0.30 * GB;
 const HELPER_RESERVE: f64 = 0.15 * GB;
@@ -312,7 +312,6 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let mut skipped = serde_json::Map::new();
     let mut helpers: Vec<&Dev> = devs[1..].iter().filter(|d| {
         let why = if d.rtt > 60.0 { Some(format!("link too slow ({:.0} ms)", d.rtt)) }
-            else if d.heat >= 0.95 { Some("too hot".into()) }
             else if !d.charging && d.battery >= 0 && d.battery < 20 { Some(format!("battery {}%", d.battery)) }
             else if d.usable - HELPER_RESERVE < biggest { Some("too little memory".into()) }
             else { None };
@@ -358,12 +357,12 @@ fn devices(hub: &Hub) -> Vec<Dev> {
     let caps = hub.caps.lock().unwrap().clone();
     let cap = caps.get("laptop").copied().unwrap_or(f64::MAX);
     let mut v = vec![Dev { id: "laptop".into(), name: me["name"].as_str().unwrap_or("This laptop").into(), usable: usable(&me).min(cap),
-        rtt: 0.0, heat: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true }];
+        rtt: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true }];
     for (id, p) in hub.peers.lock().unwrap().iter() {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v.push(Dev { id: id.clone(), name: p.name.clone(), usable: usable(&p.specs).min(caps.get(id).copied().unwrap_or(f64::MAX)), rtt: r.get(r.len() / 2).copied().unwrap_or(0.0),
-            heat: p.specs["heat"].as_f64().unwrap_or(0.0), battery: p.specs["battery"].as_i64().unwrap_or(100),
+            battery: p.specs["battery"].as_i64().unwrap_or(100),
             charging: p.specs["charging"].as_bool().unwrap_or(true), host: false });
     }
     v

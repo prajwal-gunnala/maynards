@@ -159,6 +159,7 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
             }
         }
         SpecsCard(rememberSpecs())
+        SpeedCard()
 
         when (link.state) {
             Link.State.IDLE, Link.State.FAILED -> NButton("Scan to join") {
