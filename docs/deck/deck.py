@@ -379,5 +379,332 @@ def main():
     print(f"wrote {OUT} ({len(prs.slides.__iter__.__self__._sldIdLst)} slides)")
 
 
+# ================================================================ v5: two slides on top of v4
+#
+#     deck-venv/bin/python deck.py --v5     # draws img/milestones.png and img/standing.png,
+#                                           # writes MeshAI_Deck_v5.pptx next to this file
+#
+# v5 opens the finished v4 deck and adds two slides before the closing one; nothing in v4 changes.
+# Our numbers: docs/measurements.md, results/REPORT.md, and the Aider runs recorded in commits
+# ccb7003 (8B, laptop alone) and 5255cfe (30B, laptop + 2 phones). Cloud numbers: the sources
+# printed on the slide, read 27 Sep 2026. Anything not measured says "est." where it stands.
+
+V4 = HERE / "MeshAI_Deck_v4.pptx"
+V5 = HERE / "MeshAI_Deck_v5.pptx"
+
+PAPER, INK, GREY, RULE, ORANGE = (239, 239, 236), (17, 17, 17), (95, 95, 95), (200, 200, 195), (242, 107, 29)
+DPI = 200   # pixels per inch of slide: the pictures are drawn at twice the size they are shown
+
+
+def _font(size, bold=False):
+    from PIL import ImageFont
+    name = "LiberationSans-Bold.ttf" if bold else "LiberationSans-Regular.ttf"
+    for d in ("/usr/share/fonts/truetype/liberation", "/usr/share/fonts/truetype/liberation2"):
+        p = pathlib.Path(d) / name
+        if p.exists():
+            return ImageFont.truetype(str(p), size)
+    return ImageFont.load_default(size)
+
+
+def _wrap(d, text, font, width):
+    lines, line = [], ""
+    for w in text.split():
+        t = (line + " " + w).strip()
+        if d.textlength(t, font=font) <= width or not line:
+            line = t
+        else:
+            lines.append(line)
+            line = w
+    return lines + ([line] if line else [])
+
+
+def _dashed_rect(d, box, color, width=5, dash=26, gap=16, radius=0):
+    x0, y0, x1, y1 = box
+    for (ax, ay, bx, by) in ((x0, y0, x1, y0), (x1, y0, x1, y1), (x1, y1, x0, y1), (x0, y1, x0, y0)):
+        length = max(abs(bx - ax), abs(by - ay))
+        s = 0
+        while s < length:
+            e = min(s + dash, length)
+            fx, fy = (bx - ax) / length, (by - ay) / length
+            d.line((ax + fx * s, ay + fy * s, ax + fx * e, ay + fy * e), fill=color, width=width)
+            s = e + gap
+
+
+def _phone(d, x, y, h, color, fill=None):
+    w = int(h * 0.52)
+    d.rounded_rectangle((x, y, x + w, y + h), radius=int(h * 0.12), outline=color, width=5, fill=fill)
+    d.line((x + w * 0.35, y + h * 0.1, x + w * 0.65, y + h * 0.1), fill=color, width=5)
+    return w
+
+
+def _laptop(d, x, y, h, color):
+    w = int(h * 1.45)
+    d.rounded_rectangle((x + w * 0.1, y, x + w * 0.9, y + h * 0.78), radius=8, outline=color, width=5)
+    d.polygon([(x, y + h), (x + w, y + h), (x + w * 0.92, y + h * 0.84), (x + w * 0.08, y + h * 0.84)],
+              outline=color, fill=color)
+    return w
+
+
+def draw_milestones(path):
+    """Left to right: what is done (solid) and what is next (outlined)."""
+    from PIL import Image, ImageDraw
+    W, H = int(18.95 * DPI), int(7.9 * DPI)
+    im = Image.new("RGB", (W, H), PAPER)
+    d = ImageDraw.Draw(im)
+    steps = [
+        ("26 SEP", True, "Two models, two phones", "12.3 · 19.1",
+         ["tok/s, text · vision", "Qwen3-8B on one phone", "Qwen2.5-VL-3B on the other",
+          "the laptop routes each question"]),
+        ("26 SEP", True, "Layers split across devices", "2–3 ms",
+         ["llama.cpp RPC over a USB cable", "venue Wi-Fi 266–483 ms: refused",
+          "first phone split: 9.2 tok/s"]),
+        ("26–27 SEP", True, "30B coder on laptop + 2 phones", "6.6–7.1 tok/s",
+         ["Qwen3-Coder-30B, 18.6 GB", "ready in 70 s, was 437–517 s",
+          "layers stored and pinned per phone"]),
+        ("27 SEP", True, "Agentic coding on the mesh", "5/5 tests",
+         ["Aider + the 30B fixed a real bug", "tests pass in 603 s (~10 min)", "5.4 tok/s"]),
+        ("NEXT", False, "Mesh clusters", "more devices",
+         ["more phones and laptops", "bigger, better models"]),
+        ("NEXT", False, "Token subscription", "cheaper tokens",
+         ["spare phones supply compute", "agentic coding within reach",
+          "cost: time, first word ~1–2 min on long prompts (est.)"]),
+    ]
+    n, gap, left = len(steps), 44, 0
+    col = (W - gap * (n - 1)) / n
+    f_date, f_title, f_big, f_body = _font(44, True), _font(66, True), _font(108, True), _font(58)
+    f_key = _font(38)
+    line_y = 150
+    # the line: solid through what is done, dashed after today
+    done_end = left + 4 * (col + gap) - gap / 2
+    d.line((0, line_y, done_end, line_y), fill=INK, width=8)
+    x = done_end
+    while x < W:
+        d.line((x, line_y, min(x + 34, W), line_y), fill=INK, width=8)
+        x += 56
+    # today
+    d.line((done_end, line_y - 70, done_end, line_y + 70), fill=ORANGE, width=8)
+    t = "TODAY"
+    d.text((done_end - d.textlength(t, font=f_date) / 2, line_y - 122), t, font=f_date, fill=ORANGE)
+
+    top, bottom = line_y + 110, H - 90
+    for i, (when, done, title, big, lines) in enumerate(steps):
+        x0 = left + i * (col + gap)
+        cx = x0 + 40
+        r = 30
+        if done:
+            d.ellipse((cx - r, line_y - r, cx + r, line_y + r), fill=INK)
+        else:
+            d.ellipse((cx - r, line_y - r, cx + r, line_y + r), fill=PAPER, outline=INK, width=7)
+        d.text((cx + r + 18, line_y - 64), f"{i + 1} · {when}", font=f_date, fill=INK if done else GREY)
+        box = (x0, top, x0 + col, bottom)
+        fg = PAPER if done else INK
+        if done:
+            d.rectangle(box, fill=INK)
+        else:
+            _dashed_rect(d, box, INK, width=6)
+        pad = 34
+        y = top + pad
+        for ln in _wrap(d, title.upper(), f_title, col - 2 * pad):
+            d.text((x0 + pad, y), ln, font=f_title, fill=fg)
+            y += 78
+        y += 34
+        fb = f_big
+        while d.textlength(big, font=fb) > col - 2 * pad:
+            fb = _font(fb.size - 4, True)
+        d.text((x0 + pad, y), big, font=fb, fill=ORANGE if (done and i == 2) else fg)
+        y += fb.size + 44
+        d.line((x0 + pad, y, x0 + col - pad, y), fill=(90, 90, 90) if done else RULE, width=3)
+        y += 40
+        for ln in lines:
+            for w in _wrap(d, ln, f_body, col - 2 * pad):
+                d.text((x0 + pad, y), w, font=f_body, fill=fg)
+                y += 70
+            y += 30
+    # the key
+    ky = H - 58
+    d.rectangle((0, ky, 44, ky + 40), fill=INK)
+    d.text((62, ky - 2), "done, measured", font=f_key, fill=INK)
+    kx = 62 + d.textlength("done, measured", font=f_key) + 60
+    _dashed_rect(d, (kx, ky, kx + 44, ky + 40), INK, width=4, dash=10, gap=6)
+    d.text((kx + 62, ky - 2), "next, planned", font=f_key, fill=INK)
+    src = "sources: docs/measurements.md · Aider runs in commits ccb7003, 5255cfe"
+    d.text((W - d.textlength(src, font=f_key), ky - 2), src, font=f_key, fill=GREY)
+    im.save(path)
+
+
+# Cloud rows, read 27 Sep 2026. Price: the vendors' pricing pages. Index and speed: Artificial Analysis,
+# Intelligence Index v4.3.2, each model at max effort. Their first-token time includes the thinking.
+STANDING = [
+    # name, sub, speed, first token, price, index, private/offline, kind
+    ("Claude Fable 5.1", "Anthropic · top tier", "69 tok/s", "1st token 246 s*", "$10 / $50", 53, "no · no", "cloud"),
+    ("Claude Sonnet 5", "Anthropic · cheaper tier", "80 tok/s", "1st token 170 s*", "$2 / $10", 38, "no · no", "cloud"),
+    ("GPT-6 Astra", "OpenAI · top tier", "63 tok/s", "1st token 324 s*", "$10 / $50", 53, "no · no", "cloud"),
+    ("GPT-6 Sol", "OpenAI · cheaper tier", "86 tok/s", "1st token 138 s*", "$2 / $10", 48, "no · no", "cloud"),
+    ("Local, one device", "Qwen3-8B on our laptop · Ollama, LM Studio",
+     "2.5 tok/s", "1st token 287 s (Aider)", "$0 †", 6, "yes · yes", "local"),
+    ("MeshAI", "Qwen3-Coder-30B · laptop + 2 phones",
+     "6.6–7.1 tok/s", "1st token ~1–2 min (est.)", "$0 †", 10, "yes · yes", "ours"),
+    ("Bigger local models", "more devices in the mesh",
+     "est.", "", "$0 †", None, "yes · yes", "next"),
+]
+
+
+def draw_standing(path):
+    """Cloud against local against us, one scale for intelligence, and the device setups under it."""
+    from PIL import Image, ImageDraw
+    W, H = int(18.95 * DPI), int(8.3 * DPI)
+    im = Image.new("RGB", (W, H), PAPER)
+    d = ImageDraw.Draw(im)
+    f_head, f_name, f_sub, f_cell, f_small = _font(34), _font(50, True), _font(34), _font(48), _font(34)
+    cols = [0, 1030, 1750, 2330, 3280]          # setup, speed, price, index, private
+    heads = ["SETUP", "SPEED", "PRICE / 1M TOKENS  IN / OUT", "INTELLIGENCE · AA INDEX v4.3.2",
+             "PRIVATE · OFFLINE"]
+    for x, h in zip(cols, heads):
+        d.text((x, 0), h, font=f_head, fill=INK)
+    y = 58
+    d.line((0, y, W, y), fill=INK, width=4)
+    row_h = 138
+    bar_x, bar_w = cols[3], 640
+    for name, sub, speed, first, price, idx, priv, kind in STANDING:
+        ours = kind == "ours"
+        fg, sub_fg = (PAPER, (200, 200, 195)) if ours else (INK, GREY)
+        if ours:
+            d.rectangle((0, y + 4, W, y + row_h), fill=INK)
+        pad = 24 if ours else 0
+        ty = y + 20
+        d.text((pad, ty), name, font=f_name, fill=fg)
+        d.text((pad, ty + 60), sub, font=f_sub, fill=sub_fg)
+        d.text((cols[1], ty), speed, font=f_cell, fill=fg)
+        if first:
+            d.text((cols[1], ty + 60), first, font=f_sub, fill=sub_fg)
+        d.text((cols[2], ty), price, font=f_cell, fill=fg)
+        d.text((cols[2], ty + 60), "per token, local" if kind != "cloud" else "per 1M tokens",
+               font=f_sub, fill=sub_fg)
+        by = ty + 8
+        if idx is None:
+            _dashed_rect(d, (bar_x, by, bar_x + bar_w, by + 40), INK, width=4, dash=14, gap=10)
+            d.text((bar_x + bar_w + 24, ty), "more", font=f_cell, fill=fg)
+            d.text((bar_x, ty + 60), "est.", font=f_sub, fill=sub_fg)
+        else:
+            d.rectangle((bar_x, by, bar_x + bar_w, by + 40), outline=(90, 90, 90) if ours else RULE, width=2)
+            d.rectangle((bar_x, by, bar_x + bar_w * idx / 60, by + 40), fill=ORANGE if ours else fg)
+            d.text((bar_x + bar_w + 24, ty), str(idx), font=f_cell, fill=fg)
+        d.text((cols[4], ty), priv, font=f_cell, fill=fg)
+        y += row_h
+        if not ours:
+            d.line((0, y, W, y), fill=RULE, width=2)
+
+    # the device setups, measured
+    y += 40
+    d.text((0, y), "WHAT EACH SETUP RUNS, MEASURED", font=f_head, fill=INK)
+    y += 56
+    cards = [
+        ("phone", "ONE PHONE", ["Qwen3-0.6B  78.1 tok/s", "Qwen3-8B  11.8 tok/s,", "5.3 after 10 min (heat)"]),
+        ("laptop", "ONE LAPTOP", ["Qwen3-1.7B  8.6 tok/s, 7/15 tests", "Qwen3-8B  2.5 tok/s writing,",
+                                  "9.6 tok/s reading (Aider)"]),
+        ("mesh", "LAPTOP + 2 PHONES", ["Qwen3-Coder-30B  6.6–7.1 tok/s", "18.6 GB: no single device",
+                                       "here can hold it"]),
+        ("next", "NEXT (EST.)", ["more phones and laptops", "→ bigger, better models"]),
+    ]
+    gap = 40
+    cw = (W - gap * 3) / 4
+    ch = 400
+    f_ct, f_cb = _font(44, True), _font(42)
+    for i, (kind, title, lines) in enumerate(cards):
+        x0 = i * (cw + gap)
+        box = (x0, y, x0 + cw, y + ch)
+        dark = kind == "mesh"
+        fg = PAPER if dark else INK
+        if dark:
+            d.rectangle(box, fill=INK)
+        elif kind == "next":
+            _dashed_rect(d, box, INK, width=5)
+        else:
+            d.rectangle(box, outline=INK, width=4)
+        ix, iy, ih = x0 + 30, y + 30, 96
+        if kind == "phone":
+            _phone(d, ix, iy, ih, fg)
+        elif kind == "laptop":
+            _laptop(d, ix, iy + 14, ih - 14, fg)
+        else:
+            w = _laptop(d, ix, iy + 14, ih - 14, fg)
+            _phone(d, ix + w + 22, iy, ih, fg)
+            w2 = _phone(d, ix + w + 22 + int(ih * 0.52) + 18, iy, ih, fg)
+            if kind == "next":
+                px = ix + w + 22 + 2 * (int(ih * 0.52) + 18)
+                d.text((px, iy + 20), "+ …", font=f_ct, fill=fg)
+        d.text((x0 + 30, y + 152), title, font=f_ct, fill=ORANGE if dark else fg)
+        ly = y + 214
+        for ln in lines:
+            d.text((x0 + 30, ly), ln, font=f_cb, fill=fg)
+            ly += 54
+
+    # sources, short
+    y += ch + 28
+    src = ("* first token at max effort, includes thinking.   † electricity and hardware you already own not counted.   "
+           "Sources, 27 Sep 2026: claude.com/pricing · developers.openai.com/api/docs/pricing · "
+           "artificialanalysis.ai (Intelligence Index v4.3.2) · ours: docs/measurements.md, results/REPORT.md, "
+           "commits ccb7003, 5255cfe")
+    for ln in _wrap(d, src, f_small, W):
+        d.text((0, y), ln, font=f_small, fill=GREY)
+        y += 42
+    im.save(path)
+
+
+def build_v5():
+    from pptx.util import Pt
+    draw_milestones(SHOTS / "milestones.png")
+    draw_standing(SHOTS / "standing.png")
+    prs = Presentation(str(V4))
+    # v4 still carries the part of a template slide it dropped from the list. On save python-pptx
+    # renumbers the listed slides, and one of them lands on that orphan's name: drop the orphan.
+    listed = {sid.rId for sid in prs.slides._sldIdLst}
+    for rId, rel in list(prs.part.rels.items()):
+        if rel.reltype.endswith("/slide") and rId not in listed:
+            prs.part.drop_rel(rId)
+    slides = list(prs.slides)
+    # the base: the "what already exists" slide (running heads and paper, a picture as the body) ...
+    base = next(s for s in slides if any(sh.shape_type == 13 for sh in s.shapes)
+                and any(sh.has_text_frame and sh.text_frame.text.strip() == "MESH AI" for sh in s.shapes)
+                and sum(1 for sh in s.shapes) == 5)
+    # ... and a title in the deck's display type, taken from "what made it work"
+    title_src = next(sh for s in slides for sh in s.shapes
+                     if sh.has_text_frame and sh.text_frame.text.strip() == "WHAT MADE IT WORK")
+    for title, pic, top, width in (("MILESTONES", "milestones.png", 2.45, 18.95),
+                                   ("WHERE WE STAND", "standing.png", 2.3, 18.95)):
+        s = prs.slides.add_slide(base.slide_layout)
+        for ph in list(s.placeholders):
+            ph._element.getparent().remove(ph._element)
+        bg = base._element.cSld.bg
+        if bg is not None:
+            s._element.cSld.insert(0, copy.deepcopy(bg))
+        for sh in base.shapes:
+            if sh.shape_type != 13:
+                s.shapes._spTree.append(copy.deepcopy(sh._element))
+        el = copy.deepcopy(title_src._element)
+        s.shapes._spTree.append(el)
+        t = s.shapes[-1]
+        t.left, t.top, t.width, t.height = Inches(0.52), Inches(0.95), Inches(18.43), Inches(1.3)
+        set_text(t, title)
+        for para in t.text_frame.paragraphs:
+            para.font.size = Pt(88)
+            para.line_spacing = Pt(88)   # the source's fixed spacing was for 68 pt
+            for run in para.runs:
+                run.font.size = Pt(88)
+        s.shapes.add_picture(str(SHOTS / pic), Inches(0.52), Inches(top), width=Inches(width))
+        morph(s)
+        # before the closing slide
+        lst = prs.slides._sldIdLst
+        new = list(lst)[-1]
+        lst.remove(new)
+        lst.insert(len(lst) - 1, new)
+    prs.save(str(V5))
+    print(f"wrote {V5} ({len(prs.slides._sldIdLst)} slides)")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--v5" in sys.argv:
+        build_v5()
+    else:
+        main()
