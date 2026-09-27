@@ -316,14 +316,14 @@ def build():
     text(s, M + Inches(0.26), y + Inches(0.72), lap_w - Inches(0.5), Inches(0.3),
          "Embeddings and output head stay here", 13, FG2, SANS)
     bar(s, M + Inches(0.26), y + Inches(1.0), lap_w - Inches(0.52), Inches(0.2), RGBColor(0x2C, 0x5E, 0x41))
-    text(s, M + Inches(0.26), y + Inches(1.35), lap_w - Inches(0.5), Inches(0.3), "Layers 0–22 · 9.19 GB", 13, FG2, SANS)
-    for i in range(23):
+    text(s, M + Inches(0.26), y + Inches(1.35), lap_w - Inches(0.5), Inches(0.3), "Layers 0–19 · 8.3 GB in use", 13, FG2, SANS)
+    for i in range(20):
         bar(s, M + Inches(0.26) + Inches(0.172) * i, y + Inches(1.63), Inches(0.14), Inches(0.42), GREEN)
     text(s, M + Inches(0.26), y + Inches(2.25), lap_w - Inches(0.5), Inches(0.5),
          "Plans the split · serves one endpoint · reads the model file once", 14, FG3, SANS, line=1.3)
 
-    for j, (px, n, rng, gb) in enumerate([(M + lap_w + Inches(0.45), 20, "Layers 23–42", "7.53 GB"),
-                                          (M + lap_w + Inches(2.75), 5, "Layers 43–47", "2.04 GB")]):
+    for j, (px, n, rng, gb) in enumerate([(M + lap_w + Inches(0.45), 14, "Layers 20–33", "5.7 GB in use"),
+                                          (M + lap_w + Inches(2.75), 14, "Layers 34–47", "5.1 GB in use")]):
         card(s, px, y + Inches(0.15), ph_w, Inches(2.9))
         text(s, px + Inches(0.2), y + Inches(0.36), ph_w - Inches(0.4), Inches(0.3), "A PHONE", 11, VIOLET, MONO)
         text(s, px + Inches(0.2), y + Inches(0.72), ph_w - Inches(0.4), Inches(0.3), rng, 13, FG2, SANS)
@@ -344,7 +344,7 @@ def build():
         text(s, rx + Inches(0.28), yy + Inches(0.3), Inches(2.6), Inches(0.3), lab, 12, FG3, SANS)
 
     y3 = y + Inches(3.25)
-    for i, (t, d) in enumerate([("The host decides", "from live memory, heat, battery and link speed"),
+    for i, (t, d) in enumerate([("The host decides", "from live memory, battery and link speed"),
                                 ("The phone never sees your prompt", "it gets numbers, computes, sends numbers back"),
                                 ("The head stays home", "which is why only kilobytes cross")]):
         cw3 = (W - 2 * M - Inches(0.6)) / 3
