@@ -28,7 +28,7 @@ HEADS = {
     "PRESENTED BY: HARPER RUSSO": "PRAJWAL GUNNALA · YUVA RAJ AMBATI",
 }
 
-KEEP = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 17, 18]
+KEEP = [1, 2, 3, 4, 5, 6, 7, 8, 10, 16, 11, 12, 13, 14, 15, 17, 18]
 
 # (slide number in the template) -> {shape id: new text}
 TEXT = {
@@ -105,15 +105,15 @@ TEXT = {
         "device: it says which, in a sentence you can read."},
 
  10: {3: "TECH STACK",
-      4: "Any GGUF: we read the header and size it ourselves",
-      5: "Kotlin and Jetpack Compose on the phones",
-      6: "Rust for the laptop agent and its web panel",
-      7: "llama.cpp and ggml, with its RPC transport",
-      8: "USB tethering as the link, 2 to 3 ms",
-      9: "A CLI and a git hook that use it: review, tests, diff",
-      10: "Android NDK, arm64 with dot product and i8mm",
-      11: "A Python harness that scores answers by running them",
-      12: "No cloud, no account, no telemetry"},
+      4: "Any GGUF model",
+      5: "Kotlin, Compose",
+      6: "Rust agent",
+      7: "llama.cpp, ggml RPC",
+      8: "USB tethering",
+      9: "OpenAI-style API",
+      10: "Android NDK arm64",
+      11: "CLI and git hook",
+      12: "No cloud at all"},
 
  11: {3: "FEASIBILITY",
       6: "IT RUNS TODAY: 30B ACROSS A LAPTOP AND TWO PHONES",
@@ -147,24 +147,43 @@ TEXT = {
 
  15: {7: "THE EVIDENCE"},
 
+ # the timeline layout, reused: six systems, and what each one leaves undone
+ 16: {2: "WHAT ALREADY EXISTS"},
+
  17: {2: "THE NUMBERS",
       5: "30B RUNNING ACROSS THREE DEVICES, 18.6 GB POOLED",
       8: "PHONES HOLD 9.6 GB OF IT, THE LAPTOP HOLDS THE HEAD",
       11: "READY IN 70 SECONDS, 6.6 TOKENS PER SECOND",
       14: "4 KB CROSSES PER WORD, 18.6 GB NEVER MOVES"},
 
- 18: {},
+ 18: {5: "TEAM MAYNARDS",
+      9: "Prajwal Gunnala", 10: "github.com/prajwal-gunnala/maynards",
+      13: "Yuva Raj Ambati", 14: "every number in this deck is in that repository"},
 }
 
 # slides whose template layout is a title only: we add the body box ourselves
 # slides whose title the template centres down the page: ours sits where every other title sits
-TITLE_TOP = {5, 6, 7, 8, 15}
+TITLE_TOP = {5, 6, 7, 8, 11, 15, 17}
 
 BODY_BOX = {5: (0.52, 4.40, 18.95, 6.00), 6: (0.52, 4.40, 18.95, 6.00),
             7: (0.52, 4.40, 18.95, 2.60), 8: (0.52, 4.40, 18.95, 6.00)}
 
 # template shapes to remove: display type left over from a layout we are reusing for body copy
-DROP = {6: [9], 15: [8]}   # 15: a decorative bar that sat behind the template's photography
+DROP = {6: [9], 15: [8]}
+
+# slides where we keep the title and the running heads and nothing else, because the picture is the slide
+ONLY = {16: [22, 23, 24, 25]}   # 16 carries its own heading inside the picture
+DROP_MORE = {18: [17, 18]}      # the template's third person; this team is two
+
+# Slides whose text was white because a photograph sat behind it. The photograph is gone, so the
+# words have to come back to ink or they vanish into the paper.
+INK_TEXT = {11}
+
+# the title box is not always shape 2
+TITLE_ID = {11: 3, 15: 7}
+
+# a long title in the template's display size runs off the slide; these get their own size, in points
+TITLE_PT = {17: 88}   # 15: a decorative bar that sat behind the template's photography
 
 # pictures: (slide, image file, left, top, width) in inches. The stock photos are removed first.
 PICTURES = {
@@ -173,6 +192,7 @@ PICTURES = {
  6: [("flow.png", 0.52, 7.15, 18.95)],
  7: [("split.png", 0.52, 7.55, 18.95)],
  15: [("accuracy.png", 3.25, 4.60, 13.50)],
+ 16: [("compare.png", 0.52, 1.10, 18.95)],
 }
 
 
@@ -273,18 +293,16 @@ def main():
     for n in KEEP:
         slide = prs.slides[n - 1]
         ids = by_id(slide)
-        for sid in DROP.get(n, []):
+        for sid in DROP.get(n, []) + DROP_MORE.get(n, []):
             if sid in ids:
                 ids[sid]._element.getparent().remove(ids[sid]._element)
+        if n in ONLY:
+            for sid, sh in list(ids.items()):
+                if sid not in ONLY[n]:
+                    parent = sh._element.getparent()
+                    if parent is not None:
+                        parent.remove(sh._element)
         body = TEXT.get(n, {}).get("body")
-        title_id = 7 if n == 15 else 2
-        if n in TITLE_TOP and title_id in ids:
-            # these template slides centre their title down the page; ours sits where every other title sits
-            t = ids[title_id]
-            t.left, t.top, t.width, t.height = Inches(0.52), Inches(1.16), Inches(18.43), Inches(2.92)
-            t.text_frame.word_wrap = True
-            from pptx.enum.text import MSO_ANCHOR
-            t.text_frame.vertical_anchor = MSO_ANCHOR.TOP
         if body and n in BODY_BOX:
             add_body(slide, template_body, body.replace("{LADDER}", ladder), BODY_BOX[n])
         for sid, text in TEXT.get(n, {}).items():
@@ -295,17 +313,50 @@ def main():
         for sh in list(slide.shapes):
             if sh.has_text_frame and sh.text_frame.text.strip() in HEADS:
                 set_text(sh, HEADS[sh.text_frame.text.strip()])
-        # the stock photography goes, and ours takes its place. Some of it is nested inside groups,
-        # so this walks the tree and drops a group that has nothing left in it.
+        # after the words are in, because replacing the text rebuilds the runs and would undo this
+        title_id = TITLE_ID.get(n, 2)
+        if n in TITLE_TOP and title_id in ids:
+            from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+            from pptx.util import Pt
+            t = ids[title_id]
+            t.left, t.top, t.width, t.height = Inches(0.52), Inches(1.16), Inches(18.43), Inches(2.92)
+            t.text_frame.word_wrap = True
+            t.text_frame.vertical_anchor = MSO_ANCHOR.TOP
+            for para in t.text_frame.paragraphs:
+                para.alignment = PP_ALIGN.LEFT      # some template titles are centred in their own box
+                if n in TITLE_PT:
+                    # both the paragraph default and every run: renderers disagree about which one wins
+                    para.font.size = Pt(TITLE_PT[n])
+                    for run in para.runs:
+                        run.font.size = Pt(TITLE_PT[n])
+        # The stock photography goes and ours takes its place. Some of it is nested inside groups, so
+        # this walks the tree, but it never touches anything holding text: on some layouts the group is
+        # what positions the words, and removing it piles them on top of each other.
+        def holds_text(sh):
+            if sh.shape_type == 6:
+                return any(holds_text(x) for x in sh.shapes)
+            return sh.has_text_frame and sh.text_frame.text.strip() != ""
+
         def strip(shapes):
             for sh in list(shapes):
+                if holds_text(sh):
+                    continue
                 if is_photo(sh):
                     sh._element.getparent().remove(sh._element)
                 elif sh.shape_type == 6:
                     strip(sh.shapes)
-                    if not len(list(sh.shapes)):
-                        sh._element.getparent().remove(sh._element)
         strip(slide.shapes)
+        if n in INK_TEXT:
+            from pptx.dml.color import RGBColor
+            def darken(shapes):
+                for sh in shapes:
+                    if sh.shape_type == 6:
+                        darken(sh.shapes)
+                    elif sh.has_text_frame:
+                        for para in sh.text_frame.paragraphs:
+                            for run in para.runs:
+                                run.font.color.rgb = RGBColor(0x11, 0x11, 0x11)
+            darken(slide.shapes)
         for name, l, t, w in PICTURES.get(n, []):
             f = SHOTS / name
             if f.exists():
