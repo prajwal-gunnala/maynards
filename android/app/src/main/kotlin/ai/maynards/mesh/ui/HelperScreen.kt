@@ -96,7 +96,7 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         NBox(fill = HelperPurple) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Title("Helper", 22)
+                    Title("Link", 16)          // the page is already titled Helper; this card is the link
                     Spacer(Modifier.width(10.dp))
                     Sticker(sticker, color)
                 }
