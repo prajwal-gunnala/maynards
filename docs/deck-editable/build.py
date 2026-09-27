@@ -588,33 +588,33 @@ def build():
 
     # 11b · how we built it: Office Kit
     s = slide(prs)
-    y = head(s, "11 · How we built it", "One laptop drove both phones.",
-             "Through iQOO Office Kit, the bridge between the laptop and the phones while we built and tested.")
+    y = head(s, "11 · How we tested it", "We tested the phones from the laptop.",
+             "Through iQOO Office Kit: every phone screen seen and driven from the laptop while we built.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     for i, (tag, big, items) in enumerate([
-            ("REMOTE CONTROL", "Phones on the laptop", ["Mirror each phone", "Mouse and keys on the phone", "No reaching over mid-test"]),
-            ("FILE TRANSFER", "The 18.6 GB model", ["Sent through Office Kit", "Same checksum on the phone", "Once per phone, then kept"]),
-            ("TESTING", "Every screen, remotely", ["Scan to join, Helper screen", "Light and dark, Speed card", "Heat during a 30B run"])]):
+            ("DRIVING IT", "Mouse and keys", ["Pairing and joining", "Prompts typed in", "No reaching over"]),
+            ("SEEING IT", "Both screens, live", ["Each phone mirrored", "Screenshots to the laptop", "Heat during a 30B run"]),
+            ("FILES", "The model, sent over", ["The 18.6 GB GGUF", "Same checksum after", "Once per phone"])]):
         x = M + (cw + Inches(0.3)) * i
-        card(s, x, y, cw, Inches(2.2), PANEL_HI if i == 0 else PANEL, GREEN if i == 0 else LINE)
+        card(s, x, y, cw, Inches(2.2), PANEL_HI if i < 2 else PANEL, GREEN if i < 2 else LINE)
         text(s, x + Inches(0.28), y + Inches(0.22), cw - Inches(0.56), Inches(0.3), tag, 11, GREEN, MONO)
         text(s, x + Inches(0.28), y + Inches(0.52), cw - Inches(0.56), Inches(0.4), big, 18, FG, SANS, bold=True)
-        bullets(s, x + Inches(0.28), y + Inches(1.05), cw - Inches(0.56), items, size=14, gap=0.36)
+        bullets(s, x + Inches(0.28), y + Inches(1.0), cw - Inches(0.56), items, size=14, gap=0.34)
     ty = y + Inches(2.4)
     card(s, M, ty, W - 2 * M, Inches(1.55))
-    cols = [M + Inches(0.3), M + Inches(3.0), M + Inches(6.0), M + Inches(9.0)]
-    colw = Inches(2.8)
-    for x, h in zip(cols, ["MOVING 18.6 GB", "OFFICE KIT", "ADB PUSH", "IN-APP DOWNLOAD"]):
+    cols = [M + Inches(0.3), M + Inches(3.3), M + Inches(7.6)]
+    colw = Inches(4.2)
+    for x, h in zip(cols, ["TESTING A PHONE", "OFFICE KIT", "ADB"]):
         text(s, x, ty + Inches(0.2), colw, Inches(0.3), h, 11, FG3 if x == cols[0] else GREEN, MONO)
-    rows = [("Time", [("[fill in]", AMBER), ("[fill in]", AMBER), ("~13 min · 24 MB/s", FG)]),
-            ("Needs", [("Office Kit on both", FG2), ("USB debugging", FG2), ("the app, same network", FG2)]),
-            ("Best for", [("files, testing by hand", FG2), ("scripts and logs", FG2), ("users, no tools", FG2)])]
-    for r, (lab, cells) in enumerate(rows):
+    rows = [("See the screen", "a live mirror, always on", "one screenshot per command"),
+            ("Drive it", "mouse and keyboard on the mirror", "one command per tap, by x and y"),
+            ("Best for", "testing by hand, the demo", "scripted runs: installs, logs, checks")]
+    for r, (lab, a, b) in enumerate(rows):
         yy = ty + Inches(0.52 + 0.32 * r)
-        text(s, cols[0], yy, colw, Inches(0.3), lab, 13, FG, SANS, bold=True)
-        for x, (v, col) in zip(cols[1:], cells):
-            text(s, x, yy, colw, Inches(0.3), v, 13, col, MONO if r == 0 else SANS)
-    foot(s, "MeshAI", "in-app measured 26 Sep · the others to be timed")
+        text(s, cols[0], yy, Inches(2.9), Inches(0.3), lab, 13, FG, SANS, bold=True)
+        text(s, cols[1], yy, colw, Inches(0.3), a, 13, FG, SANS)
+        text(s, cols[2], yy, colw, Inches(0.3), b, 13, FG2, SANS)
+    foot(s, "MeshAI", "we used both: Office Kit by hand, adb in scripts")
 
     # 15 · close
     s = slide(prs)
