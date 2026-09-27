@@ -43,6 +43,10 @@ import androidx.compose.ui.unit.sp
 import com.journeyapps.barcodescanner.ScanContract
 import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
 
 @Composable
 fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
@@ -85,6 +89,30 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
+        if (link.state == Link.State.IDLE || link.state == Link.State.FAILED) {
+            NBox(fill = HostGreen) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(8.dp).background(Term, RoundedCornerShape(4.dp)))
+                        Spacer(Modifier.width(9.dp))
+                        Label("Next")
+                    }
+                    Title("Scan to join", 22)
+                    Text(
+                        "Open MeshAI on the host phone, show its code, and point this camera at it. " +
+                            "After that this phone rejoins on its own.",
+                        fontSize = 14.sp, color = Muted, lineHeight = 19.sp,
+                    )
+                    NButton("Scan the code", fill = Term) {
+                        scan.launch(
+                            ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the Host's QR")
+                                .setBeepEnabled(false).setOrientationLocked(false),
+                        )
+                    }
+                    if (scanError.isNotBlank()) Mono(scanError, 12, Bad)
+                }
+            }
+        }
         PageHeader(
             "Helper",
             when (link.state) {
@@ -167,14 +195,8 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         SpecsCard(rememberSpecs())
         SpeedCard()
 
-        when (link.state) {
-            Link.State.IDLE, Link.State.FAILED -> NButton("Scan to join") {
-                scan.launch(
-                    ScanOptions().setDesiredBarcodeFormats(ScanOptions.QR_CODE).setPrompt("Scan the Host's QR")
-                        .setBeepEnabled(false).setOrientationLocked(false),
-                )
-            }
-            else -> NButton("Leave", fill = Paper) { client.leave(); MeshService.stop(ctx) }
+        if (link.state != Link.State.IDLE && link.state != Link.State.FAILED) {
+            NButton("Leave the mesh", fill = Paper) { client.leave(); MeshService.stop(ctx) }
         }
         if (eng.log.isNotEmpty()) {
             NBox(fill = Cream, shadow = 3.dp, pad = 10.dp) {
