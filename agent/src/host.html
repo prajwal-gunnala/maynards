@@ -635,13 +635,19 @@ const heatColor = (h, c) => (c > 90 || h >= .8) ? 'var(--bad)' : (c > 75 || h >=
 function card(o) {
   const s = o.specs || {}, total = num(s.totalBytes, 1) || 1, cap = S.caps[o.id];
   const st = o.store && o.store.total ? o.store : null;
-  return `<div class="card">
+  // a phone reports every two seconds; past ten it has gone quiet and these numbers are history
+  const quiet = !o.laptop && num(o.quiet_s, 0) >= 10;
+  return `<div class="card" ${quiet ? 'style="border-color:#3a2222"' : ''}>
     <div class="ch">${ic(o.laptop ? 'laptop' : 'phone', 'lg')}
       <div style="min-width:0"><h3>${esc(o.name)}</h3>
         <div class="d mono" style="overflow:hidden; text-overflow:ellipsis">${esc(s.chip || '')}${s.cores ? ' · ' + s.cores + ' cores' : ''}</div></div>
-      <span class="sp"></span><span class="tag ${o.laptop ? 'ok' : 'helper'}">${o.laptop ? 'host' : 'helper'}</span></div>
-    <div class="cb">
-      ${meter('Memory free', `${gb(num(s.freeBytes) / 1e9)} / ${gb(total / 1e9)} GB`, num(s.freeBytes) / total, 'var(--info)')}
+      <span class="sp"></span><span class="tag ${quiet ? 'bad' : o.laptop ? 'ok' : 'helper'}">${
+        quiet ? `quiet ${num(o.quiet_s)} s` : o.laptop ? 'host' : 'helper'}</span></div>
+    <div class="cb" ${quiet ? 'style="opacity:.55"' : ''}>
+      ${quiet ? `<div class="row" style="color:var(--bad); margin-bottom:12px">${ic('warn')}
+        <span style="font-size:12.5px">Nothing heard for ${num(o.quiet_s)} s. What follows is the last it said, not what is true now.</span></div>` : ''}
+      ${meter(layersOf(o.id) ? 'Memory free, while holding its layers' : 'Memory free',
+               `${gb(num(s.freeBytes) / 1e9)} / ${gb(total / 1e9)} GB`, num(s.freeBytes) / total, 'var(--info)')}
       ${meter('Offered for models' + (cap ? ` (capped ${gb(cap)} GB)` : ''), gb(o.usable) + ' GB', num(o.usable) * 1e9 / total, 'var(--ok)')}
       ${st ? meter('Layers kept on the device', `${st.done}/${st.total} · ${gb(num(st.bytes) / 1e9)} GB`, num(st.done) / num(st.total, 1), 'var(--helper)') : ''}
       <div class="kv" style="margin-top:4px">
