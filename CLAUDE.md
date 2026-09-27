@@ -9,3 +9,6 @@ and show proof (a run, a test, a screenshot) before each commit.
 - Never split a model that fits on one device.
 - UI: short labels, no long descriptions.
 - Out of scope: the Oracle mirror, image generation, NPU/GPU backends.
+- Two agents work on this repo. Every commit has a subject line plus a body another agent can act on without
+  asking: What changed (files, functions, messages), Why, what stays Unchanged, and how it was Checked (the
+  measured numbers or test names). After a pull, read the new commit bodies before changing the same files.
