@@ -90,7 +90,7 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         NBox(fill = HelperPurple) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Title("Helper", 34)
+                    Title("Helper", 22)
                     Spacer(Modifier.width(10.dp))
                     Sticker(sticker, color)
                 }
