@@ -55,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.outlined.Memory
 
 private data class Tab(val label: String, val icon: ImageVector)
 
@@ -148,24 +149,22 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Spacer(Modifier.height(16.dp))
-        Header()
         val pool = me.usableBytes + peers.values.sumOf { it.specs.usableBytes }
-        NBox(fill = HostGreen) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Title("The brain", 30)
-                    Spacer(Modifier.width(10.dp))
-                    Sticker(if (peers.isEmpty()) "1 device" else "${peers.size + 1} devices", Paper)
-                }
-                Mono("${gb(pool)} GB pooled for models", 13)
-            }
+        PageHeader(
+            "Mesh",
+            if (peers.isEmpty()) "This phone is the host. Add a device and their memory is pooled, so a model too big for either can run across both."
+            else "${peers.size + 1} devices, ${gb(pool)} GB pooled. The host plans which device holds which layers.",
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            StatTile(Icons.Outlined.Hub, "Devices", "${peers.size + 1}", if (peers.isEmpty()) "alone" else "joined", Modifier.weight(1f))
+            StatTile(Icons.Outlined.Memory, "Pooled", gb(pool), "GB", Modifier.weight(1f))
         }
         NBox(pad = 8.dp) {
             MeshWeb(
                 listOf(WebNode("This phone", HostGreen, isHost = true, note = layersOf(run.plan, me.id))) +
                     peers.values.map { WebNode(it.specs.name, HelperPurple, note = layersOf(run.plan, it.id)) },
                 Modifier.fillMaxWidth().aspectRatio(1.4f),
+                busy = run.status == ai.maynards.mesh.brain.RunState.Status.READY,
             )
         }
 
@@ -180,12 +179,17 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
                 }
             }
         }
-        NButton(if (showQr) "Hide QR" else "Add device", fill = if (showQr) Paper else Yellow) { showQr = !showQr }
+        NButton(if (showQr) "Hide the code" else "Add a device", fill = if (showQr) Paper else Term) { showQr = !showQr }
 
-        Label("Devices")
+        Section("Devices")
         DeviceRow(me.name, "this phone · host", me.usableBytes, me.heat, me.battery, me.charging, -1.0, HostGreen, false)
         peers.values.sortedBy { it.specs.name }.forEach { p -> PeerRow(p) }
-        if (peers.isEmpty()) Small("No helpers yet. Scan the QR from another phone.")
+        if (peers.isEmpty()) NBox {
+            EmptyState(
+                "No other device yet",
+                "On the other phone open MeshAI, choose Helper, and scan the code above. A laptop joins from its terminal with mesh join.",
+            )
+        }
 
         NButton("Change role", fill = Paper, onClick = onChangeRole)
     }
