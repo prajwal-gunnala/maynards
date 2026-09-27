@@ -360,6 +360,67 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
            "need_gb": need / GB, "slices": slices, "skipped": skipped})
 }
 
+// ---------------------------------------------------------------- pinned split: the same layers on the same phones
+
+/// The split the owner pinned for one model: ~/.config/meshai/pinned.json
+/// {"model": file, "slices": [{"id", "name", "from", "to"}, ...]}. While it exists the planner is not asked for that
+/// model: every run puts the same layers on the same devices, which already hold them on their own storage.
+fn pinned() -> Option<Value> {
+    fs::read_to_string(config().join("pinned.json")).ok().and_then(|s| serde_json::from_str(&s).ok())
+}
+
+/// The plan for a model: the pinned split when there is one for it, otherwise the planner's.
+fn plan_for(m: &Model, devs: &[Dev], ctx: u64) -> Value {
+    pinned().filter(|p| p["model"] == m.file.as_str()).and_then(|p| pinned_plan(m, devs, ctx, &p)).unwrap_or_else(|| plan(m, devs, ctx))
+}
+
+fn pinned_plan(m: &Model, devs: &[Dev], ctx: u64, pin: &Value) -> Option<Value> {
+    let pins = pin["slices"].as_array()?;
+    // a pin made for a different file with the same name would put layers that do not exist on a phone
+    if pins.last().and_then(|x| x["to"].as_u64()) != Some(m.layers.len() as u64) { return None; }
+    let kv_layer = (m.kv_per_token * ctx * 17 / 32) as f64 / m.layers.len().max(1) as f64;
+    let extra = m.proj.as_ref().map(|p| p.1 as f64).unwrap_or(0.0);
+    let (mut slices, mut missing, mut short) = (Vec::new(), Vec::new(), Vec::new());
+    let mut need = 0.0;
+    for x in pins {
+        let id = x["id"].as_str().unwrap_or("");
+        let (from, to) = (x["from"].as_u64().unwrap_or(0) as usize, x["to"].as_u64().unwrap_or(0) as usize);
+        let host = id == "laptop";
+        let bytes: f64 = (from..to.min(m.layers.len())).map(|i| m.layers[i] as f64 + kv_layer).sum::<f64>()
+            + if host { m.other as f64 + extra } else { 0.0 };
+        need += bytes + if host { HOST_RESERVE } else { HELPER_RESERVE };
+        let name = match devs.iter().find(|d| d.id == id) {
+            Some(d) => {
+                if d.usable < bytes + if host { HOST_RESERVE } else { HELPER_RESERVE } {
+                    short.push(format!("{} has {:.1} GB, needs {:.1}", d.name, d.usable / GB, bytes / GB));
+                }
+                d.name.clone()
+            }
+            None => { missing.push(x["name"].as_str().unwrap_or(id).to_string()); x["name"].as_str().unwrap_or(id).to_string() }
+        };
+        slices.push(json!({"id": id, "name": name, "from": from, "to": to, "gb": bytes / GB, "host": host}));
+    }
+    let (verdict, reason) = if !missing.is_empty() { ("not_possible", format!("Pinned: waiting for {}", missing.join(", "))) }
+        else if !short.is_empty() { ("tight", format!("Pinned: {}", short.join("; "))) }
+        else { ("doable", "Pinned split".to_string()) };
+    Some(json!({"verdict": verdict, "reason": reason, "need_gb": need / GB, "slices": slices, "skipped": {}, "pinned": true}))
+}
+
+/// When the last pinned device joins, start the pinned model by itself. Only on that change: after the owner presses
+/// Stop it stays stopped until a pinned device leaves and comes back.
+fn autostart_pinned(hub: &Arc<Hub>, was_complete: &mut bool) {
+    let Some(pin) = pinned() else { *was_complete = false; return; };
+    let ids: Vec<String> = pin["slices"].as_array().map(|a| a.iter().filter_map(|x| x["id"].as_str().map(String::from)).collect()).unwrap_or_default();
+    let complete = { let peers = hub.peers.lock().unwrap(); ids.iter().all(|id| id == "laptop" || peers.contains_key(id)) };
+    let idle = matches!(hub.run.lock().unwrap().status.as_str(), "idle" | "failed" | "");
+    if complete && !*was_complete && idle {
+        let file = pin["model"].as_str().unwrap_or("").to_string();
+        hub.say(format!("all pinned devices are here: starting {file} on its pinned layers"));
+        start(hub.clone(), file);
+    }
+    *was_complete = complete;
+}
+
 fn devices(hub: &Hub) -> Vec<Dev> {
     let me = laptop_specs();
     let caps = hub.caps.lock().unwrap().clone();
@@ -583,7 +644,7 @@ fn start(hub: Arc<Hub>, file: String) {
     stop(&hub, "");
     let gen = *hub.run_gen.lock().unwrap();
     let Some(m) = scan_models(&hub).into_iter().find(|m| m.file == file) else { set_run(&hub, "failed", "model not found"); return; };
-    let p = plan(&m, &devices(&hub), ctx_tokens());
+    let p = plan_for(&m, &devices(&hub), ctx_tokens());
     if p["verdict"] == "not_possible" { set_run(&hub, "failed", p["reason"].as_str().unwrap_or("does not fit")); return; }
     { let mut r = hub.run.lock().unwrap();
       *r = Run { status: "starting".into(), step: "Planning".into(), model: m.name.clone(), plan: p.clone(), started: Some(Instant::now()) }; }
@@ -981,6 +1042,7 @@ pub fn host(port: u16) -> Result<(), String> {
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
     { let h = hub.clone(); thread::spawn(move || loop { tell_phones(&h); thread::sleep(Duration::from_secs(2)); }); }
+    { let h = hub.clone(); thread::spawn(move || { let mut complete = false; loop { autostart_pinned(&h, &mut complete); thread::sleep(Duration::from_secs(3)); } }); }
     { let h = hub.clone(); thread::spawn(move || { let mut said = std::collections::HashSet::new(); loop { keep_wifi_default(&h, &mut said); thread::sleep(Duration::from_secs(5)); } }); }
     // all addresses: the page and API for this laptop; other machines on the link may use /v1 with the key
     let l = TcpListener::bind(("0.0.0.0", port)).map_err(|e| format!("port {port}: {e}"))?;
@@ -1003,7 +1065,7 @@ fn state(hub: &Hub) -> Value {
     }).collect();
     let devs = devices(hub);
     let models: Vec<Value> = scan_models(hub).iter().map(|m| {
-        let p = plan(m, &devs, ctx_tokens());
+        let p = plan_for(m, &devs, ctx_tokens());
         json!({"file": m.file, "name": m.name, "gb": m.bytes as f64 / GB, "layers": m.layers.len(), "plan": p})
     }).collect();
     let run = hub.run.lock().unwrap().clone();
@@ -1025,7 +1087,7 @@ fn state(hub: &Hub) -> Value {
     let qr = qrcode::QrCode::new(invite.to_string().as_bytes()).map(|c| c.render::<qrcode::render::svg::Color>()
         .min_dimensions(240, 240).quiet_zone(true).build()).unwrap_or_default();
     json!({
-        "mesh": hub.mesh, "invite": invite, "qr": qr, "ctx": ctx_tokens(),
+        "mesh": hub.mesh, "invite": invite, "qr": qr, "ctx": ctx_tokens(), "pinned": pinned(),
         "laptop": {"specs": me, "usable_gb": usable(&me) / GB},
         "peers": peers, "models": models,
         "pool_gb": devs.iter().map(|d| d.usable).sum::<f64>() / GB,
@@ -1064,6 +1126,21 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         "/api/state" => ok(&mut s, state(&hub)),
         "/api/run" => { start(hub.clone(), req["model"].as_str().unwrap_or("").into()); ok(&mut s, json!({"ok": true})) }
         "/api/stop" => { stop(&hub, "stopped"); ok(&mut s, json!({"ok": true})) }
+        // pin: the split running now (or, if that model is not running, the plan it would get now), kept for good
+        "/api/pin" => {
+            let file = req["model"].as_str().unwrap_or("").to_string();
+            let Some(m) = scan_models(&hub).into_iter().find(|m| m.file == file) else { return ok(&mut s, json!({"ok": false, "error": "model not found"})); };
+            let run = hub.run.lock().unwrap().clone();
+            let p = if run.status == "ready" && run.model == m.name { run.plan } else { plan(&m, &devices(&hub), ctx_tokens()) };
+            let slices: Vec<Value> = p["slices"].as_array().cloned().unwrap_or_default().iter()
+                .map(|x| json!({"id": x["id"], "name": x["name"], "from": x["from"], "to": x["to"]})).collect();
+            if slices.is_empty() { return ok(&mut s, json!({"ok": false, "error": p["reason"]})); }
+            let pin = json!({"model": m.file, "slices": slices});
+            let _ = fs::write(config().join("pinned.json"), pin.to_string());
+            hub.say(format!("pinned {}: {}", m.name, slices.iter().map(|x| format!("{} {}-{}", x["name"].as_str().unwrap_or(""), x["from"], x["to"].as_u64().unwrap_or(1) - 1)).collect::<Vec<_>>().join(", ")));
+            ok(&mut s, json!({"ok": true, "pinned": pin}))
+        }
+        "/api/unpin" => { let _ = fs::remove_file(config().join("pinned.json")); hub.say("unpinned: the planner chooses the split again".into()); ok(&mut s, json!({"ok": true})) }
         // Measure what the setup that is running right now is actually worth: the same coding
         // problems every time, scored by running each answer against its tests.
         "/api/bench" => { bench(hub.clone(), req["label"].as_str().unwrap_or("").to_string()); ok(&mut s, json!({"ok": true})) }

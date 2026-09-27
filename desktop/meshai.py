@@ -172,6 +172,9 @@ class MeshWindow(Gtk.Window):
         row.pack_start(self.run_btn, True, True, 0)
         row.pack_start(stop, True, True, 0)
         mod.pack_start(row, False, False, 0)
+        self.pin_btn = Gtk.Button(label="Pin this split")
+        self.pin_btn.connect("clicked", self.on_pin)
+        mod.pack_start(self.pin_btn, False, False, 0)
         self.run_status = label("", ["mono"], wrap=True)
         mod.pack_start(self.run_status, False, False, 0)
         self.progress = Gtk.ProgressBar()
@@ -256,6 +259,17 @@ class MeshWindow(Gtk.Window):
         i = self.model_pick.get_active()
         if 0 <= i < len(self.models_seen):
             self.post("/api/run", {"model": self.models_seen[i]["file"]})
+
+    def on_pin(self, *_):
+        """Pinned: the same layers on the same phones every run, started as soon as they have all joined."""
+        i = self.model_pick.get_active()
+        if not (0 <= i < len(self.models_seen)):
+            return
+        file = self.models_seen[i]["file"]
+        if (self.state.get("pinned") or {}).get("model") == file:
+            self.post("/api/unpin")
+        else:
+            self.post("/api/pin", {"model": file})
 
     def on_aider(self, *_):
         folder = self.project()
@@ -389,8 +403,13 @@ class MeshWindow(Gtk.Window):
                          f"layers {x['from']}–{x['to'] - 1} · {x['gb']:.1f} GB")
         for name, why in (p.get("skipped") or {}).items():
             lines.append(f"skipped {name}: {why}")
+        if p.get("pinned"):
+            lines.insert(0, "📌 pinned: same layers every run, starts when all are here")
         self.plan_text.set_text("\n".join(lines))
         self.run_btn.set_sensitive(v != "not_possible")
+        is_pinned = (self.state.get("pinned") or {}).get("model") == self.models_seen[i]["file"]
+        self.pin_btn.set_label("Unpin" if is_pinned else "Pin this split")
+        self.pin_btn.set_sensitive(is_pinned or bool(p.get("slices")))
 
     def render_run(self, s, run):
         status = run.get("status", "idle")
