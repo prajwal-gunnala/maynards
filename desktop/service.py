@@ -66,15 +66,22 @@ class Task:
     # -------------------------------------------------- the run
     def run(self):
         m = self.meta
-        self.emit("start", prompt=m["prompt"], project=m["project"], test_cmd=m["test_cmd"])
+        self.emit("start", prompt=m["prompt"], project=m["project"], test_cmd=m["test_cmd"], perms=m["perms"])
         mesh = self.svc.mesh() or {}
         run = mesh.get("run") or {}
         m["model"] = run.get("model") or ""
         m["devices"] = len(mesh.get("peers") or []) + 1
         if run.get("status") != "ready":
             return self.finish("failed", "No model is running on the mesh: press Run first")
-        argv = [AIDER, m["test_cmd"], "--message", m["prompt"], "--yes-always", "--no-suggest-shell-commands",
+        perms = m["perms"]
+        argv = [AIDER, m["test_cmd"] if perms["tests"] else "-", "--message", m["prompt"], "--yes-always",
                 "--no-pretty", "--no-fancy-input", "--no-auto-lint"]
+        if not perms["edit"]:
+            argv.append("--dry-run")                                # shows the change, writes nothing
+        if not perms["commit"]:
+            argv += ["--no-auto-commits", "--no-dirty-commits"]     # changes stay in the working tree
+        if not perms["shell"]:
+            argv.append("--no-suggest-shell-commands")               # with --yes-always a suggestion would run
         env = dict(os.environ, TERM="dumb", NO_COLOR="1", PYTHONUNBUFFERED="1")
         try:
             self.proc = subprocess.Popen(argv, cwd=m["project"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -85,7 +92,8 @@ class Task:
         code = self.proc.wait()
         if m.get("status") == "stopped":
             return
-        self.run_tests()
+        if perms["tests"]:
+            self.run_tests()
         self.finish("done" if code == 0 else "failed", "" if code == 0 else f"Aider exited with {code}")
 
     def read_output(self):
@@ -198,7 +206,7 @@ class Service:
         return ps
 
     # -------------------------------------------------- tasks
-    def start(self, project, prompt, test_cmd):
+    def start(self, project, prompt, test_cmd, perms=None):
         if not prompt.strip():
             raise ValueError("empty task")
         if not os.path.isdir(os.path.join(project, ".git")):
@@ -208,7 +216,8 @@ class Service:
                 raise ValueError("a task is already running: the mesh answers one at a time")
             tid = time.strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2)
             meta = {"id": tid, "project": project, "prompt": prompt.strip(), "test_cmd": test_cmd or guess_tests(project),
-                    "status": "running", "started": now(), "title": prompt.strip().splitlines()[0][:80]}
+                    "status": "running", "started": now(), "title": prompt.strip().splitlines()[0][:80],
+                    "perms": {k: bool((perms or {}).get(k, v)) for k, v in DEFAULT_PERMS.items()}}
             t = Task(self, meta)
             t.save()
             self.tasks[tid] = t
@@ -222,6 +231,8 @@ class Service:
             t.finish("failed", f"{e.__class__.__name__}: {e}")
 
     def undo(self, t, commit):
+        if not t.meta.get("perms", {}).get("commit", True):
+            raise ValueError("this task did not commit")
         if commit not in t.meta.get("commits", []):
             raise ValueError("not a commit of this task")
         code, out, err = git(t.meta["project"], "revert", "--no-edit", commit)
@@ -237,6 +248,11 @@ class Service:
                 return json.loads(r.read())
         except Exception:
             return None
+
+
+# What the agent may do. Shell stays off unless the owner turns it on: with --yes-always, Aider would run any
+# command it suggests without asking.
+DEFAULT_PERMS = {"edit": True, "commit": True, "tests": True, "shell": False}
 
 
 def guess_tests(path):
@@ -320,7 +336,7 @@ def make_handler(svc):
             if path == "/svc/projects":
                 return svc.add_project(b["path"])
             if path == "/svc/tasks":
-                return {"id": svc.start(b["project"], b.get("prompt", ""), b.get("test_cmd", ""))}
+                return {"id": svc.start(b["project"], b.get("prompt", ""), b.get("test_cmd", ""), b.get("perms"))}
             if path.startswith("/svc/tasks/") and path.endswith("/stop"):
                 svc.tasks[path.split("/")[3]].stop()
                 return {"ok": True}
