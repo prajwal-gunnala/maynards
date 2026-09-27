@@ -327,7 +327,7 @@ def make_handler(svc):
             if path.startswith("/svc/tasks/") and path.endswith("/undo"):
                 svc.undo(svc.tasks[path.split("/")[3]], b["commit"])
                 return {"ok": True}
-            if path in ("/svc/run", "/svc/stop"):        # the mesh's own Run / Stop, passed through
+            if path in ("/svc/run", "/svc/stop", "/svc/pin", "/svc/unpin", "/svc/newqr"):   # the mesh's own, passed through
                 req = urllib.request.Request(HOST + path.replace("/svc", "/api"), data=json.dumps(b).encode(), method="POST")
                 return json.loads(urllib.request.urlopen(req, timeout=10).read() or b"{}")
             raise KeyError(path)
