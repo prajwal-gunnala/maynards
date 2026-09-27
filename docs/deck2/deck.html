@@ -1,0 +1,650 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  /* A deck drawn for a room, not a document. 1920x1080 per slide, printed one page each. */
+  @page { size: 1920px 1080px; margin: 0; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+--bg:#0B0C0B; --panel:#12140F; --line:#262A23; --line2:#1A1E18;
+    --fg:#F0EFE9; --fg2:#A3A79C; --fg3:#6E736A;
+    --accent:#5FD68A; --accent-dim:#1B3A28; --amber:#E8B84B; --violet:#A78BFA;
+    --sans:"Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  }
+  html, body { background:var(--bg); }
+  .slide {
+    position:relative; width:1920px; height:1080px; overflow:hidden;
+    background:var(--bg); color:var(--fg); font-family:var(--sans);
+    padding:80px 104px 60px; page-break-after:always; display:flex; flex-direction:column;
+  }
+  .slide:last-child { page-break-after:auto; }
+  .web { position:absolute; inset:0; opacity:.5; pointer-events:none; z-index:0; }
+  .slide > *:not(.web) { position:relative; z-index:1; }
+  .eyebrow { font:500 20px var(--mono); letter-spacing:.16em; text-transform:uppercase; color:var(--fg3); }
+  h1 { font-size:108px; line-height:1.02; letter-spacing:-3px; font-weight:600; }
+  h2 { font-size:68px; line-height:1.05; letter-spacing:-2px; font-weight:600; margin-bottom:10px; }
+  .sub { font-size:28px; color:var(--fg2); margin-top:16px; max-width:1500px; line-height:1.4; }
+  .rule { height:1px; background:var(--line); margin:34px 0; }
+  ul { list-style:none; }
+  li { font-size:29px; line-height:1.32; color:var(--fg); padding-left:36px; position:relative; margin-bottom:18px; }
+  li::before { content:""; position:absolute; left:0; top:15px; width:16px; height:2px; background:var(--accent); }
+  li small { display:block; font-size:23px; color:var(--fg3); margin-top:5px; }
+  .cols { display:flex; gap:38px; flex:1; min-height:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:30px 32px; flex:1; min-width:0; overflow:hidden; }
+  .card.hi { background:var(--accent-dim); border-color:#2C5E41; }
+  .card.solid { background:var(--fg); color:var(--bg); }
+  .card.solid li { color:var(--bg); } .card.solid li::before { background:var(--bg); }
+  .card.solid .k { color:#3A3E36; }
+  .k { font:500 19px var(--mono); letter-spacing:.14em; text-transform:uppercase; color:var(--fg3); margin-bottom:20px; }
+  .big { font:600 82px/1 var(--mono); letter-spacing:-3px; }
+  .big small { font-size:26px; color:var(--fg3); letter-spacing:0; font-weight:400; }
+  .mono { font-family:var(--mono); }
+  .foot { margin-top:auto; padding-top:20px; display:flex; justify-content:space-between;
+          font:400 20px var(--mono); color:var(--fg3); border-top:1px solid var(--line2); }
+  .tag { display:inline-block; border:1px solid var(--line); border-radius:999px; padding:8px 20px;
+         font:400 22px var(--mono); color:var(--fg2); margin:0 12px 14px 0; }
+  .tag.on { border-color:var(--accent); color:var(--accent); }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font:500 19px var(--mono); letter-spacing:.13em; text-transform:uppercase; color:var(--fg3);
+       padding:0 0 16px; border-bottom:1px solid var(--line); }
+  td { padding:20px 24px 20px 0; border-bottom:1px solid var(--line2); font-size:25px; color:var(--fg2); vertical-align:top; }
+  td b { color:var(--fg); font-weight:600; display:block; font-size:27px; }
+  td small { color:var(--fg3); font-size:20px; font-family:var(--mono); }
+  tr.us td { background:rgba(95,214,138,.07); color:var(--fg); }
+  tr.us td b { color:var(--accent); }
+  img.shot { border:1px solid var(--line); border-radius:12px; }
+</style>
+</head>
+<body>
+<script>
+// one web, drawn the way the product draws it
+function web(cx, cy, R, op, col) {
+  const S = 12, RINGS = 5; let g = '';
+  for (let i = 0; i < S; i++) { const a = i * 2 * Math.PI / S;
+    g += `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * R}" y2="${cy + Math.sin(a) * R}" stroke="${col}"/>`; }
+  for (let r = 1; r <= RINGS; r++) { const rr = R * r / RINGS; let d = '';
+    for (let k = 0; k <= S; k++) { const a = k * 2 * Math.PI / S, px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+      if (!k) { d = `M${px},${py}`; continue; }
+      const m = (k - .5) * 2 * Math.PI / S, s = rr * .9;
+      d += ` Q${cx + Math.cos(m) * s},${cy + Math.sin(m) * s} ${px},${py}`; }
+    g += `<path d="${d}" fill="none" stroke="${col}"/>`; }
+  return `<svg class="web" style="left:0;top:0;opacity:${op}" width="1920" height="1080" stroke-width="1.1">${g}</svg>`;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('[data-web]').forEach(el => {
+    const [cx, cy, r, op] = el.dataset.web.split(',').map(Number);
+    el.insertAdjacentHTML('afterbegin', web(cx, cy, r, op, '#2A2F27'));
+  });
+});
+</script>
+
+<!-- 1 TITLE -->
+<section class="slide" data-web="1500,560,620,1">
+  <div class="eyebrow">Team Maynards · iQOO Hackathon 2026 · Developer Tools</div>
+  <div style="flex:1; display:flex; flex-direction:column; justify-content:center">
+    <h1>MeshAI</h1>
+    <div class="sub" style="font-size:40px; color:var(--fg); max-width:1200px; margin-top:28px">
+      Run a model your hardware cannot hold, on the devices you already own.
+    </div>
+    <div style="margin-top:48px" class="mono" style="font-size:24px; color:var(--fg2)">
+      <span class="tag on">30B across a laptop and two phones</span>
+      <span class="tag">ready in 70 s</span>
+      <span class="tag">6.6 tokens per second</span>
+      <span class="tag">internet off</span>
+    </div>
+  </div>
+  <div class="foot"><span>Prajwal Gunnala · Yuva Raj Ambati</span><span>27 September 2026</span></div>
+</section>
+
+<!-- 2 HOOK -->
+<section class="slide" data-web="960,540,760,.9" style="justify-content:center; align-items:center; text-align:center">
+  <h1 style="font-size:124px; max-width:1500px">What if you could actually run it?</h1>
+  <div style="margin-top:56px">
+    <span class="tag on">no API bill</span><span class="tag on">on your phones</span><span class="tag on">30B coder</span>
+    <span class="tag">reviews your code</span><span class="tag">on a budget laptop</span><span class="tag">offline</span>
+  </div>
+</section>
+
+<!-- 3 PROBLEM -->
+<section class="slide">
+  <div class="eyebrow">01 · The problem</div>
+  <h2 style="margin-top:14px">Memory decides which model you can run.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card">
+      <div class="k">What a model needs</div>
+      <table style="font-size:24px">
+        <tr><td style="padding:12px 0"><b>Qwen3 0.6B</b></td><td class="mono" style="text-align:right">0.64 GB</td></tr>
+        <tr><td style="padding:12px 0"><b>Qwen3 1.7B</b></td><td class="mono" style="text-align:right">1.83 GB</td></tr>
+        <tr><td style="padding:12px 0"><b>Qwen3 8B</b></td><td class="mono" style="text-align:right">4.7 GB</td></tr>
+        <tr><td style="padding:12px 0"><b>gpt-oss 20B</b></td><td class="mono" style="text-align:right">12.1 GB</td></tr>
+        <tr class="us"><td style="padding:12px 0"><b>Qwen3-Coder 30B</b></td><td class="mono" style="text-align:right">18.6 GB</td></tr>
+      </table>
+      <div class="rule" style="margin:24px 0"></div>
+      <div class="k">What a device has free</div>
+      <ul style="margin-top:6px">
+        <li>A budget laptop: about 4 GB</li>
+        <li>One 16 GB phone: about 8.7 GB</li>
+        <li style="color:var(--accent)">The three together: about 20 GB<small style="color:var(--fg3)">and the 30B fits</small></li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="k">Small models are not almost as good</div>
+      <div style="font-size:28px; color:var(--fg2); margin-bottom:28px">The same 15 coding problems, scored by running every answer against its own tests.</div>
+      <div style="display:flex; align-items:flex-end; gap:46px; height:330px; padding:0 20px">
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:34px; margin-bottom:12px">13%</div>
+          <div style="height:60px; background:#2A2F27; border-radius:6px"></div>
+          <div class="mono" style="font-size:21px; color:var(--fg3); margin-top:14px">0.6B<br>2 of 15</div>
+        </div>
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:34px; margin-bottom:12px; color:var(--accent)">47%</div>
+          <div style="height:210px; background:var(--accent); border-radius:6px"></div>
+          <div class="mono" style="font-size:21px; color:var(--fg3); margin-top:14px">1.7B<br>7 of 15</div>
+        </div>
+        <div style="flex:1.4; text-align:center; opacity:.55">
+          <div class="mono" style="font-size:30px; margin-bottom:12px; color:var(--fg3)">?</div>
+          <div style="height:300px; border:2px dashed #3A4036; border-radius:6px"></div>
+          <div class="mono" style="font-size:21px; color:var(--fg3); margin-top:14px">30B<br>needs 18.6 GB</div>
+        </div>
+      </div>
+      <div style="font-size:26px; color:var(--fg2); margin-top:26px">
+        Neither device can hold the one that is worth running. A machine that can costs more than the laptop.
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>measured 27 September, results/REPORT.md</span></div>
+</section>
+
+<!-- 4 THE MESH -->
+<section class="slide" data-web="1620,300,420,.8">
+  <div class="eyebrow">02 · The solution</div>
+  <h2 style="margin-top:14px">Pool the memory of the devices you already own.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card" style="flex:1.25">
+      <ul>
+        <li>One device plans, the others hold layers<small>it reads free memory, heat, battery and link, then decides</small></li>
+        <li>One OpenAI-compatible endpoint<small>the tools you already use do not change</small></li>
+        <li>About 4 KB crosses the cable per word<small>the 18.6 GB of weights never move</small></li>
+        <li>Any device, mixed: phones and laptops in one cluster, any GGUF<small>nothing hardcoded; we read the header and size it ourselves</small></li>
+        <li>It refuses a device, in words, when it would make things worse</li>
+        <li>Nothing leaves your devices. The demo runs with the internet off</li>
+      </ul>
+      <div style="margin-top:14px">
+        <span class="tag on">one endpoint</span><span class="tag on">plans the split</span><span class="tag">refuses bad devices</span>
+        <span class="tag">mesh review · tests · diff</span><span class="tag">git pre-commit hook</span>
+      </div>
+    </div>
+    <div class="card" style="flex:.85; display:flex; align-items:center; justify-content:center; padding:24px">
+      <img class="shot" src="img/app-new.png" style="max-width:100%; max-height:560px; border:0">
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>the app: host or helper, on any capable Android</span></div>
+</section>
+
+<!-- 5 WHAT YOU DO WITH IT -->
+<section class="slide">
+  <div class="eyebrow">03 · The use case</div>
+  <h2 style="margin-top:14px">You are about to commit. You tap one button.</h2>
+  <div class="rule"></div>
+  <div style="display:flex; gap:26px; align-items:stretch; margin-bottom:38px">
+    <div class="card" style="flex:1"><div class="k">Your laptop</div>
+      <div style="font-size:29px">You edit a file<br><span style="color:var(--fg3)">git diff, not committed</span></div></div>
+    <div style="align-self:center; font-size:44px; color:var(--accent)">→</div>
+    <div class="card solid" style="flex:1"><div class="k">Your phone</div>
+      <div style="font-size:29px">One tap: review my changes<br><span style="opacity:.6">it asks the laptop over the cable</span></div></div>
+    <div style="align-self:center; font-size:44px; color:var(--accent)">→</div>
+    <div class="card" style="flex:1.1"><div class="k">The mesh</div>
+      <div style="font-size:29px">30B across three devices<br><span style="color:var(--fg3)">two phones hold 9.6 GB of it</span></div></div>
+    <div style="align-self:center; font-size:44px; color:var(--accent)">→</div>
+    <div class="card hi" style="flex:1"><div class="k">The review</div>
+      <div style="font-size:29px">On the phone screen<br><span style="color:var(--fg2)">before you commit</span></div></div>
+  </div>
+  <div class="cols">
+    <div class="card"><div class="k">Why anyone keeps it</div>
+      <ul><li>The same review installs as a git pre-commit hook, in one command</li>
+        <li>Every commit read before it lands, on your own hardware</li>
+        <li>No API bill on the ten thousandth run</li></ul></div>
+    <div class="card"><div class="k">And it never leaves</div>
+      <ul><li>Internet off · no account · no upload</li>
+        <li>The code stays on the desk it was written on</li>
+        <li>Also: mesh review a file, mesh tests to write its tests</li></ul></div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>built and demonstrated during the event</span></div>
+</section>
+
+<!-- 6 ARCHITECTURE -->
+<section class="slide">
+  <div class="eyebrow">04 · Architecture</div>
+  <h2 style="margin-top:12px">One word, one pass, three devices.</h2>
+  <div class="rule" style="margin:22px 0"></div>
+  <svg viewBox="0 0 1700 620" style="width:100%; height:auto">
+    <defs>
+      <marker id="ar" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#5FD68A"/></marker>
+      <marker id="ab" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+        <path d="M0,0 L10,5 L0,10 z" fill="#A78BFA"/></marker>
+    </defs>
+
+    <!-- laptop -->
+    <rect x="20" y="96" width="600" height="330" rx="14" fill="#12140F" stroke="#3A4036" stroke-width="2"/>
+    <rect x="70" y="126" width="500" height="250" rx="8" fill="#0B0C0B" stroke="#262A23"/>
+    <path d="M10,440 h620 l-24,26 h-572 z" fill="#12140F" stroke="#3A4036" stroke-width="2"/>
+    <text x="44" y="82" font-family="ui-monospace,monospace" font-size="19" fill="#5FD68A" letter-spacing="2">HOST · THIS LAPTOP</text>
+
+    <text x="96" y="166" font-family="ui-monospace,monospace" font-size="16" fill="#A3A79C">EMBEDDINGS AND OUTPUT HEAD · pinned to the host</text>
+    <rect x="96" y="176" width="448" height="24" rx="3" fill="#2C5E41"/>
+
+    <text x="96" y="242" font-family="ui-monospace,monospace" font-size="17" fill="#A3A79C">LAYERS 0–22 · 9.19 GB</text>
+    <rect x="96.0" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="115.6" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="135.2" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="154.8" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="174.4" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="194.0" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="213.7" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="233.3" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="252.9" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="272.5" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="292.1" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="311.7" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="331.3" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="350.9" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="370.5" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="390.1" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="409.7" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="429.3" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="449.0" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="468.6" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="488.2" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="507.8" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/><rect x="527.4" y="262" width="16.6" height="34" rx="2" fill="#5FD68A"/>
+    <text x="96" y="340" font-family="ui-monospace,monospace" font-size="17" fill="#6E736A">llama.cpp · plans the split · serves /v1</text>
+    <text x="96" y="366" font-family="ui-monospace,monospace" font-size="17" fill="#6E736A">reads the file once, front to back</text>
+
+    <!-- phone one -->
+    <rect x="720" y="60" width="270" height="470" rx="26" fill="#12140F" stroke="#3A4036" stroke-width="2"/>
+    <rect x="742" y="92" width="226" height="406" rx="12" fill="#0B0C0B" stroke="#262A23"/>
+    <rect x="828" y="72" width="54" height="8" rx="4" fill="#3A4036"/>
+    <text x="742" y="46" font-family="ui-monospace,monospace" font-size="19" fill="#A78BFA" letter-spacing="2">HELPER · PHONE</text>
+    <text x="766" y="146" font-family="ui-monospace,monospace" font-size="17" fill="#A3A79C">LAYERS 23–42</text>
+    <text x="766" y="170" font-family="ui-monospace,monospace" font-size="17" fill="#6E736A">7.53 GB</text>
+    <rect x="766" y="196" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="210" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="224" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="238" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="252" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="266" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="280" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="294" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="308" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="322" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="336" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="350" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="364" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="378" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="392" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="406" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="420" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="434" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="448" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="766" y="462" width="178" height="10" rx="2" fill="#A78BFA"/>
+    <text x="766" y="470" font-family="ui-monospace,monospace" font-size="15" fill="#6E736A">keeps them on the device</text>
+
+    <!-- phone two -->
+    <rect x="1060" y="60" width="270" height="470" rx="26" fill="#12140F" stroke="#3A4036" stroke-width="2"/>
+    <rect x="1082" y="92" width="226" height="406" rx="12" fill="#0B0C0B" stroke="#262A23"/>
+    <rect x="1168" y="72" width="54" height="8" rx="4" fill="#3A4036"/>
+    <text x="1082" y="46" font-family="ui-monospace,monospace" font-size="19" fill="#A78BFA" letter-spacing="2">HELPER · PHONE</text>
+    <text x="1106" y="146" font-family="ui-monospace,monospace" font-size="17" fill="#A3A79C">LAYERS 43–47</text>
+    <text x="1106" y="170" font-family="ui-monospace,monospace" font-size="17" fill="#6E736A">2.04 GB</text>
+    <rect x="1106" y="196" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="1106" y="210" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="1106" y="224" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="1106" y="238" width="178" height="10" rx="2" fill="#A78BFA"/><rect x="1106" y="252" width="178" height="10" rx="2" fill="#A78BFA"/>
+    <text x="1106" y="300" font-family="ui-monospace,monospace" font-size="15" fill="#6E736A">an unseen split:</text>
+    <text x="1106" y="322" font-family="ui-monospace,monospace" font-size="15" fill="#6E736A">ready in 70 s</text>
+
+    <!-- the path a word takes -->
+    <path d="M620,250 C670,250 680,230 718,230" fill="none" stroke="#5FD68A" stroke-width="3" marker-end="url(#ar)"/>
+    <path d="M992,300 C1020,300 1030,280 1058,280" fill="none" stroke="#5FD68A" stroke-width="3" marker-end="url(#ar)"/>
+    <path d="M1060,420 C900,470 760,470 622,400" fill="none" stroke="#A78BFA" stroke-width="3" stroke-dasharray="7 6" marker-end="url(#ab)"/>
+    <text x="640" y="212" font-family="ui-monospace,monospace" font-size="17" fill="#5FD68A">hidden state · 4 KB</text>
+    <text x="1000" y="262" font-family="ui-monospace,monospace" font-size="17" fill="#5FD68A">4 KB</text>
+    <text x="800" y="492" font-family="ui-monospace,monospace" font-size="17" fill="#A78BFA">back to the head, which writes the word</text>
+
+    <!-- right rail -->
+    <line x1="1380" y1="60" x2="1380" y2="530" stroke="#262A23" stroke-width="2"/>
+    <text x="1408" y="96" font-family="ui-monospace,monospace" font-size="19" fill="#A3A79C" letter-spacing="2">PER WORD</text>
+    <text x="1408" y="146" font-size="34" fill="#F0EFE9" font-family="ui-monospace,monospace">48 layers</text>
+    <text x="1408" y="182" font-size="21" fill="#6E736A">one pass, in order</text>
+    <text x="1408" y="244" font-size="34" fill="#5FD68A" font-family="ui-monospace,monospace">4 KB</text>
+    <text x="1408" y="280" font-size="21" fill="#6E736A">crosses each cable</text>
+    <text x="1408" y="342" font-size="34" fill="#F0EFE9" font-family="ui-monospace,monospace">18.6 GB</text>
+    <text x="1408" y="378" font-size="21" fill="#6E736A">of weights never move</text>
+    <text x="1408" y="440" font-size="34" fill="#F0EFE9" font-family="ui-monospace,monospace">2–3 ms</text>
+    <text x="1408" y="476" font-size="21" fill="#6E736A">USB tethering, each link</text>
+    <text x="1408" y="524" font-size="21" fill="#6E736A">internet off throughout</text>
+  </svg>
+  <div style="display:flex; gap:26px; margin-top:8px">
+    <div class="card" style="padding:20px 26px"><div class="k" style="margin-bottom:10px">The planner decides</div>
+      <div style="font-size:23px; color:var(--fg2)">Live memory, heat, battery and round trip time. One unbroken run of layers each, largest device first.</div></div>
+    <div class="card" style="padding:20px 26px"><div class="k" style="margin-bottom:10px">The helper never sees your prompt</div>
+      <div style="font-size:23px; color:var(--fg2)">It receives a hidden state, computes its layers and hands the result back. No text ever reaches it.</div></div>
+    <div class="card" style="padding:20px 26px"><div class="k" style="margin-bottom:10px">The head stays home</div>
+      <div style="font-size:23px; color:var(--fg2)">Embeddings and output head are pinned to the host, which is why only kilobytes cross per word.</div></div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>measured configuration, 27 September · llama.cpp and ggml (MIT)</span></div>
+</section>
+
+<!-- 7 WHAT MADE IT WORK -->
+<section class="slide" data-web="200,900,340,.7">
+  <div class="eyebrow">05 · Engineering</div>
+  <h2 style="margin-top:14px">What made a split usable at all.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card"><div class="k">Loading</div>
+      <div class="big">517<small> s</small> <span style="color:var(--accent)">→ 70<small style="color:var(--accent)"> s</small></span></div>
+      <div style="font-size:25px; color:var(--fg2); margin-top:20px">With mmap the engine read the file in scattered pieces while pushing layers out. Read it once, front to back.</div>
+      <div class="rule" style="margin:26px 0"></div>
+      <div class="k">A split never used before</div>
+      <div class="big">437<small> s</small> <span style="color:var(--accent)">→ 70<small style="color:var(--accent)"> s</small></span></div>
+      <div style="font-size:25px; color:var(--fg2); margin-top:20px">Every device keeps its own layers, checked against the engine's own file.</div>
+    </div>
+    <div class="card"><div class="k">And the rest</div>
+      <ul>
+        <li>Embeddings and output head pinned to the host<small>so one small activation crosses per word, not weights</small></li>
+        <li>One conversation slot<small>a long chat stays in the cache instead of being re-read</small></li>
+        <li>Median of ten round trips, never the average<small>one Wi-Fi spike cannot evict a healthy device</small></li>
+        <li>A sustained run, not a single shot<small>11.4 → 5.3 tok/s as the phone goes 34.6 → 47.5 °C, raw CSV committed</small></li>
+        <li>Text and vision on two phones at once<small>routed by the request, with a header naming who answered</small></li>
+      </ul>
+    </div>
+    <div class="card hi"><div class="k" style="color:#8FD3A8">It refuses</div>
+      <div style="font-size:30px; line-height:1.5; margin-bottom:26px">The planner says no, in a sentence you can read.</div>
+      <ul>
+        <li style="color:#DFF3E7">Too slow to reach, above 60 ms</li>
+        <li style="color:#DFF3E7">Too hot, or nearly flat</li>
+        <li style="color:#DFF3E7">The model already fits one device<small style="color:#8FD3A8">splitting would only make it slower</small></li>
+      </ul>
+      <div style="font-size:25px; color:#BFE6CD; margin-top:20px">Seven hermetic tests cover the planner. It will tell you your phone is not worth using, and that is the feature.</div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>every figure in docs/measurements.md, with its conditions</span></div>
+</section>
+
+<!-- 8 WHY NOT BEFORE -->
+<section class="slide">
+  <div class="eyebrow">06 · Why this is hard</div>
+  <h2 style="margin-top:14px">The link decides everything.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card">
+      <div class="k">Every word waits for the link</div>
+      <div style="display:flex; align-items:flex-end; gap:40px; height:300px; margin:36px 0 10px">
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:30px; color:var(--accent); margin-bottom:12px">2–3 ms</div>
+          <div style="height:26px; background:var(--accent); border-radius:5px"></div>
+          <div class="mono" style="font-size:21px; color:var(--fg3); margin-top:14px">USB cable<br>it works</div>
+        </div>
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:30px; color:var(--amber); margin-bottom:12px">65–154 ms</div>
+          <div style="height:110px; background:var(--amber); border-radius:5px"></div>
+          <div class="mono" style="font-size:21px; color:var(--fg3); margin-top:14px">home Wi-Fi<br>marginal</div>
+        </div>
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:30px; color:#E06C6C; margin-bottom:12px">266–483 ms</div>
+          <div style="height:250px; background:#E06C6C; border-radius:5px"></div>
+          <div class="mono" style="font-size:21px; color:var(--fg3); margin-top:14px">venue Wi-Fi<br>refused</div>
+        </div>
+      </div>
+      <div style="font-size:25px; color:var(--fg2); margin-top:20px">Measured round trip. The planner refuses anything above 60 ms, which is why the demo runs on a cable.</div>
+    </div>
+    <div class="card">
+      <div class="k">What the research says</div>
+      <ul>
+        <li>Petals measured 0.83 tokens per second across two continents<small>the only peer-reviewed system to do this at scale</small></li>
+        <li>prima.cpp, the most mature home cluster, excludes phones on purpose</li>
+        <li>A search of arXiv for multi-smartphone inference returns nothing</li>
+      </ul>
+      <div class="rule" style="margin:26px 0"></div>
+      <div style="font-size:29px; line-height:1.45">A split is worth it on a link you own,<br>and worthless on one you do not.<br><span style="color:var(--accent)">That is exactly where we drew the line.</span></div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>Petals arXiv 2209.01188 · prima.cpp arXiv 2504.08791</span></div>
+</section>
+
+<!-- 9 EVIDENCE -->
+<section class="slide">
+  <div class="eyebrow">07 · Evidence</div>
+  <h2 style="margin-top:14px">Measured, not claimed.</h2>
+  <div class="sub">The same fifteen coding problems, asked of every configuration, scored by executing each answer against its own tests. No partial credit, no human judgement.</div>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card" style="flex:1.3">
+      <div class="k">Accuracy as the pool grows</div>
+      <div style="display:flex; align-items:flex-end; gap:56px; height:400px; padding:30px 30px 0">
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:40px; margin-bottom:14px">13%</div>
+          <div style="height:52px; background:#2A2F27; border-radius:7px"></div>
+          <div class="mono" style="font-size:22px; color:var(--fg3); margin-top:16px">laptop alone<br>0.6B · 2 of 15<br><span style="color:var(--fg2)">20.9 tok/s</span></div>
+        </div>
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:40px; margin-bottom:14px; color:var(--accent)">47%</div>
+          <div style="height:188px; background:var(--accent); border-radius:7px"></div>
+          <div class="mono" style="font-size:22px; color:var(--fg3); margin-top:16px">laptop alone<br>1.7B · 7 of 15<br><span style="color:var(--fg2)">8.6 tok/s</span></div>
+        </div>
+        <div style="flex:1; text-align:center">
+          <div class="mono" style="font-size:40px; margin-bottom:14px; color:var(--violet)">47%</div>
+          <div style="height:188px; background:var(--violet); border-radius:7px"></div>
+          <div class="mono" style="font-size:22px; color:var(--fg3); margin-top:16px">split across two<br>1.7B · 7 of 15<br><span style="color:var(--fg2)">7.4 tok/s</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card"><div class="k">What the numbers say</div>
+      <ul>
+        <li>A bigger model triples the score<small>13% to 47% on the same problems</small></li>
+        <li>Splitting costs a little speed, not accuracy<small>8.6 to 7.4 tokens per second</small></li>
+        <li style="color:var(--accent)">The split failed the same eight tasks as the single device<small style="color:var(--fg3)">identical answers: the split is faithful, it only changes what you can hold</small></li>
+      </ul>
+      <div class="rule" style="margin:24px 0"></div>
+      <div style="font-size:27px; line-height:1.45; color:var(--fg2)">Speed falls a little. Accuracy climbs a lot. That is the trade, stated honestly, with the evidence.</div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>results/REPORT.md · scripts/bench.py · one press in the app</span></div>
+</section>
+
+<!-- 10 WHAT ALREADY EXISTS -->
+<section class="slide">
+  <div class="eyebrow">08 · Prior art</div>
+  <h2 style="margin-top:14px">What already exists, and what it leaves undone.</h2>
+  <div class="rule"></div>
+  <table>
+    <tr><th style="width:23%">System</th><th style="width:40%">What it does</th><th>What it leaves to you</th></tr>
+    <tr><td><b>Darkbloom</b><small>Eigen Labs, a16z backed</small></td>
+        <td>Rents idle Apple Silicon Macs for inference and pays their owners</td>
+        <td>One whole model per Mac. It does not pool memory, and never touches a phone</td></tr>
+    <tr><td><b>exo</b><small>github, 47k stars</small></td>
+        <td>Splits a model across your own Macs and Linux boxes, by how much memory each has</td>
+        <td>The phone is not a first class device. It does not refuse a bad one, or explain</td></tr>
+    <tr><td><b>Petals</b><small>peer reviewed</small></td>
+        <td>A public swarm of volunteer servers holding one very large model</td>
+        <td>0.83 tokens per second across two continents. Unmaintained since 2024</td></tr>
+    <tr><td><b>llama.cpp RPC</b><small>the primitive we use</small></td>
+        <td>Runs layers on another machine over a socket. MeshAI drives this underneath</td>
+        <td>You type the addresses and the tensor split by hand. Nothing decides</td></tr>
+    <tr><td><b>Ollama · LM Studio</b><small>Jan, and the rest</small></td>
+        <td>Excellent single device runtimes. One machine, one model</td>
+        <td>If the model does not fit that machine, you do not run it at all</td></tr>
+    <tr class="us"><td><b>MeshAI</b><small>what we built</small></td>
+        <td>An Android app where a phone hosts or helps. A planner reads live memory, heat, battery and link, gives each device layers it can hold, and says no in words</td>
+        <td>Nothing. No paper and no product pools phone memory to run one model</td></tr>
+  </table>
+  <div style="display:flex; gap:26px; margin-top:26px">
+    <div class="card hi" style="padding:24px 28px"><div class="k" style="color:#8FD3A8">Any device, mixed</div>
+      <div style="font-size:25px; color:#DFF3E7; line-height:1.45">Android phones and laptops in one cluster, and any GGUF model.
+        Nothing is hardcoded: we read the header and size it ourselves.</div></div>
+    <div class="card" style="padding:24px 28px"><div class="k">The phone is a peer, not an accessory</div>
+      <div style="font-size:25px; color:var(--fg2); line-height:1.45">It can be the host that plans and answers, or the helper that holds layers.
+        Every other system treats a phone as a client.</div></div>
+    <div class="card" style="padding:24px 28px"><div class="k">All of it on the device</div>
+      <div style="font-size:25px; color:var(--fg2); line-height:1.45">Camera into a vision model, voice recognised on-device, the model itself on-device.
+        Office Kit moves the files and mirrors the demo.</div></div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>each row checked against its own source, September 2026</span></div>
+</section>
+
+<!-- 11 THE BUSINESS -->
+<section class="slide" data-web="1640,260,380,.8">
+  <div class="eyebrow">09 · The business</div>
+  <h2 style="margin-top:14px">Their own devices become the private cloud.</h2>
+  <div class="sub">We do not buy hardware and we do not rent anyone else's. We sell the software that turns the devices an organisation already owns into the cluster that runs its own AI.</div>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card"><div class="k">Who pays</div>
+      <ul>
+        <li>Teams whose code cannot leave the building</li>
+        <li>Developers whose laptop is the limit</li>
+        <li>Labs and campuses with devices idle all night</li>
+        <li>Anywhere the network is poor or absent</li>
+      </ul>
+      <div class="rule" style="margin:22px 0"></div>
+      <div style="font-size:25px; color:var(--fg2); line-height:1.45">They are not choosing between us and a cloud. They are choosing between us and a GPU server at eight to fifteen lakh, or nothing at all.</div>
+    </div>
+    <div class="card"><div class="k">What they get</div>
+      <ul>
+        <li>A 30B model on the devices they own</li>
+        <li>One endpoint their tools already speak</li>
+        <li>Every commit reviewed locally</li>
+        <li>Nothing leaves the building, ever</li>
+        <li>No bill on the ten thousandth run</li>
+      </ul>
+      <div class="rule" style="margin:22px 0"></div>
+      <div style="font-size:25px; color:var(--accent); line-height:1.45">Add a device and the ceiling rises. What you can hold is what you can run.</div>
+    </div>
+    <div class="card solid"><div class="k">How we earn</div>
+      <ul>
+        <li><b style="font-size:30px">Per site</b><small style="color:#4A4E45">a lab, a floor, a campus: the private cloud</small></li>
+        <li><b style="font-size:30px">Per seat</b><small style="color:#4A4E45">the developer tool, with the git hook as the way in</small></li>
+        <li><b style="font-size:30px">Licensed to the device maker</b><small style="color:#4A4E45">two phones worth more together than apart, which is a reason to own the second one</small></li>
+      </ul>
+      <div style="font-size:25px; margin-top:20px; font-weight:600">That last buyer is sitting in this room.</div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>the hardware is already bought, and already idle</span></div>
+</section>
+
+<!-- 12 FEASIBILITY -->
+<section class="slide">
+  <div class="eyebrow">10 · Feasibility</div>
+  <h2 style="margin-top:14px">It is not a plan. It ran this weekend.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card hi"><div class="k" style="color:#8FD3A8">What ran</div>
+      <div style="font-size:34px; font-weight:600; margin-bottom:22px">Qwen3-Coder-30B</div>
+      <ul>
+        <li style="color:#DFF3E7">18.6 GB across a laptop and two phones</li>
+        <li style="color:#DFF3E7">Laptop 0–22 · phone 23–42 · phone 43–47<small style="color:#8FD3A8">the phones hold 9.6 GB of it</small></li>
+        <li style="color:#DFF3E7">Ready in 70 seconds · 6.6 tokens per second</li>
+        <li style="color:#DFF3E7">Three coding questions answered correctly</li>
+        <li style="color:#DFF3E7">Internet off throughout</li>
+      </ul>
+      <div style="font-size:21px; color:#8FD3A8; margin-top:20px; line-height:1.5; font-family:var(--mono)">
+        Conditions, because a number without them is worthless:<br>
+        USB tethering 2–3 ms · context 4096, KV at 8 bits<br>laptop capped at 8 GB to force the split · 27 September</div>
+    </div>
+    <div class="card"><div class="k">Built inside the window</div>
+      <ul>
+        <li>llama.cpp cross compiled for arm64</li>
+        <li>Android app: host role and helper role</li>
+        <li>Rust agent and its web panel</li>
+        <li>Our own GGUF reader and layer planner</li>
+        <li>Layer store, so an unseen split starts in 70 s</li>
+        <li>Benchmark harness that runs the answers</li>
+        <li>CLI and a git pre-commit hook</li>
+      </ul>
+      <div style="font-size:24px; color:var(--fg3); margin-top:18px">Every commit timestamped. Nothing pre-built. Open source used with attribution, all of it named.</div>
+    </div>
+    <div class="card"><div class="k">What could go wrong, and what we did</div>
+      <table style="font-size:22px">
+        <tr><td style="padding:10px 12px 10px 0"><b style="font-size:23px">The link is slow</b></td><td style="padding:10px 0; font-size:21px">refused above 60 ms, in words</td></tr>
+        <tr><td style="padding:10px 12px 10px 0"><b style="font-size:23px">Phone runs out of memory</b></td><td style="padding:10px 0; font-size:21px">proportional reserve, owner sets a cap</td></tr>
+        <tr><td style="padding:10px 12px 10px 0"><b style="font-size:23px">A device drops</b></td><td style="padding:10px 0; font-size:21px">it reconnects; a real departure ends cleanly</td></tr>
+        <tr><td style="padding:10px 12px 10px 0"><b style="font-size:23px">Engine lacks a flag</b></td><td style="padding:10px 0; font-size:21px">we ask the binary what it supports</td></tr>
+        <tr><td style="padding:10px 12px 10px 0"><b style="font-size:23px">A corrupt model file</b></td><td style="padding:10px 0; font-size:21px">every header read is bounds checked</td></tr>
+        <tr><td style="padding:10px 12px 10px 0"><b style="font-size:23px">An unfamiliar machine</b></td><td style="padding:10px 0; font-size:21px">one press checks engine, models, ports, adb</td></tr>
+      </table>
+      <div style="font-size:26px; color:var(--accent); margin-top:22px; font-weight:600">It refuses before it disappoints.</div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>two 16 GB phones and one budget laptop · nothing else was bought</span></div>
+</section>
+
+<!-- 13 LIMITS -->
+<section class="slide" data-web="1600,820,360,.7">
+  <div class="eyebrow">11 · Limits</div>
+  <h2 style="margin-top:14px">What we will not claim.</h2>
+  <div class="sub">Volunteering these is what makes the rest believable.</div>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card"><div class="k">Not faster</div>
+      <div style="font-size:30px; line-height:1.45; margin-bottom:24px">It buys memory, not speed.</div>
+      <ul><li>Every word crosses the link once</li>
+        <li>A split is slower than one device that already fits</li>
+        <li>Our own planner says so, and refuses your phone</li>
+        <li>We split only when the model fits nowhere else</li></ul></div>
+    <div class="card"><div class="k">Not cheaper per token</div>
+      <div style="font-size:30px; line-height:1.45; margin-bottom:24px">A commodity API is cheaper. That is not the point.</div>
+      <ul><li>We are for work that is not allowed to leave</li>
+        <li>And for hardware that cannot hold the model alone</li>
+        <li>If your data can leave and you want the best answer, use the cloud</li></ul></div>
+    <div class="card"><div class="k">Private, but precisely</div>
+      <div style="font-size:30px; line-height:1.45; margin-bottom:24px">Across devices one person owns. No further.</div>
+      <ul><li>Nothing leaves the devices you own</li>
+        <li>The demo runs with the internet off</li>
+        <li>We do not claim activations sent to a stranger are private<small>published work turns them back into text</small></li></ul></div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>the boundary, stated before anyone asks</span></div>
+</section>
+
+<!-- 14 WHO IT IS FOR -->
+<section class="slide">
+  <div class="eyebrow">12 · Impact</div>
+  <h2 style="margin-top:14px">The ceiling moves.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card" style="flex:1.1">
+      <div class="k">Who it is for</div>
+      <div style="margin-top:8px">
+        <span class="tag on">developers on a weak laptop</span><span class="tag on">two person teams</span>
+        <span class="tag on">workplaces that forbid cloud AI</span><span class="tag">students with a good phone</span>
+        <span class="tag">field work with no signal</span><span class="tag">any capable Android</span>
+      </div>
+      <div class="rule" style="margin:28px 0"></div>
+      <ul>
+        <li>Memory decides which model you can run</li>
+        <li>Pool the memory and the ceiling moves</li>
+        <li>The same devices now hold a 30B</li>
+        <li style="color:var(--accent)">The answers change accordingly</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="k">Why phone first is not a gimmick here</div>
+      <div style="display:flex; gap:50px; margin:30px 0 26px">
+        <div><div class="big" style="color:var(--accent)">94.2<small style="color:var(--accent)">%</small></div>
+          <div style="font-size:23px; color:var(--fg3); margin-top:10px">of rural Indian households<br>have a phone</div></div>
+        <div><div class="big">4.2<small>%</small></div>
+          <div style="font-size:23px; color:var(--fg3); margin-top:10px">have a computer</div></div>
+      </div>
+      <div style="font-size:25px; color:var(--fg2); line-height:1.5">
+        That is not our first user, and we will not pretend it is. It is why the phone has to be the device that
+        <i>works</i> rather than the accessory: for most people it is the only computer in the house, and as open
+        models improve at a given size, what it can hold matters more every year.</div>
+      <div style="font-size:21px; color:var(--fg3); margin-top:18px; font-family:var(--mono)">MoSPI, Comprehensive Annual Modular Survey 2022-23</div>
+    </div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>it runs best on the newest phones, which their own engineers can verify</span></div>
+</section>
+
+<!-- 15 TECH STACK -->
+<section class="slide" data-web="300,300,300,.6">
+  <div class="eyebrow">13 · What it is made of</div>
+  <h2 style="margin-top:14px">Tech stack.</h2>
+  <div class="rule"></div>
+  <div class="cols">
+    <div class="card"><div class="k">The runtime</div>
+      <ul><li>Any GGUF model<small>we read the header and size it ourselves</small></li>
+        <li>llama.cpp and ggml, with its RPC transport<small>MIT, attributed</small></li>
+        <li>Our own planner and GGUF reader<small>seven hermetic tests</small></li></ul></div>
+    <div class="card"><div class="k">The devices</div>
+      <ul><li>Kotlin and Jetpack Compose<small>host role and helper role in one app</small></li>
+        <li>Android NDK, arm64 with dot product and i8mm</li>
+        <li>Foreground service, type connectedDevice</li></ul></div>
+    <div class="card"><div class="k">The link and the tools</div>
+      <ul><li>Rust agent and web panel<small>mesh host, mesh join, mesh ask</small></li>
+        <li>USB tethering, 2 to 3 ms</li>
+        <li>OpenAI-compatible API, CLI and git hook</li>
+        <li style="color:var(--accent)">No cloud, no account, no telemetry</li></ul></div>
+  </div>
+  <div class="foot"><span>MeshAI</span><span>github.com/prajwal-gunnala/maynards</span></div>
+</section>
+
+<!-- 16 CLOSE -->
+<section class="slide" data-web="960,540,700,.9" style="justify-content:center">
+  <h1 style="font-size:96px">Thank you</h1>
+  <div class="sub" style="font-size:34px; max-width:1300px; margin-top:26px">
+    A model your hardware should not be able to run, on devices you already own, with the internet switched off.
+  </div>
+  <div style="display:flex; gap:80px; margin-top:64px">
+    <div><div style="font-size:36px; font-weight:600">Prajwal Gunnala</div>
+      <div class="mono" style="font-size:22px; color:var(--fg3); margin-top:8px">github.com/prajwal-gunnala/maynards</div></div>
+    <div><div style="font-size:36px; font-weight:600">Yuva Raj Ambati</div>
+      <div class="mono" style="font-size:22px; color:var(--fg3); margin-top:8px">every number in this deck is in that repository</div></div>
+  </div>
+  <div style="margin-top:56px">
+    <span class="tag on">30B across three devices</span><span class="tag on">ready in 70 s</span>
+    <span class="tag on">6.6 tokens per second</span><span class="tag on">4 KB per word</span><span class="tag on">internet off</span>
+  </div>
+  <div class="foot"><span>Team Maynards</span><span>iQOO Hackathon 2026 · Developer Tools</span></div>
+</section>
+
+</body></html>
