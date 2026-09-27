@@ -590,20 +590,16 @@ def build():
 
     # 15 · close
     s = slide(prs)
-    web(s, Emu(int(W * 0.80)), Emu(int(H * 0.46)), Emu(int(Inches(2.6))))
-    spider(s, Emu(int(W * 0.80)), Emu(int(H * 0.46)), Emu(int(Inches(0.34))))
-    text(s, M, Inches(2.2), Inches(10), Inches(1.0), "Thank you", 52, FG, SANS, bold=True)
-    text(s, M, Inches(3.4), Inches(9.6), Inches(1.0),
-         "A big model, on the devices you already own, with the internet switched off.", 21, FG2, SANS, line=1.3)
-    for i, (n, d) in enumerate([("Prajwal Gunnala", "github.com/prajwal-gunnala/maynards"),
-                                ("Yuva Raj Ambati", "every number here is in that repository")]):
-        x = M + Inches(5.6) * i
-        text(s, x, Inches(4.7), Inches(5.2), Inches(0.4), n, 20, FG, SANS, bold=True)
-        text(s, x, Inches(5.1), Inches(5.2), Inches(0.3), d, 13, FG3, MONO)
-    for i, t in enumerate(["30B across three devices", "ready in 70 s", "6.6 words a second", "internet off"]):
-        x = M + Inches(3.075 * i)
-        c = card(s, x, Inches(5.9), Inches(2.87), Inches(0.5), PANEL_HI, GREEN)
-        text(s, x, Inches(6.03), Inches(2.87), Inches(0.3), t, 12, GREEN, MONO, align=PP_ALIGN.CENTER)
+    web(s, Emu(int(W * 0.80)), Emu(int(H * 0.48)), Emu(int(Inches(2.7))))
+    spider(s, Emu(int(W * 0.80)), Emu(int(H * 0.48)), Emu(int(Inches(0.36))))
+    text(s, M, Inches(2.35), Inches(8.6), Inches(1.1), "Thank you", 58, FG, SANS, bold=True)
+    text(s, M, Inches(3.65), Inches(8.2), Inches(1.0),
+         "A big model, on the devices you already own,\nwith the internet switched off.",
+         24, FG2, SANS, line=1.35)
+    text(s, M, Inches(5.25), Inches(8.6), Inches(0.4),
+         "Prajwal Gunnala   ·   Yuva Raj Ambati", 20, FG, SANS, bold=True)
+    text(s, M, Inches(5.75), Inches(8.6), Inches(0.35),
+         "github.com/prajwal-gunnala/maynards", 15, GREEN, MONO)
     foot(s, "Team Maynards", "iQOO Hackathon 2026 · Developer Tools")
 
     problems = check(prs)
