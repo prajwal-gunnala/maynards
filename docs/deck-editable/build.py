@@ -220,44 +220,9 @@ def build():
          "Every other system treats a phone as a client that asks a server.", 16, FG, SANS, line=1.35)
     foot(s, "MeshAI", "one app · host role or helper role")
 
-    # 4 · what you do with it
-    s = slide(prs)
-    y = head(s, "03 · What you do with it", "Review your code before you commit.",
-             "One tap on the phone. The answer comes from a 30B model running on your own devices.")
-    steps = [("Your laptop", "You change a file", PANEL, FG),
-             ("Your phone", "Tap: review my changes", PANEL, FG),
-             ("The mesh", "30B across three devices", PANEL, FG),
-             ("The review", "On your phone, in seconds", PANEL_HI, GREEN)]
-    sw = (W - 2 * M - Inches(0.9)) / 4
-    for i, (t, d, fill, col) in enumerate(steps):
-        x = M + (sw + Inches(0.3)) * i
-        card(s, x, y + Inches(0.1), sw, Inches(1.25), fill, GREEN if fill == PANEL_HI else LINE)
-        text(s, x + Inches(0.24), y + Inches(0.3), sw - Inches(0.48), Inches(0.3), t, 14, col, SANS, bold=True)
-        text(s, x + Inches(0.24), y + Inches(0.66), sw - Inches(0.48), Inches(0.5), d, 13, FG2, SANS, line=1.25)
-        if i < 3:
-            text(s, x + sw + Inches(0.02), y + Inches(0.55), Inches(0.26), Inches(0.3), "→", 16, GREEN, SANS,
-                 align=PP_ALIGN.CENTER)
-    y2 = y + Inches(1.7)
-    cw = (W - 2 * M - Inches(0.3)) / 2
-    card(s, M, y2, cw, Inches(2.2))
-    text(s, M + Inches(0.3), y2 + Inches(0.26), cw - Inches(0.6), Inches(0.3), "WHY PEOPLE KEEP IT", 11, FG3, MONO)
-    bullets(s, M + Inches(0.3), y2 + Inches(0.66), cw - Inches(0.6), [
-        "It installs as a git hook, in one command",
-        "Every commit gets read before it lands",
-        "No bill, however many times you run it",
-    ], size=14, gap=0.42)
-    card(s, M + cw + Inches(0.3), y2, cw, Inches(2.2))
-    text(s, M + cw + Inches(0.6), y2 + Inches(0.26), cw - Inches(0.6), Inches(0.3), "AND IT NEVER LEAVES", 11, FG3, MONO)
-    bullets(s, M + cw + Inches(0.6), y2 + Inches(0.66), cw - Inches(0.6), [
-        "Internet off. No account. No upload",
-        "The code stays on the desk it was written on",
-        "Also: review a file, or write its tests",
-    ], size=14, gap=0.42)
-    foot(s, "MeshAI", "mesh review · mesh tests · mesh diff · git pre-commit hook")
-
     # 5 · how it works
     s = slide(prs)
-    y = head(s, "04 · How it works", "One word goes through all 48 layers, then comes back.")
+    y = head(s, "03 · How it works", "One word goes through all 48 layers, then comes back.")
     lap_w, ph_w = Inches(4.5), Inches(1.9)
     card(s, M, y + Inches(0.15), lap_w, Inches(2.9))
     text(s, M + Inches(0.26), y + Inches(0.36), lap_w - Inches(0.5), Inches(0.3), "THIS LAPTOP · THE HOST", 11, GREEN, MONO)
@@ -304,7 +269,7 @@ def build():
 
     # 6 · what we fixed
     s = slide(prs)
-    y = head(s, "05 · What we fixed", "Three things made it slow. We fixed all three.")
+    y = head(s, "04 · What we fixed", "Three things made it slow. We fixed all three.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     fixes = [("Loading the model", "517 s", "70 s",
               "It was reading the file in scattered pieces. Now it reads it once, start to finish."),
@@ -332,7 +297,7 @@ def build():
 
     # 7 · why it is hard
     s = slide(prs)
-    y = head(s, "06 · Why this is hard", "The cable is the whole trick.",
+    y = head(s, "05 · Why this is hard", "The cable is the whole trick.",
              "Every word has to travel to the other device and back. So the speed of the link decides everything.")
     cw = (W - 2 * M - Inches(0.3)) / 2
     card(s, M, y, cw, Inches(3.5))
@@ -359,9 +324,66 @@ def build():
          16, GREEN, SANS, line=1.3)
     foot(s, "MeshAI", "Petals arXiv 2209.01188 · prima.cpp arXiv 2504.08791")
 
+    # 12 · what we do not claim
+    s = slide(prs)
+    y = head(s, "06 · Limits", "What we will not claim.",
+             "We say these first, because it is the only way the rest is worth believing.")
+    cw = (W - 2 * M - Inches(0.6)) / 3
+    lims = [("Not faster", "It buys memory, not speed.",
+             ["Every word crosses the cable once", "One device that already fits is quicker",
+              "Our own app tells you so and refuses", "We split only when nothing else fits"]),
+            ("Not cheaper per word", "A cloud API costs less per word.",
+             ["We are for work that cannot leave", "And hardware that cannot hold the model",
+              "If your data can leave, use the cloud"]),
+            ("Private, but only so far", "Across devices one person owns.",
+             ["Nothing leaves the devices you own", "The demo runs with the internet off",
+              "We do not claim a stranger's phone is safe"])]
+    for i, (t, d, pts) in enumerate(lims):
+        x = M + (cw + Inches(0.3)) * i
+        card(s, x, y, cw, Inches(3.3))
+        text(s, x + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), t.upper(), 11, FG3, MONO)
+        text(s, x + Inches(0.28), y + Inches(0.62), cw - Inches(0.56), Inches(0.5), d, 16, FG, SANS, line=1.3)
+        bullets(s, x + Inches(0.28), y + Inches(1.35), cw - Inches(0.56), pts, size=13, gap=0.44)
+    foot(s, "MeshAI", "the boundary, before anyone has to ask for it")
+
+    # 4 · what you do with it
+    s = slide(prs)
+    y = head(s, "07 · What you do with it", "Review your code before you commit.",
+             "One tap on the phone. The answer comes from a 30B model running on your own devices.")
+    steps = [("Your laptop", "You change a file", PANEL, FG),
+             ("Your phone", "Tap: review my changes", PANEL, FG),
+             ("The mesh", "30B across three devices", PANEL, FG),
+             ("The review", "On your phone, in seconds", PANEL_HI, GREEN)]
+    sw = (W - 2 * M - Inches(0.9)) / 4
+    for i, (t, d, fill, col) in enumerate(steps):
+        x = M + (sw + Inches(0.3)) * i
+        card(s, x, y + Inches(0.1), sw, Inches(1.25), fill, GREEN if fill == PANEL_HI else LINE)
+        text(s, x + Inches(0.24), y + Inches(0.3), sw - Inches(0.48), Inches(0.3), t, 14, col, SANS, bold=True)
+        text(s, x + Inches(0.24), y + Inches(0.66), sw - Inches(0.48), Inches(0.5), d, 13, FG2, SANS, line=1.25)
+        if i < 3:
+            text(s, x + sw + Inches(0.02), y + Inches(0.55), Inches(0.26), Inches(0.3), "→", 16, GREEN, SANS,
+                 align=PP_ALIGN.CENTER)
+    y2 = y + Inches(1.7)
+    cw = (W - 2 * M - Inches(0.3)) / 2
+    card(s, M, y2, cw, Inches(2.2))
+    text(s, M + Inches(0.3), y2 + Inches(0.26), cw - Inches(0.6), Inches(0.3), "WHY PEOPLE KEEP IT", 11, FG3, MONO)
+    bullets(s, M + Inches(0.3), y2 + Inches(0.66), cw - Inches(0.6), [
+        "It installs as a git hook, in one command",
+        "Every commit gets read before it lands",
+        "No bill, however many times you run it",
+    ], size=14, gap=0.42)
+    card(s, M + cw + Inches(0.3), y2, cw, Inches(2.2))
+    text(s, M + cw + Inches(0.6), y2 + Inches(0.26), cw - Inches(0.6), Inches(0.3), "AND IT NEVER LEAVES", 11, FG3, MONO)
+    bullets(s, M + cw + Inches(0.6), y2 + Inches(0.66), cw - Inches(0.6), [
+        "Internet off. No account. No upload",
+        "The code stays on the desk it was written on",
+        "Also: review a file, or write its tests",
+    ], size=14, gap=0.42)
+    foot(s, "MeshAI", "mesh review · mesh tests · mesh diff · git pre-commit hook")
+
     # 8 · proof
     s = slide(prs)
-    y = head(s, "07 · Proof", "We measured it. We did not guess.",
+    y = head(s, "08 · Proof", "We measured it. We did not guess.",
              "Same 15 coding problems for every setup. We ran each answer against its own tests. Right or wrong, nothing in between.")
     cw = (W - 2 * M - Inches(0.3)) * 0.56
     card(s, M, y, cw, Inches(3.3))
@@ -390,7 +412,7 @@ def build():
 
     # 9 · what exists today
     s = slide(prs)
-    y = head(s, "08 · What exists today", "Nobody else pools phone memory.")
+    y = head(s, "09 · What exists today", "Nobody else pools phone memory.")
     rows = [("Darkbloom", "a16z backed", "Rents out idle Macs and pays their owners",
              "One whole model per Mac. Never a phone.", False),
             ("exo", "47k stars", "Splits a model across your Macs and Linux boxes",
@@ -418,43 +440,51 @@ def build():
 
     # 10 · the business
     s = slide(prs)
-    y = head(s, "09 · The business", "Their own devices become their private cloud.",
-             "We do not buy hardware. We sell the software that turns the devices a company already owns into one cluster.")
+    y = head(s, "10 · The business", "People pay to run big open models on devices, not on a cloud.",
+             "The models are free and open. What is scarce is memory. We sell the software that pools it, and we can do that two ways.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     card(s, M, y, cw, Inches(3.4))
-    text(s, M + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WHO PAYS", 11, FG3, MONO)
-    bullets(s, M + Inches(0.28), y + Inches(0.66), cw - Inches(0.56), [
-        "Teams whose code cannot leave", "Developers with a weak laptop",
-        "Labs and campuses, idle all night", "Places with no good network",
-    ], size=14, gap=0.44)
-    text(s, M + Inches(0.28), y + Inches(2.6), cw - Inches(0.56), Inches(0.7),
-         "They are not choosing us over a cloud. They are choosing us over a ₹10 lakh GPU server, or nothing.",
-         13, FG2, SANS, line=1.35)
+    text(s, M + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WAY ONE · THEIR OWN DEVICES", 11, FG3, MONO)
+    text(s, M + Inches(0.28), y + Inches(0.62), cw - Inches(0.56), Inches(0.5),
+         "A company's own phones and laptops become its private cloud.", 15, FG, SANS, line=1.3)
+    bullets(s, M + Inches(0.28), y + Inches(1.3), cw - Inches(0.56), [
+        "A QA phone lab, idle all night", "A campus computer lab",
+        "Nothing leaves the building", "Nobody has to be paid: they own them",
+    ], size=13, gap=0.42)
+    text(s, M + Inches(0.28), y + Inches(3.0), cw - Inches(0.56), Inches(0.35),
+         "Sold per site.", 13, GREEN, SANS, bold=True)
+
     x2 = M + cw + Inches(0.3)
-    card(s, x2, y, cw, Inches(3.4))
-    text(s, x2 + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WHAT THEY GET", 11, FG3, MONO)
-    bullets(s, x2 + Inches(0.28), y + Inches(0.66), cw - Inches(0.56), [
-        "A 30B model on devices they own", "One endpoint their tools already use",
-        "Code reviewed on every commit", "Nothing leaves the building", "No bill, however often they run it",
-    ], size=14, gap=0.44)
-    text(s, x2 + Inches(0.28), y + Inches(2.85), cw - Inches(0.56), Inches(0.5),
-         "Add a device and they can run a bigger model.", 13, GREEN, SANS, line=1.3)
+    card(s, x2, y, cw, Inches(3.4), PANEL_HI, GREEN)
+    text(s, x2 + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WAY TWO · DEVICES LENT TO US", 11, GREEN, MONO)
+    text(s, x2 + Inches(0.28), y + Inches(0.62), cw - Inches(0.56), Inches(0.5),
+         "People hand us a phone they no longer use. We keep it, run it and pay them.", 15, FG, SANS, line=1.3)
+    bullets(s, x2 + Inches(0.28), y + Inches(1.3), cw - Inches(0.56), [
+        "The device is in our hands, not their pocket",
+        "Racked, plugged in, cooled, looked after",
+        "Open models, so nothing to license",
+        "The owner earns from a phone in a drawer",
+    ], size=13, gap=0.42)
+    text(s, x2 + Inches(0.28), y + Inches(3.0), cw - Inches(0.56), Inches(0.35),
+         "Sold per million words.", 13, GREEN, SANS, bold=True)
+
     x3 = M + 2 * (cw + Inches(0.3))
-    card(s, x3, y, cw, Inches(3.4), PANEL_HI, GREEN)
-    text(s, x3 + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "HOW WE EARN", 11, GREEN, MONO)
-    for i, (t, d) in enumerate([("Per site", "a lab, a floor, a campus"),
-                                ("Per seat", "the developer tool, with the git hook as the way in"),
-                                ("Licensed to a phone maker", "two phones are worth more together than apart")]):
-        yy = y + Inches(0.7 + 0.82 * i)
-        text(s, x3 + Inches(0.28), yy, cw - Inches(0.56), Inches(0.3), t, 16, FG, SANS, bold=True)
-        text(s, x3 + Inches(0.28), yy + Inches(0.3), cw - Inches(0.56), Inches(0.45), d, 12, FG2, SANS, line=1.25)
-    text(s, x3 + Inches(0.28), y + Inches(3.0), cw - Inches(0.56), Inches(0.3),
-         "That last buyer is in this room.", 13, GREEN, SANS, bold=True)
-    foot(s, "MeshAI", "the hardware is already bought, and already sitting idle")
+    card(s, x3, y, cw, Inches(3.4))
+    text(s, x3 + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WHO PAYS, EITHER WAY", 11, FG3, MONO)
+    bullets(s, x3 + Inches(0.28), y + Inches(0.66), cw - Inches(0.56), [
+        "Teams whose code cannot leave", "Developers with a weak laptop",
+        "Anyone who needs a model their machine cannot hold",
+    ], size=13, gap=0.5)
+    text(s, x3 + Inches(0.28), y + Inches(2.3), cw - Inches(0.56), Inches(0.8),
+         "They are not choosing us over a cloud. They are choosing us over a \u20b910 lakh GPU server, or nothing at all.",
+         13, FG2, SANS, line=1.35)
+    text(s, x3 + Inches(0.28), y + Inches(3.0), cw - Inches(0.56), Inches(0.35),
+         "And a phone maker can license it.", 13, GREEN, SANS, bold=True)
+    foot(s, "MeshAI", "open models · the memory is the scarce thing, and we pool it")
 
     # 11 · can we build it
     s = slide(prs)
-    y = head(s, "10 · Feasibility", "It already runs. This is not a plan.")
+    y = head(s, "11 · Feasibility", "It already runs. This is not a plan.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     card(s, M, y, cw, Inches(3.5), PANEL_HI, GREEN)
     text(s, M + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WHAT RAN", 11, GREEN, MONO)
@@ -488,28 +518,6 @@ def build():
     text(s, x3 + Inches(0.28), y + Inches(3.15), cw - Inches(0.56), Inches(0.3),
          "It says no before it disappoints you.", 13, GREEN, SANS, bold=True)
     foot(s, "MeshAI", "two 16 GB phones and one budget laptop · nothing else was bought")
-
-    # 12 · what we do not claim
-    s = slide(prs)
-    y = head(s, "11 · Limits", "What we will not claim.",
-             "We say these first, because it is the only way the rest is worth believing.")
-    cw = (W - 2 * M - Inches(0.6)) / 3
-    lims = [("Not faster", "It buys memory, not speed.",
-             ["Every word crosses the cable once", "One device that already fits is quicker",
-              "Our own app tells you so and refuses", "We split only when nothing else fits"]),
-            ("Not cheaper per word", "A cloud API costs less per word.",
-             ["We are for work that cannot leave", "And hardware that cannot hold the model",
-              "If your data can leave, use the cloud"]),
-            ("Private, but only so far", "Across devices one person owns.",
-             ["Nothing leaves the devices you own", "The demo runs with the internet off",
-              "We do not claim a stranger's phone is safe"])]
-    for i, (t, d, pts) in enumerate(lims):
-        x = M + (cw + Inches(0.3)) * i
-        card(s, x, y, cw, Inches(3.3))
-        text(s, x + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), t.upper(), 11, FG3, MONO)
-        text(s, x + Inches(0.28), y + Inches(0.62), cw - Inches(0.56), Inches(0.5), d, 16, FG, SANS, line=1.3)
-        bullets(s, x + Inches(0.28), y + Inches(1.35), cw - Inches(0.56), pts, size=13, gap=0.44)
-    foot(s, "MeshAI", "the boundary, before anyone has to ask for it")
 
     # 13 · who it is for
     s = slide(prs)
