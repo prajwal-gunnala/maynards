@@ -31,6 +31,7 @@ SANS    = "Segoe UI"
 MONO    = "Consolas"
 
 W, H = Inches(13.333), Inches(7.5)
+NOTES = False          # a deck is points, not prose: the second line under each point is off
 M = Inches(0.62)                      # page margin
 
 
@@ -185,7 +186,7 @@ def bullets(s, x, y, w, items, size=15, gap=0.44):
         d.fill.solid(); d.fill.fore_color.rgb = GREEN; d.line.fill.background(); d.shadow.inherit = False
         text(s, x + Inches(0.26), yy, w - Inches(0.26), Inches(0.3 * n), t, size, FG, SANS, line=1.15)
         h = 0.26 * size / 14 * n
-        if note:
+        if note and NOTES:
             nn = lines_of(note, 12, w_in - 0.26)
             text(s, x + Inches(0.26), yy + Inches(h), w - Inches(0.26), Inches(0.24 * nn), note, 14, FG3, SANS, line=1.15)
             h += 0.24 * nn
@@ -194,6 +195,32 @@ def bullets(s, x, y, w, items, size=15, gap=0.44):
 
 
 # ----------------------------------------------------------------- the slides
+def question(prs, q, small=None):
+    """A slide that asks one thing. The next slide answers it."""
+    s = slide(prs)
+    web(s, Emu(int(W * 0.82)), Emu(int(H * 0.74)), Emu(int(Inches(2.5))))
+    spider(s, Emu(int(W * 0.82)), Emu(int(H * 0.74)), Emu(int(Inches(0.28))))
+    text(s, M, Inches(2.4), Inches(9.6), Inches(1.8), q, 44, FG, SANS, bold=True, line=1.15)
+    if small:
+        text(s, M, Inches(4.4), Inches(9.6), Inches(0.5), small, 17, FG3, SANS)
+    return s
+
+
+def check(prs):
+    """Every shape has to sit inside the page, above the footer. Caught here, not on a projector."""
+    bad = []
+    top, bottom, left, right = Inches(0.2), H - Inches(0.10), Inches(0.2), W - Inches(0.10)
+    for i, s in enumerate(prs.slides, 1):
+        for sh in s.shapes:
+            if sh.width == W and sh.height == H:
+                continue                       # the background
+            if sh.top + sh.height > bottom or sh.left + sh.width > right or sh.top < top or sh.left < left:
+                what = (sh.text_frame.text[:34].replace("\n", " ") if sh.has_text_frame else sh.shape_type)
+                bad.append(f"slide {i}: {what!r} bottom={(sh.top + sh.height) / 914400:.2f}in "
+                           f"right={(sh.left + sh.width) / 914400:.2f}in")
+    return bad
+
+
 def build():
     prs = deck()
 
@@ -217,7 +244,7 @@ def build():
 
     # 2 · the problem
     s = slide(prs)
-    y = head(s, "01 · The problem", "Your model has to fit in memory.",
+    y = head(s, "01 · The problem", "A 30B model needs 18.6 GB of memory.",
              "If it does not fit, you cannot run it. So people run small models, and small models get it wrong.")
     cw = (W - 2 * M - Inches(0.3)) / 2
     card(s, M, y, cw, Inches(3.9))
@@ -260,9 +287,11 @@ def build():
              align=PP_ALIGN.CENTER)
     foot(s, "MeshAI", "measured 27 September · results/REPORT.md")
 
+    question(prs, "So how do you run a model\nthat does not fit?")
+
     # 3 · what we built
     s = slide(prs)
-    y = head(s, "02 · What we built", "Put the devices together and run the big model.",
+    y = head(s, "02 · What we built", "Phones and a laptop, as one machine.",
              "One device plans and answers. The others hold part of the model. Your tools do not change.")
     bullets(s, M, y + Inches(0.1), Inches(7.2), [
         ("Phones and laptops in one cluster", "any Android phone, any laptop, any GGUF model"),
@@ -280,7 +309,7 @@ def build():
 
     # 5 · how it works
     s = slide(prs)
-    y = head(s, "03 · How it works", "One word goes through all 48 layers, then comes back.")
+    y = head(s, "03 · How it works", "Layers split across the devices.")
     lap_w, ph_w = Inches(4.5), Inches(1.9)
     card(s, M, y + Inches(0.15), lap_w, Inches(2.9))
     text(s, M + Inches(0.26), y + Inches(0.36), lap_w - Inches(0.5), Inches(0.3), "THIS LAPTOP · THE HOST", 11, GREEN, MONO)
@@ -327,7 +356,7 @@ def build():
 
     # 6 · what we fixed
     s = slide(prs)
-    y = head(s, "04 · What we fixed", "Three things made it slow. We fixed all three.")
+    y = head(s, "04 · What we fixed", "Loading went from 517 s to 70 s.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     fixes = [("Loading the model", "517 s", "70 s",
               "It was reading the file in scattered pieces. Now it reads it once, start to finish."),
@@ -355,7 +384,7 @@ def build():
 
     # 12 · what we do not claim
     s = slide(prs)
-    y = head(s, "05 · When to use it", "Use it when the model will not fit. Not otherwise.",
+    y = head(s, "05 · When to use it", "Use it when the model does not fit.",
              "It is worth knowing where this helps, because it is the same thing as knowing where it does not.")
     cw = (W - 2 * M - Inches(0.3)) / 2
     card(s, M, y, cw, Inches(3.55), PANEL_HI, GREEN)
@@ -419,16 +448,18 @@ def build():
     ], size=16, gap=0.42)
     foot(s, "MeshAI", "mesh review · mesh tests · mesh diff · git pre-commit hook")
 
+    question(prs, "Does splitting it\nmake the answers worse?")
+
     # 8 · proof
     s = slide(prs)
-    y = head(s, "07 · Proof", "We measured it. We did not guess.",
+    y = head(s, "07 · Proof", "13% to 47%, on the same tests.",
              "Same 15 coding problems for every setup. We ran each answer against its own tests. Right or wrong, nothing in between.")
     cw = (W - 2 * M - Inches(0.3)) * 0.56
     card(s, M, y, cw, Inches(3.3))
     base = y + Inches(2.3)
-    for i, (lab, pct, h, col, sp) in enumerate([("laptop alone, 0.6B\n2 of 15", "13%", 0.4, LINE, "20.9 tok/s"),
-                                                ("laptop alone, 1.7B\n7 of 15", "47%", 1.45, GREEN, "8.6 tok/s"),
-                                                ("split over two, 1.7B\n7 of 15", "47%", 1.45, VIOLET, "7.4 tok/s")]):
+    for i, (lab, pct, h, col, sp) in enumerate([("0.6B alone\n2 of 15", "13%", 0.4, LINE, "20.9 tok/s"),
+                                                ("1.7B alone\n7 of 15", "47%", 1.45, GREEN, "8.6 tok/s"),
+                                                ("1.7B split\n7 of 15", "47%", 1.45, VIOLET, "7.4 tok/s")]):
         bx = M + Inches(0.45 + 2.1 * i)
         bar(s, bx, base - Inches(h), Inches(1.5), Inches(h), col)
         text(s, bx, base - Inches(h) - Inches(0.36), Inches(1.5), Inches(0.3), pct, 20,
@@ -444,41 +475,41 @@ def build():
         ("Splitting costs a little speed", "8.6 becomes 7.4 words a second"),
         ("Splitting does not change the answers", "the split got the same 8 wrong as the single device"),
     ], size=15, gap=0.62)
-    text(s, x2 + Inches(0.3), y + Inches(2.6), W - M - x2 - Inches(0.6), Inches(0.6),
-         "Speed drops a little. Accuracy jumps a lot. That is the trade.", 16, GREEN, SANS, line=1.3)
+    text(s, x2 + Inches(0.3), y + Inches(2.85), W - M - x2 - Inches(0.6), Inches(0.6),
+         "Speed drops a little. Accuracy jumps a lot.", 16, GREEN, SANS, line=1.3)
     foot(s, "MeshAI", "one button in the app runs this · results/REPORT.md")
 
     # 9 · what exists today
     s = slide(prs)
-    y = head(s, "08 · What exists today", "Nobody else pools phone memory.")
-    rows = [("Darkbloom", "a16z backed", "Rents out idle Macs and pays their owners",
-             "One whole model per Mac. Never a phone.", False),
-            ("exo", "47k stars", "Splits a model across your Macs and Linux boxes",
-             "The phone is not a real device in it.", False),
-            ("Petals", "peer reviewed", "A public swarm of volunteer servers",
-             "0.83 words a second. Dead since 2024.", False),
-            ("llama.cpp RPC", "we build on it", "Runs layers on another machine over a socket",
-             "You type the addresses by hand. Nothing decides.", False),
-            ("Ollama, LM Studio", "and the rest", "Great on one machine, one model",
-             "If it does not fit, you do not run it.", False),
-            ("MeshAI", "what we built", "Phones and laptops together. It decides who holds what, and says no when it should",
-             "Nothing. No product and no paper does this.", True)]
-    text(s, M, y, Inches(2.6), Inches(0.3), "SYSTEM", 13, FG3, MONO)
-    text(s, M + Inches(2.9), y, Inches(5), Inches(0.3), "WHAT IT DOES", 13, FG3, MONO)
-    text(s, M + Inches(8.2), y, Inches(4), Inches(0.3), "WHAT IT LEAVES TO YOU", 13, FG3, MONO)
-    for i, (n, tag, does, gap_, us) in enumerate(rows):
-        yy = y + Inches(0.42 + 0.63 * i)
-        if us:
-            card(s, M - Inches(0.14), yy - Inches(0.1), W - 2 * M + Inches(0.28), Inches(0.72), PANEL_HI, GREEN)
-        text(s, M, yy, Inches(2.8), Inches(0.3), n, 15, GREEN if us else FG, SANS, bold=True)
-        text(s, M, yy + Inches(0.26), Inches(2.8), Inches(0.25), tag, 10, FG3, MONO)
-        text(s, M + Inches(2.9), yy, Inches(5.1), Inches(0.5), does, 13, FG if us else FG2, SANS, line=1.25)
-        text(s, M + Inches(8.2), yy, Inches(4.2), Inches(0.5), gap_, 13, FG if us else FG2, SANS, line=1.25)
-    foot(s, "MeshAI", "each one checked against its own source, September 2026")
+    y = head(s, "08 · Literature survey", "Nobody else pools phone memory.")
+    rows = [("Petals", "arXiv 2209.01188", "A public swarm of volunteer servers", "0.83 words a second, across continents"),
+            ("prima.cpp", "arXiv 2504.08791", "Splits a model across a home cluster", "Leaves phones out on purpose"),
+            ("EdgeShard", "arXiv 2405.14371", "Splits across edge devices", "Jetsons and servers, not phones"),
+            ("exo", "github, 47k stars", "Splits across your Macs and Linux boxes", "A phone is not a real device in it"),
+            ("Darkbloom", "Eigen Labs", "Rents idle Macs and pays the owners", "One whole model per Mac. Never a phone"),
+            ("llama.cpp RPC", "we build on it", "Runs layers on another machine", "You type the split by hand"),
+            ("Ollama, LM Studio", "and the rest", "Great on one machine, one model", "If it does not fit, you cannot run it")]
+    text(s, M, y, Inches(2.9), Inches(0.3), "SYSTEM", 12, FG3, MONO)
+    text(s, M + Inches(3.1), y, Inches(4.6), Inches(0.3), "WHAT IT DOES", 12, FG3, MONO)
+    text(s, M + Inches(8.0), y, Inches(4.4), Inches(0.3), "WHY IT IS NOT THIS", 12, FG3, MONO)
+    for i, (n, src, does, gap_) in enumerate(rows):
+        yy = y + Inches(0.4 + 0.5 * i)
+        text(s, M, yy, Inches(2.9), Inches(0.3), n, 15, FG, SANS, bold=True)
+        text(s, M, yy + Inches(0.23), Inches(2.9), Inches(0.25), src, 11, FG3, MONO)
+        text(s, M + Inches(3.1), yy, Inches(4.7), Inches(0.3), does, 14, FG2, SANS)
+        text(s, M + Inches(8.0), yy, Inches(4.5), Inches(0.3), gap_, 14, FG2, SANS)
+    yy = y + Inches(0.4 + 0.5 * len(rows)) + Inches(0.12)
+    card(s, M - Inches(0.14), yy, W - 2 * M + Inches(0.28), Inches(0.62), PANEL_HI, GREEN)
+    text(s, M + Inches(0.1), yy + Inches(0.16), Inches(3), Inches(0.3), "MeshAI", 16, GREEN, SANS, bold=True)
+    text(s, M + Inches(3.1), yy + Inches(0.17), Inches(9), Inches(0.3),
+         "Phones and laptops together. It decides who holds what, and says no when it should.", 15, FG, SANS)
+    foot(s, "MeshAI", "a search of arXiv for multi-phone inference returns nothing")
+
+    question(prs, "Who pays for this,\nand what are they buying?")
 
     # 10 · the business
     s = slide(prs)
-    y = head(s, "09 · The business", "We rent memory, not speed.",
+    y = head(s, "09 · The business", "We rent memory.",
              "The models are open and free. What people do not have is the memory to hold them. A phone in a drawer is cheap memory.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     card(s, M, y, cw, Inches(3.4), PANEL_HI, GREEN)
@@ -522,7 +553,7 @@ def build():
 
     # 11 · can we build it
     s = slide(prs)
-    y = head(s, "10 · Feasibility", "It already runs. This is not a plan.")
+    y = head(s, "10 · Feasibility", "It ran this weekend.")
     cw = (W - 2 * M - Inches(0.6)) / 3
     card(s, M, y, cw, Inches(3.5), PANEL_HI, GREEN)
     text(s, M + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WHAT RAN", 11, GREEN, MONO)
@@ -575,7 +606,10 @@ def build():
         text(s, x, Inches(6.03), Inches(2.87), Inches(0.3), t, 12, GREEN, MONO, align=PP_ALIGN.CENTER)
     foot(s, "Team Maynards", "iQOO Hackathon 2026 · Developer Tools")
 
+    problems = check(prs)
     prs.save(str(OUT))
+    for line in problems:
+        print("  OVERFLOW:", line)
     print(f"wrote {OUT} ({len(prs.slides._sldIdLst)} slides, every word editable)")
 
 
