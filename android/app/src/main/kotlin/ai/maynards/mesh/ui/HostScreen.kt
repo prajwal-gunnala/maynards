@@ -117,7 +117,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
         )
         Box(Modifier.weight(1f)) {
             when (tab) {
-                0 -> MeshTab(host, runner, onChangeRole)
+                0 -> MeshTab(host, runner, onChangeRole, onGo = { tab = it })
                 1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap), onRun = { runner.run(it); tab = 2 },
                     peers = peers.values, downloads = downloads)
                 2 -> {
@@ -138,7 +138,8 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
 }
 
 @Composable
-private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onChangeRole: () -> Unit) {
+private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onChangeRole: () -> Unit,
+                    onGo: (Int) -> Unit) {
     val run by runner.state.collectAsState()
     val peers by host.peers.collectAsState()
     val token by host.token.collectAsState()
@@ -150,6 +151,7 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         val pool = me.usableBytes + peers.values.sumOf { it.specs.usableBytes }
+        NextStep(run, peers.size, onGo) { showQr = true }
         PageHeader(
             "Mesh",
             if (peers.isEmpty()) "This phone is the host. Add a device and their memory is pooled, so a model too big for either can run across both."
@@ -222,6 +224,53 @@ private fun layersOf(plan: ai.maynards.mesh.brain.Plan?, id: String): String =
 private fun PeerRow(p: Peer) = DeviceRow(
     p.specs.name, "${p.addr} · helper", p.specs.usableBytes, p.specs.heat, p.specs.battery, p.specs.charging,
     p.rttMs, HelperPurple, p.specs.kind == "laptop",
+)
+
+/**
+ * The one thing to do next, whatever the state is. Without this a person opening the app has to
+ * guess the order: add a device, pick a model, then ask it something. Now it says so, and the
+ * button goes there.
+ */
+@Composable
+private fun NextStep(
+    run: ai.maynards.mesh.brain.RunState,
+    peers: Int,
+    onGo: (Int) -> Unit,
+    onShowQr: () -> Unit,
+) {
+    val st = run.status
+    val (title, why, label, action, tone) = when {
+        st == ai.maynards.mesh.brain.RunState.Status.READY ->
+            Q5("Ready", "${run.plan?.model?.name ?: "A model"} is running. Ask it anything.", "Open the chat", { onGo(2) }, Term)
+        st == ai.maynards.mesh.brain.RunState.Status.LOADING || st == ai.maynards.mesh.brain.RunState.Status.STARTING ->
+            Q5("Starting", "${run.step}. A device that has held these layers before keeps them.", "Watch it", { onGo(2) }, Warn)
+        st == ai.maynards.mesh.brain.RunState.Status.FAILED ->
+            Q5("It stopped", run.step, "Pick another model", { onGo(1) }, Bad)
+        peers == 0 ->
+            Q5("Add a device", "This phone is alone. Another phone or a laptop brings its memory into the pool.",
+                "Show the code", onShowQr, Term)
+        else ->
+            Q5("Pick a model", "$peers device${if (peers == 1) "" else "s"} joined. Choose what to run across them.",
+                "Choose a model", { onGo(1) }, Term)
+    }
+    NBox(fill = if (tone == Term) HostGreen else if (tone == Bad) Danger else Yellow) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(tone, RoundedCornerShape(4.dp)))
+                Spacer(Modifier.width(9.dp))
+                Label("Next")
+            }
+            Title(title, 22)
+            Text(why, fontSize = 14.sp, color = Muted, lineHeight = 19.sp)
+            NButton(label, fill = Term, onClick = action)
+        }
+    }
+}
+
+/** Five things, because Kotlin's Triple stops at three. */
+private data class Q5(
+    val title: String, val why: String, val label: String,
+    val action: () -> Unit, val tone: androidx.compose.ui.graphics.Color,
 )
 
 @Composable

@@ -71,6 +71,7 @@ import ai.maynards.mesh.brain.Plan
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.material.icons.outlined.Warning
+import androidx.compose.ui.draw.clip
 
 /** One line of the conversation as shown on screen. */
 data class Bubble(val mine: Boolean, val text: String, val stats: Answer? = null, val photo: android.graphics.Bitmap? = null)
@@ -300,20 +301,19 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                 Icon(Icons.Outlined.Close, "Remove", Modifier.clickableNoRipple { photo = null }, tint = Ink)
             }
         }
-        Row(Modifier.padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            val shape = RoundedCornerShape(10.dp)
-            SquareButton(if (voice.listening) Icons.Outlined.MicOff else Icons.Outlined.Mic, if (voice.listening) HostGreen else Paper) {
+        Row(Modifier.padding(top = 10.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Action(if (voice.listening) Icons.Outlined.MicOff else Icons.Outlined.Mic,
+                if (voice.listening) "Listening…" else "Speak", voice.listening) {
                 if (voice.listening) voice.stop() else voice.start()
             }
-            Spacer(Modifier.width(6.dp))
-            SquareButton(Icons.Outlined.RateReview, if (busy) Cream else Paper) { reviewChanges() }
-            Spacer(Modifier.width(6.dp))
+            Action(Icons.Outlined.RateReview, "Review my changes", false, enabled = !busy) { reviewChanges() }
             if (canSee) {
-                SquareButton(Icons.Outlined.Image, if (photo != null) HostGreen else Paper) { gallery() }
-                Spacer(Modifier.width(6.dp))
-                SquareButton(Icons.Outlined.PhotoCamera, Paper) { camera() }
-                Spacer(Modifier.width(6.dp))
+                Action(Icons.Outlined.PhotoCamera, "Photo", photo != null) { camera() }
+                Action(Icons.Outlined.Image, "", photo != null) { gallery() }
             }
+        }
+        Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            val shape = RoundedCornerShape(10.dp)
             Box(Modifier.weight(1f).background(Paper, shape).border(Border, Ink, shape).padding(12.dp)) {
                 if (input.isEmpty()) Text("Ask anything", color = Muted)
                 BasicTextField(input, { input = it }, Modifier.fillMaxWidth(), textStyle = TextStyle(fontSize = 16.sp, color = Ink))
@@ -404,6 +404,30 @@ private fun BubbleView(b: Bubble) {
                         s.route?.substringAfter(':')?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), 10, Muted)
                 }
             }
+        }
+    }
+}
+
+/** An action with its name on it. An icon on its own is a guess. */
+@Composable
+private fun Action(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    on: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(999.dp)
+    Row(
+        Modifier.clip(shape).background(if (on) HostGreen else Raised).border(Border, if (on) Term else Line, shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = if (label.isEmpty()) 10.dp else 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, Modifier.size(17.dp), tint = if (!enabled) Faint else if (on) Term else Muted)
+        if (label.isNotEmpty()) {
+            Spacer(Modifier.width(7.dp))
+            Text(label, fontSize = 13.sp, color = if (!enabled) Faint else if (on) Term else Ink)
         }
     }
 }
