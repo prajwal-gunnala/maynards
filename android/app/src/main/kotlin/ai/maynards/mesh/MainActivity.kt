@@ -44,7 +44,15 @@ class MainActivity : ComponentActivity() {
         handleAdbExtras(intent)
 
         val app = application as MeshApp
+        ai.maynards.mesh.ui.Themes.load(this)
         setContent {
+            // status and navigation bar icons dark on the light theme, light on the dark one
+            androidx.compose.runtime.SideEffect {
+                androidx.core.view.WindowCompat.getInsetsController(window, window.decorView).apply {
+                    isAppearanceLightStatusBars = ai.maynards.mesh.ui.Themes.light
+                    isAppearanceLightNavigationBars = ai.maynards.mesh.ui.Themes.light
+                }
+            }
             MeshTheme {
                 Surface(Modifier.fillMaxSize().systemBarsPadding(), color = MaterialTheme.colorScheme.background) {
                     var role by remember { mutableStateOf(RoleStore.load(this) ?: Role.HELPER) }   // phones help; laptops host

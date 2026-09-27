@@ -148,6 +148,8 @@
   .chips span { font:11px var(--mono); color:var(--fg-3); border:1px solid var(--line-soft); border-radius:999px; padding:1px 8px; }
   .chips span.who { color:var(--ok); border-color:#1e3a2a; }
   .chips span.who.vision { color:var(--helper); border-color:#2e2a45; }
+  .latest { position:fixed; right:36px; bottom:96px; z-index:6; border-radius:999px; padding:6px 14px; font:12px var(--mono); }
+  .latest.hide { display:none; }
   .composer { position:sticky; bottom:0; background:linear-gradient(180deg, rgba(9,9,11,0), var(--bg) 22%); padding:18px 0 4px; }
   .composer .box { display:flex; gap:8px; align-items:flex-end; background:var(--card); border:1px solid var(--line);
                    border-radius:10px; padding:8px; }
@@ -334,15 +336,16 @@
     <!-- ================================================================ CHAT -->
     <section class="page hide" data-p="chat">
       <div class="head">
-        <div><h1>Chat</h1><p>The same endpoint your tools use. Attach a photo and it goes to a device running a vision model.</p></div>
+        <div><h1>Chat</h1><p id="chat-sub">The same endpoint your tools use.</p></div>
         <div class="act" id="chat-act"></div>
       </div>
       <div class="card" id="apibox"></div>
       <div id="log" style="margin-top:16px"></div>
+      <button type="button" class="latest hide" id="latest">↓ Latest</button>
       <form class="composer" id="f">
         <div class="quiet mono" id="preview" style="font-size:11.5px; margin-bottom:6px"></div>
         <div class="box">
-          <label class="btn ghost" title="Attach a photo"><svg class="i"><use href="#i-image"/></svg>
+          <label class="btn ghost" title="Attach a photo" id="attach"><svg class="i"><use href="#i-image"/></svg>
             <input type="file" id="img" accept="image/*" hidden></label>
           <textarea id="q" placeholder="Ask anything"></textarea>
           <button class="primary" id="send"><svg class="i"><use href="#i-in"/></svg>Send</button>
@@ -842,7 +845,15 @@ function renderRun() {
 }
 
 /* --------------------------------------------------------------------- chat */
+// a photo only helps when the model that will answer can read one: the running model has a projector, or a phone on
+// USB runs a vision model (the Vision + 8B setup)
+const photoOK = () => (S.run.status === 'ready' && S.run.vision) || usb.some(d => d.running && d.vision);
 function renderChat() {
+  const ok = photoOK();
+  $('attach').classList.toggle('hide', !ok);
+  $('chat-sub').textContent = ok ? 'The same endpoint your tools use. Attach a photo and it goes to the vision model.'
+                                 : 'The same endpoint your tools use. This model reads text only.';
+  if (!ok && image) { image = null; $('preview').textContent = ''; $('img').value = ''; }
   $('chat-act').innerHTML = S.run.status === 'ready'
     ? `<button class="ghost" data-go2="measure">${ic('chart')}Measure this setup</button>` : '';
   $('apibox').innerHTML = `<div class="cb tight row wrap between">
@@ -864,11 +875,21 @@ const md = t => String(t).split('```').map((chunk, i) => i % 2
   ? `<pre>${esc(chunk.replace(/^[a-z]*\n/i, ''))}</pre>`
   : esc(chunk).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>')).join('');
 
+const atBottom = () => innerHeight + scrollY >= document.body.scrollHeight - 120;
+let follow = true;              // stay pinned to the newest words until the reader scrolls up
+addEventListener('scroll', () => { follow = atBottom(); $('latest').classList.toggle('hide', follow || !streaming); }, { passive: true });
+$('latest').onclick = () => { follow = true; scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }); $('latest').classList.add('hide'); };
+const keepUp = () => { if (follow) scrollTo(0, document.body.scrollHeight); };
 function bubble(cls, html) {
   const d = document.createElement('div');
   d.className = 'msg ' + cls; d.innerHTML = html;
-  $('log').appendChild(d); scrollTo(0, document.body.scrollHeight);
+  $('log').appendChild(d); follow = true; keepUp();
   return d;
+}
+let streaming = null;           // the AbortController of the answer being written, if any
+function setSending(on) {
+  $('send').innerHTML = on ? `${ic('stop')}Stop` : `<svg class="i"><use href="#i-in"/></svg>Send`;
+  $('send').classList.toggle('primary', !on);
 }
 $('img').onchange = e => {
   const f = e.target.files && e.target.files[0];
@@ -896,13 +917,15 @@ $('img').onchange = e => {
 };
 $('f').onsubmit = async e => {
   e.preventDefault();
+  if (streaming) { streaming.abort(); return; }          // the button says Stop while an answer is being written
   const text = $('q').value.trim();
   if (!text) return;
   if (S && S.run.status !== 'ready' && !usb.some(d => d.running)) {
     toast('nothing is running yet — start a model first');
     return;
   }
-  $('q').value = ''; $('send').disabled = true;
+  if (image && !photoOK()) { toast('this model reads text only'); image = null; $('preview').textContent = ''; }
+  $('q').value = '';
   const hadImage = !!image;
   bubble('me', (hadImage ? `<img src="${image}">` : '') + md(text));
   const content = hadImage ? [{ type: 'text', text }, { type: 'image_url', image_url: { url: image } }] : text;
@@ -910,12 +933,16 @@ $('f').onsubmit = async e => {
   image = null; $('preview').textContent = ''; $('img').value = '';
   const out = bubble('', '…');
   const t0 = performance.now();
-  let acc = '', first = null, timings = null;
+  let acc = '', first = null, timings = null, frame = 0;
+  streaming = new AbortController(); setSending(true);
+  // redraw at most once per frame: re-rendering on every token makes long answers stutter
+  const paint = () => { frame = 0; out.innerHTML = md(acc) + `<div class="chips"><span>${((performance.now() - t0) / 1000).toFixed(1)} s</span></div>`; keepUp(); };
   const tick = setInterval(() => { if (!acc) out.textContent = `thinking… ${((performance.now() - t0) / 1000).toFixed(1)} s`; }, 200);
   try {
     const r = await fetch('/v1/chat/completions', {
       method: 'POST', headers: { 'content-type': 'application/json', 'x-mesh-client': 'page' },
       body: JSON.stringify({ messages: msgs, stream: true, max_tokens: 1024 }),
+      signal: streaming.signal,
     });
     if (!r.ok || !r.body) {
       let why = `HTTP ${r.status}`;
@@ -948,8 +975,7 @@ $('f').onsubmit = async e => {
         if (piece) {
           if (first === null) first = performance.now() - t0;
           acc += piece;
-          out.innerHTML = md(acc) + `<div class="chips"><span>${((performance.now() - t0) / 1000).toFixed(1)} s</span></div>`;
-          scrollTo(0, document.body.scrollHeight);
+          if (!frame) frame = requestAnimationFrame(paint);
         }
       }
     }
@@ -960,11 +986,18 @@ $('f').onsubmit = async e => {
     history.push({ role: 'user', content: text }, { role: 'assistant', content: acc });
     if (history.length > 20) history = history.slice(-20);   // keep the prompt inside the context window
   } catch (err) {
-    if (err) out.textContent = 'Error: ' + (err.message || err);
+    if (err && err.name === 'AbortError') {
+      // stopped by the reader: keep what was written; closing the stream stops the engine too
+      cancelAnimationFrame(frame);
+      out.innerHTML = (acc ? md(acc) : '<span class="quiet">Stopped before the first word.</span>') + `<div class="chips">${chipRow({
+        who: 'stopped', first_ms: first, total_ms: performance.now() - t0 })}</div>`;
+      if (acc) history.push({ role: 'user', content: text }, { role: 'assistant', content: acc });
+    } else if (err) out.textContent = 'Error: ' + (err.message || err);
   } finally {
-    clearInterval(tick); $('send').disabled = false; $('q').focus();
+    clearInterval(tick); streaming = null; setSending(false); $('latest').classList.add('hide'); keepUp(); $('q').focus();
   }
 };
+addEventListener('keydown', e => { if (e.key === 'Escape' && streaming) streaming.abort(); });
 $('q').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } };
 
 /* ------------------------------------------------------------------ measure */

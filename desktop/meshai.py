@@ -30,6 +30,7 @@ HOST = os.environ.get("MESH_HOST_URL", "http://localhost:8080")
 CTX_FOR_AIDER = 16384
 LOG = os.path.expanduser("~/.cache/meshai/app.log")
 BG = Gdk.RGBA(9 / 255, 9 / 255, 11 / 255, 1)
+LIGHT_BG = Gdk.RGBA(247 / 255, 247 / 255, 248 / 255, 1)
 
 
 def log(msg):
@@ -92,6 +93,13 @@ class Window(Gtk.Window):
             self.pick_folder()
         elif msg.get("kind") == "dashboard":
             self.open_dashboard()
+        elif msg.get("kind") == "theme":
+            self.set_theme(msg.get("theme") == "light")
+
+    def set_theme(self, light):
+        """The page picks light or dark; the window and its dialogs follow, so nothing flashes the other colour."""
+        Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", not light)
+        self.web.set_background_color(LIGHT_BG if light else BG)
 
     def pick_folder(self):
         dlg = Gtk.FileChooserDialog(title="Choose a project (a git repository)", transient_for=self,

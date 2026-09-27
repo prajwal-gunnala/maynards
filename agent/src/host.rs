@@ -1100,7 +1100,9 @@ fn state(hub: &Hub) -> Value {
         "last_run": last_run,
         "caps": caps,
         "api": {"key": hub.api_key, "urls": laptop_ips().iter().map(|(ip, _)| format!("http://{ip}:{}/v1", hub.api_port)).collect::<Vec<_>>()},
+        // can the running model read a photo? Only with a projector (mmproj) next to it; the chat hides the photo button otherwise
         "run": {"status": run.status, "step": run.step, "model": run.model, "plan": run.plan,
+                "vision": scan_models(hub).iter().any(|m| m.name == run.model && m.proj.is_some()),
                 "seconds": run.started.map(|t| t.elapsed().as_secs())},
     })
 }

@@ -6,11 +6,24 @@
 <title>MeshAI</title>
 <style>
   :root {
-    --bg:#09090b; --card:#111113; --raised:#18181b; --line:#26262a; --line-soft:#1c1c20;
-    --fg:#ededed; --fg-2:#8b8b93; --fg-3:#63636b;
+    --bg:#09090b; --card:#111113; --raised:#18181b; --line:#26262a; --line-soft:#1c1c20; --hover:var(--hover);
+    --fg:#ededed; --fg-2:#8b8b93; --fg-3:#63636b; --code:#c9c9d1;
     --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --helper:#a78bfa; --info:#60a5fa;
+    --ok-ring:#4ade8026; --ok-line:#4ade8055; --bad-line:#f8717155; --host-fill:#10231a; --scrim:#000000aa;
+    --add-bg:#4ade8014; --add-fg:#86efac; --del-bg:#f8717114; --del-fg:#fca5a5; --warn-bg:#2a2210;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, "Noto Sans", sans-serif;
     --mono: ui-monospace, "JetBrains Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    color-scheme: dark;
+  }
+  /* light: every text colour keeps at least 4.5:1 against its surface; the accents are one shade darker so
+     green, amber and red stay readable on white */
+  :root[data-theme="light"] {
+    --bg:#f7f7f8; --card:#ffffff; --raised:#f1f1f3; --line:#e2e2e6; --line-soft:#ececef; --hover:#c8c8cf;
+    --fg:#18181b; --fg-2:#52525b; --fg-3:#6b6b73; --code:#27272a;
+    --ok:#15803d; --warn:#b45309; --bad:#b91c1c; --helper:#6d28d9; --info:#1d4ed8;
+    --ok-ring:#15803d26; --ok-line:#15803d55; --bad-line:#b91c1c44; --host-fill:#dcfce7; --scrim:#18181b66;
+    --add-bg:#dcfce7; --add-fg:#166534; --del-bg:#fee2e2; --del-fg:#991b1b; --warn-bg:#fef3c7;
+    color-scheme: light;
   }
   * { box-sizing:border-box; }
   html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.5 var(--sans); }
@@ -27,15 +40,15 @@
   /* ---------- shared */
   .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 12px; border-radius:7px;
          border:1px solid var(--line); background:var(--raised); cursor:pointer; white-space:nowrap; font-size:13px; }
-  .btn:hover { border-color:#3a3a40; } .btn:disabled { opacity:.35; cursor:not-allowed; }
+  .btn:hover { border-color:var(--hover); } .btn:disabled { opacity:.35; cursor:not-allowed; }
   .btn.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); font-weight:600; }
   .btn.ghost { background:none; }
   .chip { display:inline-flex; align-items:center; gap:6px; padding:2px 9px; border:1px solid var(--line); border-radius:999px;
           font:12px var(--mono); color:var(--fg-2); background:var(--bg); white-space:nowrap; }
   .dot { width:7px; height:7px; border-radius:50%; background:var(--fg-3); flex:none; display:inline-block; }
   .dot.ok { background:var(--ok); } .dot.warn { background:var(--warn); } .dot.bad { background:var(--bad); }
-  .dot.live { background:var(--ok); box-shadow:0 0 0 3px #4ade8026; animation:pulse 1.4s infinite; }
-  @keyframes pulse { 50% { box-shadow:0 0 0 6px #4ade8000; } }
+  .dot.live { background:var(--ok); box-shadow:0 0 0 3px var(--ok-ring); animation:pulse 1.4s infinite; }
+  @keyframes pulse { 50% { box-shadow:0 0 0 6px transparent; } }
   .label { font:500 11px var(--mono); color:var(--fg-3); letter-spacing:.8px; text-transform:uppercase; }
   .sec { margin-top:28px; }
   .sechead { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
@@ -58,7 +71,7 @@
   .stepper { display:flex; gap:6px; margin-top:18px; flex-wrap:wrap; }
   .st { display:flex; align-items:center; gap:8px; padding:6px 12px 6px 6px; border:1px solid var(--line); border-radius:999px; font-size:13px; color:var(--fg-2); }
   .st i { width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font:600 11px var(--mono); font-style:normal; border:1px solid var(--line); }
-  .st.done { color:var(--fg); } .st.done i { color:var(--ok); border-color:#4ade8055; }
+  .st.done { color:var(--fg); } .st.done i { color:var(--ok); border-color:var(--ok-line); }
   .st.now { color:var(--fg); border-color:var(--fg-2); } .st.now i { border-color:var(--fg); color:var(--fg); }
   .st.later { opacity:.45; }
   .hint { margin-top:10px; font-size:13px; color:var(--fg-2); }
@@ -109,7 +122,7 @@
   .panel h2 { font-size:14px; margin:0; font-weight:600; }
   .panel .sechead { margin-bottom:12px; }
   .opt { display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; cursor:pointer; background:var(--bg); }
-  .opt:hover { border-color:#3a3a40; } .opt.sel { border-color:var(--fg-2); }
+  .opt:hover { border-color:var(--hover); } .opt.sel { border-color:var(--fg-2); }
   .opt .t { flex:1; min-width:0; } .opt .t small { display:block; font:11.5px var(--mono); color:var(--fg-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .runline { display:flex; align-items:center; gap:10px; margin-top:12px; }
   .runline .t { flex:1; min-width:0; font-size:12.5px; } .runline .t small { display:block; font:11.5px var(--mono); color:var(--fg-2); }
@@ -118,35 +131,36 @@
   .perm .t { flex:1; } .perm .t small { display:block; font-size:12px; color:var(--fg-2); }
   .sw { width:34px; height:20px; border-radius:999px; background:var(--line); position:relative; cursor:pointer; flex:none; border:0; padding:0; }
   .sw::after { content:""; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:var(--fg-2); transition:left .15s; }
-  .sw.on { background:#4ade8055; } .sw.on::after { left:17px; background:var(--ok); }
-  .sw.danger.on { background:#f8717155; } .sw.danger.on::after { background:var(--bad); }
+  .sw.on { background:var(--ok-line); } .sw.on::after { left:17px; background:var(--ok); }
+  .sw.danger.on { background:var(--bad-line); } .sw.danger.on::after { background:var(--bad); }
   .field { display:flex; align-items:center; gap:8px; margin-top:10px; }
   .field input { flex:1; min-width:0; background:var(--bg); border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:12.5px var(--mono); }
   textarea.ask { width:100%; margin-top:12px; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; resize:vertical; min-height:74px; outline:0; }
-  textarea.ask:focus { border-color:#3a3a40; }
+  textarea.ask:focus { border-color:var(--hover); }
   .sendrow { display:flex; align-items:center; gap:8px; margin-top:8px; } .sendrow .grow { flex:1; font:12px var(--mono); color:var(--fg-3); }
   .task { margin-top:14px; padding:12px 14px; border:1px solid var(--line); border-radius:10px; background:var(--bg); }
   .task .ttl { font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .task .line { display:flex; gap:8px; align-items:center; font:12px var(--mono); color:var(--fg-2); margin-top:6px; flex-wrap:wrap; }
   pre { margin:8px 0 0; padding:10px 12px; background:var(--card); border:1px solid var(--line); border-radius:8px;
-        font:11.5px/1.5 var(--mono); color:#c9c9d1; white-space:pre-wrap; word-break:break-word; max-height:200px; overflow:auto; }
+        font:11.5px/1.5 var(--mono); color:var(--code); white-space:pre-wrap; word-break:break-word; max-height:200px; overflow:auto; }
   details summary { cursor:pointer; font:12px var(--mono); color:var(--fg-2); margin-top:8px; }
   .recent button { display:flex; width:100%; gap:8px; align-items:center; padding:6px 0; background:none; border:0; cursor:pointer; color:var(--fg-2); text-align:left; font-size:12.5px; }
   .recent button:hover { color:var(--fg); } .recent .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  .modal { position:fixed; inset:0; background:#000a; display:none; place-items:center; z-index:9; }
+  .modal { position:fixed; inset:0; background:var(--scrim); display:none; place-items:center; z-index:9; }
   .modal.on { display:grid; }
   .modal .card { width:min(900px, 90vw); max-height:84vh; display:flex; flex-direction:column; }
   .modal .mh { display:flex; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); gap:10px; }
   .diff { overflow:auto; padding:10px 0; font:12px/1.5 var(--mono); }
   .diff div { padding:0 16px; white-space:pre-wrap; word-break:break-all; }
-  .diff .a { background:#4ade8014; color:#86efac; } .diff .d { background:#f8717114; color:#fca5a5; } .diff .x { color:var(--info); }
-  .banner { display:none; padding:8px 28px; background:#2a2210; color:var(--warn); font:12px var(--mono); }
+  .diff .a { background:var(--add-bg); color:var(--add-fg); } .diff .d { background:var(--del-bg); color:var(--del-fg); } .diff .x { color:var(--info); }
+  .banner { display:none; padding:8px 28px; background:var(--warn-bg); color:var(--warn); font:12px var(--mono); }
   .banner.on { display:block; }
   @media (max-width: 1300px) { .tiles { grid-template-columns:repeat(3, minmax(0,1fr)); } .grid2 { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
+<script>try { document.documentElement.dataset.theme = localStorage.getItem('theme') || 'dark'; } catch (e) {}</script>
 <div class="app">
   <div class="left"><div class="banner" id="banner">Reconnecting…</div><div class="wrap" id="cluster"></div></div>
   <div class="right" id="side"></div>
@@ -217,7 +231,8 @@ function renderCluster() {
       <span class="chip"><span class="dot ${run.status === 'ready' ? 'ok' : run.status === 'loading' || run.status === 'starting' ? 'live' : 'warn'}"></span>${esc(run.model || 'no model')} · ${esc(run.status || 'idle')}</span>
       ${(m.pinned || {}).model ? '<span class="chip ok">📌 pinned</span>' : ''}<span class="grow"></span>
       <button class="btn" onclick="pairing=!pairing;render()">${pairing ? 'Hide code' : 'Pair a phone'}</button>
-      <button class="btn ghost" onclick="native({kind:'dashboard'})">Dashboard</button></div>
+      <button class="btn ghost" onclick="native({kind:'dashboard'})">Dashboard</button>
+      <button class="btn ghost" onclick="toggleTheme()" title="Light or dark">${document.documentElement.dataset.theme === 'light' ? '☾ Dark' : '☀ Light'}</button></div>
     <div class="stepper">${st.map((s, i) => { let c = s.ok ? 'done' : 'now'; if (!s.ok) { if (seen) c = 'later'; seen = true; }
       return `<div class="st ${c}"><i>${s.ok ? '✓' : i + 1}</i>${s.k}</div>`; }).join('')}</div>
     ${next ? `<div class="hint">Next: ${next.hint}</div>` : '<div class="hint ok">Ready: the agent on the right can work.</div>'}`;
@@ -286,21 +301,21 @@ const meter = (k, v, p, color) => `<div class="meter"><div class="t"><span>${k}<
 
 function meshMap(m, slices) {
   const peers = m.peers || [], W = 520, H = 300, cx = W / 2, cy = H / 2 + 6, R = 108;
-  const web = [0.35, 0.65, 1].map(f => `<polygon points="${[...Array(8)].map((_, i) => { const a = i / 8 * Math.PI * 2 - Math.PI / 2; return `${cx + Math.cos(a) * R * f * 1.15},${cy + Math.sin(a) * R * f}`; }).join(' ')}" fill="none" stroke="#1c1c20"/>`).join('') +
-    [...Array(8)].map((_, i) => { const a = i / 8 * Math.PI * 2 - Math.PI / 2; return `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * R * 1.15}" y2="${cy + Math.sin(a) * R}" stroke="#1c1c20"/>`; }).join('');
+  const web = [0.35, 0.65, 1].map(f => `<polygon points="${[...Array(8)].map((_, i) => { const a = i / 8 * Math.PI * 2 - Math.PI / 2; return `${cx + Math.cos(a) * R * f * 1.15},${cy + Math.sin(a) * R * f}`; }).join(' ')}" style="fill:none;stroke:var(--line-soft)"/>`).join('') +
+    [...Array(8)].map((_, i) => { const a = i / 8 * Math.PI * 2 - Math.PI / 2; return `<line x1="${cx}" y1="${cy}" x2="${cx + Math.cos(a) * R * 1.15}" y2="${cy + Math.sin(a) * R}" style="stroke:var(--line-soft)"/>`; }).join('');
   const nodes = peers.map((p, i) => { const a = Math.PI + i / Math.max(peers.length, 1) * Math.PI * 2;   // first phone left, then around
     return { p, x: cx + Math.cos(a) * R * 1.55, y: cy + Math.sin(a) * R * 0.9 }; });
-  const lines = nodes.map(({ p, x, y }) => { const c = (p.rtt_ms ?? 0) > 60 ? '#f87171' : p.link === 'USB cable' ? '#4ade80' : '#fbbf24';
-    return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${c}" stroke-width="1.5" stroke-dasharray="${p.link === 'USB cable' ? '' : '4 4'}"/>
-      <text x="${(cx + x) / 2}" y="${(cy + y) / 2 - 8}" fill="#8b8b93" font-size="11" font-family="monospace" text-anchor="middle">${p.rtt_ms != null ? Math.round(p.rtt_ms) + ' ms' : ''}${p.link === 'USB cable' ? ' · USB' : p.link ? ' · ' + esc(p.link) : ''}</text>`; }).join('');
+  const lines = nodes.map(({ p, x, y }) => { const c = (p.rtt_ms ?? 0) > 60 ? 'var(--bad)' : p.link === 'USB cable' ? 'var(--ok)' : 'var(--warn)';
+    return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" style="stroke:${c}" stroke-width="1.5" stroke-dasharray="${p.link === 'USB cable' ? '' : '4 4'}"/>
+      <text x="${(cx + x) / 2}" y="${(cy + y) / 2 - 8}" style="fill:var(--fg-2)" font-size="11" font-family="monospace" text-anchor="middle">${p.rtt_ms != null ? Math.round(p.rtt_ms) + ' ms' : ''}${p.link === 'USB cable' ? ' · USB' : p.link ? ' · ' + esc(p.link) : ''}</text>`; }).join('');
   const lay = id => { const s = slices.find(x => x.id === id); return s ? `L${s.from}–${s.to - 1}` : ''; };
-  const circles = nodes.map(({ p, x, y }) => `<circle cx="${x}" cy="${y}" r="24" fill="#111113" stroke="#a78bfa" stroke-width="1.5"/>
-      <text x="${x}" y="${y + 4}" fill="#a78bfa" font-size="11" font-family="monospace" text-anchor="middle">${esc(String(p.name).split('·').pop().trim())}</text>
-      <text x="${x}" y="${y + 40}" fill="#8b8b93" font-size="11" font-family="monospace" text-anchor="middle">${lay(p.id)}</text>`).join('');
+  const circles = nodes.map(({ p, x, y }) => `<circle cx="${x}" cy="${y}" r="24" style="fill:var(--card);stroke:var(--helper)" stroke-width="1.5"/>
+      <text x="${x}" y="${y + 4}" style="fill:var(--helper)" font-size="11" font-family="monospace" text-anchor="middle">${esc(String(p.name).split('·').pop().trim())}</text>
+      <text x="${x}" y="${y + 40}" style="fill:var(--fg-2)" font-size="11" font-family="monospace" text-anchor="middle">${lay(p.id)}</text>`).join('');
   return `<div class="sechead" style="padding:14px 16px 0;margin:0"><span class="label">Mesh</span></div><svg viewBox="0 0 ${W} ${H}">${web}${lines}
-    <circle cx="${cx}" cy="${cy}" r="30" fill="#10231a" stroke="#4ade80" stroke-width="1.5"/>
-    <text x="${cx}" y="${cy + 4}" fill="#4ade80" font-size="12" font-family="monospace" text-anchor="middle">host</text>
-    <text x="${cx}" y="${cy + 46}" fill="#8b8b93" font-size="11" font-family="monospace" text-anchor="middle">${lay('laptop')}</text>${circles}</svg>`;
+    <circle cx="${cx}" cy="${cy}" r="30" style="fill:var(--host-fill);stroke:var(--ok)" stroke-width="1.5"/>
+    <text x="${cx}" y="${cy + 4}" style="fill:var(--ok)" font-size="12" font-family="monospace" text-anchor="middle">host</text>
+    <text x="${cx}" y="${cy + 46}" style="fill:var(--fg-2)" font-size="11" font-family="monospace" text-anchor="middle">${lay('laptop')}</text>${circles}</svg>`;
 }
 
 // ---------------------------------------------------------------- right: the model, then the agent
@@ -369,6 +384,8 @@ function render() {
 }
 
 // ---------------------------------------------------------------- actions
+function toggleTheme() { const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = t; store('theme', t); native({ kind: 'theme', theme: t }); render(); }
 function pickModel(file) { chosen.model = file; store('model', file); render(); }
 function pickProject(path) { chosen.project = path; store('project', path); current = null; render(); }
 function togglePerm(k) { perms[k] = !perms[k]; store('perms', JSON.stringify(perms)); render(); }
@@ -414,6 +431,7 @@ async function pollTask() {
           if (d.events.length && document.activeElement?.tagName !== 'INPUT') render(); } catch (e) {}
   }
 }
+native({ kind: 'theme', theme: document.documentElement.dataset.theme });
 poll(); setInterval(poll, 2000); setInterval(pollTask, 700);
 </script>
 </body>

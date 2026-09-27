@@ -71,7 +71,7 @@ fun MeshWeb(
                 val t = if (out) pulse * 2f else (1f - pulse) * 2f
                 val bead = Offset(c.x + (p.x - c.x) * t, c.y + (p.y - c.y) * t)
                 // the return leg has to be visible on a dark page: HelperPurple is a panel fill, not an accent
-                drawCircle(if (out) Term else Color(0xFFA78BFA), 8f, bead)
+                drawCircle(if (out) Term else Helper, 8f, bead)
                 drawCircle(Ink.copy(alpha = 0.6f), 8f, bead, style = Stroke(2f))
             }
             drawNode(p, r * 0.13f, n.fill)

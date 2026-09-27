@@ -67,11 +67,23 @@ fun Header() {
             ) { Text("M", color = Ink, fontWeight = FontWeight.Black, fontSize = 26.sp) }
         }
         Spacer(Modifier.width(14.dp))
-        Column {
+        Column(Modifier.weight(1f)) {
             Title("MeshAI", 26)
             Small("Your devices. One brain.")
         }
+        ThemeSwitch()
     }
+}
+
+/** Light or dark, remembered on this phone. */
+@Composable
+fun ThemeSwitch() {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Box(
+        Modifier.size(40.dp).background(Raised, RoundedCornerShape(20.dp)).border(Border, Line, RoundedCornerShape(20.dp))
+            .clickable { Themes.set(ctx, !Themes.light) },
+        contentAlignment = Alignment.Center,
+    ) { Text(if (Themes.light) "☾" else "☀", color = Ink, fontSize = 18.sp) }
 }
 
 @Composable

@@ -61,7 +61,7 @@ fun NButton(
     val primary = fill == Term
     val bg = when {
         !enabled -> Raised
-        primary -> if (pressed) Color.White else Ink
+        primary -> if (pressed) Pressed else Ink
         pressed -> Line
         else -> Raised
     }
