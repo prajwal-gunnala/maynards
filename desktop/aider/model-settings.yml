@@ -1,0 +1,11 @@
+# Aider's settings for the model the mesh serves. The name is ours: llama-server answers
+# whatever model name it is asked for with the one model it has loaded.
+- name: openai/mesh
+  edit_format: diff          # search/replace blocks: small answers, which matters at ~7 tok/s
+  use_repo_map: true
+  send_undo_reply: false
+  lazy: false
+  reminder: user
+  examples_as_sys_msg: true
+  extra_params:
+    max_tokens: 2048
