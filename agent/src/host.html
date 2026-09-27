@@ -15,6 +15,7 @@
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     --rail: 248px;
+    color-scheme: dark;       /* native controls (selects, scrollbars) draw dark too */
   }
   * { box-sizing:border-box; }
   html, body { height:100%; }
@@ -100,6 +101,10 @@
   input, select, textarea { font:13px var(--mono); background:#0d0d0f; color:var(--fg); border:1px solid var(--line);
                             border-radius:6px; padding:7px 10px; }
   input:focus, select:focus, textarea:focus { outline:none; border-color:#3a3a42; }
+  /* WebKitGTK draws a light native menu otherwise, grey text on white */
+  select { -webkit-appearance:none; appearance:none; padding-right:30px; cursor:pointer;
+           background:#0d0d0f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b8b93' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; }
+  select option { background:#111113; color:var(--fg); }
   input.cap { width:74px; }
 
   .tag { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:999px;
@@ -148,6 +153,32 @@
   .chips span { font:11px var(--mono); color:var(--fg-3); border:1px solid var(--line-soft); border-radius:999px; padding:1px 8px; }
   .chips span.who { color:var(--ok); border-color:#1e3a2a; }
   .chips span.who.vision { color:var(--helper); border-color:#2e2a45; }
+  /* agent */
+  .agent { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; align-items:start; }
+  .agent-main { display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .agent-side { display:flex; flex-direction:column; gap:14px; }
+  .agent textarea { width:100%; resize:vertical; font:13.5px/1.5 var(--sans); }
+  .steps { display:flex; flex-direction:column; }
+  .step { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:12px; padding:10px 0; border-top:1px solid var(--line-soft); align-items:start; }
+  .step:first-child { border-top:0; }
+  .step .ico { font:13px var(--mono); color:var(--fg-3); text-align:center; padding-top:1px; }
+  .step small { display:block; font:12px var(--mono); color:var(--fg-3); }
+  .step .when { font:11.5px var(--mono); color:var(--fg-3); white-space:nowrap; }
+  .prompt { background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:11px 14px; white-space:pre-wrap; font-size:13.5px; }
+  .sw { width:34px; height:20px; border-radius:999px; background:var(--line); position:relative; cursor:pointer; border:0; padding:0; flex:none; }
+  .sw::after { content:""; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:var(--fg-2); transition:left .15s; }
+  .sw.on { background:#1e3a2a; } .sw.on::after { left:17px; background:var(--ok); }
+  .sw.danger.on { background:#3a2222; } .sw.danger.on::after { background:var(--bad); }
+  .perm { display:flex; gap:12px; align-items:center; padding:8px 0; border-top:1px solid var(--line-soft); }
+  .perm:first-child { border-top:0; } .perm .t { flex:1; font-size:13px; } .perm small { display:block; color:var(--fg-3); font-size:12px; }
+  .hist { display:flex; gap:9px; align-items:center; width:100%; padding:7px 0; background:none; border:0; border-top:1px solid var(--line-soft);
+          border-radius:0; text-align:left; color:var(--fg-2); font-size:12.5px; cursor:pointer; }
+  .hist:first-child { border-top:0; } .hist:hover { color:var(--fg); } .hist.on { color:var(--fg); }
+  .hist .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .diffv { max-height:460px; overflow:auto; font:12px/1.5 var(--mono); background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:8px 0; }
+  .diffv div { padding:0 12px; white-space:pre-wrap; word-break:break-all; }
+  .diffv .a { background:#4ade8014; color:#86efac; } .diffv .d { background:#f8717114; color:#fca5a5; } .diffv .x { color:var(--info); }
+  @media (max-width: 1100px) { .agent { grid-template-columns:1fr; } }
   .latest { position:fixed; right:36px; bottom:96px; z-index:6; border-radius:999px; padding:6px 14px; font:12px var(--mono); }
   .latest.hide { display:none; }
   .composer { position:sticky; bottom:0; background:linear-gradient(180deg, rgba(9,9,11,0), var(--bg) 22%); padding:18px 0 4px; }
@@ -226,8 +257,9 @@
       <div class="group">Work</div>
       <a class="nav" data-go="run"><svg class="i"><use href="#i-layers"/></svg>Run<span class="k">4</span></a>
       <a class="nav" data-go="chat"><svg class="i"><use href="#i-chat"/></svg>Chat<span class="k">5</span></a>
-      <a class="nav" data-go="measure"><svg class="i"><use href="#i-chart"/></svg>Measure<span class="k">6</span></a>
-      <a class="nav" data-go="checks"><svg class="i"><use href="#i-health"/></svg>Diagnostics<span class="k">7</span></a>
+      <a class="nav" data-go="agent"><svg class="i"><use href="#i-hash"/></svg>Agent<span class="k">6</span></a>
+      <a class="nav" data-go="measure"><svg class="i"><use href="#i-chart"/></svg>Measure<span class="k">7</span></a>
+      <a class="nav" data-go="checks"><svg class="i"><use href="#i-health"/></svg>Diagnostics<span class="k">8</span></a>
     </nav>
     <div class="rail-foot">
       <div class="r"><span>engine</span><span class="row" style="gap:6px"><i class="dot" id="f-dot"></i><b id="f-state">–</b></span></div>
@@ -353,6 +385,30 @@
       </form>
     </section>
 
+    <!-- =============================================================== AGENT -->
+    <section class="page hide" data-p="agent">
+      <div class="head">
+        <div><h1>Agent</h1><p>Aider changes a project with the model on the mesh. Your tests decide when it is done, and every change is a commit you can undo.</p></div>
+        <div class="act" id="agent-act"></div>
+      </div>
+      <div class="agent">
+        <div class="agent-main">
+          <div class="card"><div class="cb">
+            <textarea id="ag-ask" rows="4" placeholder="What should it change? For example: fix the failing tests, add a function and its tests, explain a file. (Ctrl+Enter)"></textarea>
+            <div class="row wrap" style="margin-top:10px">
+              <button class="primary" id="ag-send">Send</button>
+              <button class="ghost hide" id="ag-stop">Stop</button>
+              <span class="quiet mono" id="ag-note" style="font-size:12px"></span>
+              <span style="flex:1"></span>
+              <span class="row wrap" id="ag-starters"></span>
+            </div>
+          </div></div>
+          <div id="ag-task"></div>
+        </div>
+        <div class="agent-side" id="ag-side"></div>
+      </div>
+    </section>
+
     <!-- ============================================================= MEASURE -->
     <section class="page hide" data-p="measure">
       <div class="head">
@@ -395,7 +451,7 @@ const num = (x, d = 0) => Number.isFinite(+x) ? +x : d;
 const gb = x => num(x).toFixed(1);
 const sec = ms => ms == null || !Number.isFinite(+ms) ? '–' : (+ms / 1000).toFixed(1) + ' s';
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const PAGES = ['overview', 'devices', 'models', 'run', 'chat', 'measure', 'checks'];
+const PAGES = ['overview', 'devices', 'models', 'run', 'chat', 'agent', 'measure', 'checks'];
 
 let S = null;            // last good /api/state
 let page = 'overview';
@@ -525,7 +581,7 @@ function paint() {
   $('f-pool').textContent = gb(S.pool_gb) + ' GB';
 
   const key = (r.model || '') + ':' + (['starting', 'loading', 'ready'].includes(r.status) ? 'on' : r.status);
-  if (followed !== null && key !== followed && r.model && page !== 'chat') { followed = key; go('chat'); return; }
+  if (followed !== null && key !== followed && r.model && page !== 'chat' && page !== 'agent') { followed = key; go('chat'); return; }
   followed = key;
 
   if (page === 'overview') renderOverview();
@@ -533,6 +589,7 @@ function paint() {
   else if (page === 'models') renderModels();
   else if (page === 'run') renderRun();
   else if (page === 'chat') renderChat();
+  else if (page === 'agent') renderAgent();
   else if (page === 'measure') renderStats();
   else if (page === 'checks') renderFeed();
 }
@@ -998,6 +1055,182 @@ $('f').onsubmit = async e => {
   }
 };
 addEventListener('keydown', e => { if (e.key === 'Escape' && streaming) streaming.abort(); });
+
+/* -------------------------------------------------------------------- agent */
+// One task runner for the whole laptop (desktop/service.py, started by the host, reached through /svc/).
+const AG_PERMS = [
+  ['edit',   'Edit files',     'Write its changes into the project'],
+  ['commit', 'Commit changes', 'Each change becomes a git commit you can undo'],
+  ['tests',  'Run tests',      'After each edit; failures go back to the model'],
+  ['shell',  'Shell commands', 'Runs any command it suggests, without asking'],
+];
+const AG_STARTERS = ['Fix the failing tests. Do not change the tests.', 'Add tests for the main function and make them pass.',
+                     'Explain what this project does, file by file.'];
+const agLoad = (k, d) => { try { return localStorage.getItem('ag.' + k) ?? d; } catch (e) { return d; } };
+const agSave = (k, v) => { try { localStorage.setItem('ag.' + k, v); } catch (e) {} };
+const AG = { projects: [], tasks: [], cur: null, events: [], next: 0, info: null, diff: null, diffText: '', tests: null,
+             project: agLoad('project', ''), busy: false, note: '', loaded: false,
+             perms: (() => { try { return { edit: true, commit: true, tests: true, shell: false, ...JSON.parse(agLoad('perms', '{}')) }; }
+                             catch (e) { return { edit: true, commit: true, tests: true, shell: false }; } })() };
+
+async function ag(path, body) {
+  const r = await fetch(path, { method: body ? 'POST' : 'GET', headers: { 'content-type': 'application/json' },
+                                body: body ? JSON.stringify(body) : undefined });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+  return j;
+}
+async function agRefresh() {
+  try {
+    const [ps, ts] = await Promise.all([ag('/svc/projects'), ag('/svc/tasks')]);
+    AG.projects = ps; AG.tasks = ts; AG.loaded = true;
+    if (!AG.project && ps.length) { AG.project = ps[0].path; agSave('project', AG.project); }
+    if (AG.project) AG.info = await ag('/svc/project?path=' + encodeURIComponent(AG.project)).catch(() => null);
+    if (!AG.cur) { const t = ts.find(t => t.project === AG.project); if (t) await agOpen(t.id, false); }
+  } catch (e) { AG.note = e.message; }
+}
+async function agOpen(id, draw = true) {
+  const d = await ag(`/svc/tasks/${id}`);
+  AG.cur = d.meta; AG.events = d.events; AG.next = d.next; AG.diff = null;
+  if (draw) renderAgent();
+}
+async function agFollow() {
+  if (!AG.cur || AG.cur.status !== 'running') return;
+  try {
+    const d = await ag(`/svc/tasks/${AG.cur.id}?after=${AG.next}`);
+    AG.cur = d.meta; AG.events = AG.events.concat(d.events); AG.next = d.next;
+    if (d.events.length && page === 'agent') renderAgentTask();
+    if (AG.cur.status !== 'running') { await agRefresh(); if (page === 'agent') renderAgent(); }
+  } catch (e) {}
+}
+setInterval(() => { if (page === 'agent') agRefresh().then(() => { if (page === 'agent') renderAgentSide(); }); }, 4000);
+setInterval(agFollow, 800);
+
+function renderAgent() {
+  if (!AG.loaded) { agRefresh().then(renderAgent); }
+  const r = S.run, ready = r.status === 'ready', ctx = S.ctx || 0;
+  $('agent-act').innerHTML = `<span class="tag ${ready ? 'ok' : 'warn'}">${ready ? esc(r.model) : 'no model running'}</span>`
+    + `<span class="tag ${ctx >= 16384 ? '' : 'warn'}">context ${ctx || '–'}</span>`
+    + `<span class="tag">${1 + S.peers.length} devices</span>`;
+  const running = AG.tasks.some(t => t.status === 'running');
+  const why = !ready ? 'Start a model on Run first.' : ctx < 16384 ? 'Restart the host with MESH_CTX=16384 so the agent fits.'
+            : !AG.project ? 'Add a project on the right.' : running ? 'A task is running: the mesh answers one at a time.' : '';
+  $('ag-send').disabled = !!why || AG.busy;
+  $('ag-stop').classList.toggle('hide', !(AG.cur && AG.cur.status === 'running'));
+  $('ag-note').textContent = AG.note || why;
+  $('ag-starters').innerHTML = AG_STARTERS.map((t, i) => `<button class="ghost sm" data-st="${i}">${esc(t.split('.')[0])}</button>`).join('');
+  document.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { $('ag-ask').value = AG_STARTERS[+b.dataset.st]; $('ag-ask').focus(); });
+  renderAgentTask(); renderAgentSide();
+}
+
+function renderAgentTask() {
+  const t = AG.cur;
+  if (!t) { $('ag-task').innerHTML = `<div class="card"><div class="empty"><h4>No task yet</h4><p>Write what you want above. The agent edits ${esc(agProjName())}, then runs your tests.</p></div></div>`; return; }
+  const text = AG.events.filter(e => e.t === 'text').map(e => e.text).join('');
+  const live = t.status === 'running';
+  const at = e => new Date(e.at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const step = (ico, title, sub, e, right = '') => `<div class="step"><div class="ico">${ico}</div><div>${title}${sub ? `<small>${sub}</small>` : ''}</div><div class="when">${right} ${e ? at(e) : ''}</div></div>`;
+  const rows = []; let shown = false;
+  for (const e of AG.events) {
+    if (e.t === 'text') { if (!shown) { shown = true; rows.push('@OUT@'); } continue; }
+    if (e.t === 'start') { const p = e.perms || t.perms || {};
+      rows.push(step('▸', `Started with ${esc(t.model || 'the mesh')}`, `${t.devices || '?'} devices · tests: ${esc(p.tests === false ? 'off' : t.test_cmd)} · ${AG_PERMS.map(([k]) => (p[k] ? '' : 'no ') + k).join(', ')}`, e)); }
+    if (e.t === 'tokens') rows.push(step('↔', `Model round: ${esc(e.sent)} tokens in, ${esc(e.received)} out`, '', e));
+    if (e.t === 'edit') rows.push(step('✎', `Edited <b class="mono">${esc(e.file)}</b>`, '', e));
+    if (e.t === 'commit') { const undone = (t.undone || []).includes(e.hash);
+      rows.push(step('●', `Committed <span class="mono">${esc(e.hash)}</span> ${undone ? '<span class="tag">reverted</span>' : ''}`, esc(e.message), e,
+        `<button class="ghost sm" data-diff="${esc(e.hash)}">Diff</button>${undone ? '' : `<button class="ghost sm" data-undo="${esc(e.hash)}">Undo</button>`}`)); }
+    if (e.t === 'tests_start' && !AG.events.some(x => x.t === 'tests')) rows.push(step('…', 'Running tests', esc(e.cmd), e));
+    if (e.t === 'tests') rows.push(step(e.ok ? '✓' : '✗', `<span style="color:var(--${e.ok ? 'ok' : 'bad'})">Tests ${e.ok ? 'pass' : 'fail'}</span> · ${esc(e.summary)}`,
+        `${e.seconds} s`, e) + `<details style="margin:0 0 6px 34px"><summary class="quiet mono" style="font-size:12px;cursor:pointer">test output</summary><pre>${esc(e.output)}</pre></details>`);
+    if (e.t === 'undo') rows.push(step('↶', `Reverted <span class="mono">${esc(e.hash)}</span>`, 'a new commit undoes it', e));
+    if (e.t === 'error') rows.push(step('!', `<span style="color:var(--bad)">${esc(e.text)}</span>`, '', e));
+  }
+  const out = `<div class="step"><div class="ico">${live ? '<i class="dot warn" style="display:inline-block"></i>' : '≡'}</div><div>
+      <details ${live ? 'open' : ''}><summary style="cursor:pointer">${live ? 'Agent is working…' : 'Agent output'} <span class="quiet mono" style="font-size:12px">${text.split('\n').length} lines</span></summary>
+      <pre id="ag-live" style="max-height:260px;overflow:auto;white-space:pre-wrap">${esc(text.split('\n').slice(-80).join('\n'))}</pre></details></div><div></div></div>`;
+  const done = AG.events.find(e => e.t === 'done');
+  const secs = done ? done.seconds : (Date.now() / 1000 - t.started);
+  let html = `<div class="card"><div class="ch"><h3 style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</h3>
+      <span class="tag ${live ? 'warn' : t.status === 'done' ? (t.tests && !t.tests.ok ? 'bad' : 'ok') : 'bad'}">${live ? 'working' : esc(t.status)}</span>
+      <span class="quiet mono" style="font-size:12px">${sec(secs * 1000)}${done && done.tps ? ' · ' + num(done.tps).toFixed(1) + ' tok/s' : ''}</span>
+      ${live ? '' : '<button class="ghost sm" id="ag-again">Run again</button>'}</div>
+    <div class="cb"><div class="prompt">${esc(t.prompt)}</div><div class="steps" style="margin-top:10px">${rows.join('').replace('@OUT@', out)}</div>
+    ${done ? `<div class="chips">${(t.files || []).map(f => `<span>${esc(f)}</span>`).join('')}<span>${t.devices || 1} devices</span>${(t.commits || []).length ? `<span>${t.commits.length} commit${t.commits.length > 1 ? 's' : ''}</span>` : ''}</div>` : ''}</div></div>`;
+  if (AG.diff) html += `<div class="card"><div class="ch"><h3 class="mono">${esc(AG.diff)}</h3><span style="flex:1"></span><button class="ghost sm" id="ag-diff-x">Close</button></div>
+    <div class="cb"><div class="diffv">${AG.diffText.split('\n').map(l => `<div class="${l.startsWith('+') && !l.startsWith('+++') ? 'a' : l.startsWith('-') && !l.startsWith('---') ? 'd' : l.startsWith('@@') ? 'x' : ''}">${esc(l) || ' '}</div>`).join('')}</div></div></div>`;
+  const keep = $('ag-live') ? $('ag-live').scrollTop + $('ag-live').clientHeight >= $('ag-live').scrollHeight - 20 : true;
+  $('ag-task').innerHTML = html;
+  const pre = $('ag-live'); if (pre && keep) pre.scrollTop = pre.scrollHeight;
+  document.querySelectorAll('[data-diff]').forEach(b => b.onclick = () => agDiff(b.dataset.diff));
+  document.querySelectorAll('[data-undo]').forEach(b => b.onclick = () => agUndo(b.dataset.undo));
+  if ($('ag-again')) $('ag-again').onclick = () => { $('ag-ask').value = t.prompt; agSend(); };
+  if ($('ag-diff-x')) $('ag-diff-x').onclick = () => { AG.diff = null; renderAgentTask(); };
+}
+
+function renderAgentSide() {
+  const i = AG.info || {}, p = AG.projects.find(x => x.path === AG.project);
+  const test = agLoad('test:' + AG.project, '') || (p && p.test_cmd) || 'python3 -m pytest -q';
+  const hist = AG.tasks.filter(t => t.project === AG.project).slice(0, 12);
+  const tr = AG.tests;
+  $('ag-side').innerHTML = `
+    <div class="card"><div class="ch"><h3>Project</h3></div><div class="cb">
+      <select id="ag-proj" style="width:100%">${AG.projects.map(x => `<option value="${esc(x.path)}" ${x.path === AG.project ? 'selected' : ''}>${esc(x.name)}</option>`).join('') || '<option>none yet</option>'}</select>
+      ${p ? `<div class="kv" style="margin-top:10px"><span class="k">Path</span><span class="v" style="word-break:break-all">${esc(p.path)}</span>
+        <span class="k">Branch</span><span class="v">${esc(i.branch || '–')}</span><span class="k">Last commit</span><span class="v">${esc(i.head || '–')}</span>
+        <span class="k">Uncommitted</span><span class="v" style="color:var(--${(i.dirty || []).length ? 'warn' : 'fg-2'})">${(i.dirty || []).length} files</span>
+        <span class="k">Tracked</span><span class="v">${i.files ?? '–'} files</span></div>` : ''}
+      <div class="row" style="margin-top:10px"><input id="ag-path" placeholder="/path/to/a/git/repo" style="flex:1;min-width:0"><button class="sm" id="ag-add">Add</button></div>
+    </div></div>
+    <div class="card"><div class="ch"><h3>Permissions</h3></div><div class="cb">${AG_PERMS.map(([k, n, w]) =>
+      `<div class="perm"><div class="t">${n}<small style="${k === 'shell' && AG.perms.shell ? 'color:var(--bad)' : ''}">${w}</small></div><button class="sw ${AG.perms[k] ? 'on' : ''} ${k === 'shell' ? 'danger' : ''}" data-perm="${k}" title="${n}"></button></div>`).join('')}</div></div>
+    <div class="card"><div class="ch"><h3>Tests</h3></div><div class="cb">
+      <input id="ag-test" value="${esc(test)}" style="width:100%" spellcheck="false">
+      <div class="row" style="margin-top:10px"><button class="sm" id="ag-runtests">Run tests now</button><span class="quiet mono" style="font-size:12px" id="ag-tnote"></span></div>
+      ${tr ? `<div style="margin-top:10px;color:var(--${tr.ok ? 'ok' : 'bad'});font-weight:600">${tr.ok ? '✓' : '✗'} ${esc(tr.summary || (tr.ok ? 'passed' : 'failed'))}</div>
+        <div class="quiet mono" style="font-size:11.5px">${esc(tr.cmd)} · ${tr.seconds} s · at ${esc(tr.head)}</div>
+        <details><summary class="quiet mono" style="font-size:12px;cursor:pointer;margin-top:6px">output</summary><pre style="max-height:240px;overflow:auto">${esc(tr.output)}</pre></details>` : ''}
+    </div></div>
+    <div class="card"><div class="ch"><h3>History</h3><span class="d">${hist.length}</span></div><div class="cb">${hist.map(t =>
+      `<button class="hist ${AG.cur && AG.cur.id === t.id ? 'on' : ''}" data-open="${esc(t.id)}"><i class="dot ${t.status === 'running' ? 'warn' : t.tests ? (t.tests.ok ? 'ok' : 'bad') : t.status === 'done' ? '' : 'bad'}"></i><span class="t">${esc(t.title)}</span><span class="quiet mono" style="font-size:11px">${t.tests && t.tests.passed != null ? t.tests.passed + '✓' : ''}</span></button>`).join('') || '<div class="quiet" style="font-size:13px">No tasks yet</div>'}</div></div>
+    <div class="card"><div class="cb" style="font-size:12px;color:var(--fg-3);line-height:1.7">One task at a time · the agent cannot run shell commands unless you allow it · only your test command runs · Undo is a git revert, history stays</div></div>`;
+  $('ag-proj').onchange = e => { AG.project = e.target.value; agSave('project', AG.project); AG.cur = null; AG.tests = null; agRefresh().then(renderAgent); };
+  $('ag-add').onclick = async () => { const path = $('ag-path').value.trim(); if (!path) return;
+    try { AG.projects = await ag('/svc/projects', { path }); AG.project = AG.projects[0].path; agSave('project', AG.project); AG.cur = null; await agRefresh(); renderAgent(); }
+    catch (e) { toast('project: ' + e.message); } };
+  $('ag-test').onchange = e => agSave('test:' + AG.project, e.target.value.trim());
+  document.querySelectorAll('[data-perm]').forEach(b => b.onclick = () => { const k = b.dataset.perm;
+    if (k === 'shell' && !AG.perms.shell && !confirm('Let the agent run any shell command it suggests, without asking?')) return;
+    AG.perms[k] = !AG.perms[k]; agSave('perms', JSON.stringify(AG.perms)); renderAgentSide(); });
+  document.querySelectorAll('[data-open]').forEach(b => b.onclick = () => agOpen(b.dataset.open));
+  $('ag-runtests').onclick = async () => { $('ag-runtests').disabled = true; $('ag-tnote').textContent = 'running…';
+    try { AG.tests = await ag('/svc/tests', { project: AG.project, test_cmd: $('ag-test').value.trim() }); } catch (e) { toast('tests: ' + e.message); }
+    renderAgentSide(); };
+}
+const agProjName = () => (AG.projects.find(p => p.path === AG.project) || {}).name || 'your project';
+
+async function agSend() {
+  const prompt = $('ag-ask').value.trim(); if (!prompt || AG.busy) return;
+  AG.busy = true; AG.note = ''; renderAgent();
+  try {
+    const r = await ag('/svc/tasks', { project: AG.project, prompt, perms: AG.perms,
+                                       test_cmd: agLoad('test:' + AG.project, '') || ($('ag-test') && $('ag-test').value.trim()) || '' });
+    $('ag-ask').value = ''; await agRefresh(); await agOpen(r.id);
+  } catch (e) { AG.note = e.message; }
+  AG.busy = false; renderAgent();
+}
+async function agDiff(hash) {
+  AG.diff = hash; AG.diffText = 'loading…'; renderAgentTask();
+  try { AG.diffText = (await ag(`/svc/diff?project=${encodeURIComponent(AG.cur.project)}&commit=${hash}`)).diff; } catch (e) { AG.diffText = e.message; }
+  renderAgentTask();
+}
+async function agUndo(hash) {
+  if (!confirm(`Revert ${hash}? A new commit undoes it; history stays.`)) return;
+  try { await ag(`/svc/tasks/${AG.cur.id}/undo`, { commit: hash }); await agOpen(AG.cur.id); } catch (e) { toast('undo: ' + e.message); }
+}
+$('ag-send').onclick = agSend;
+$('ag-stop').onclick = async () => { if (AG.cur) { try { await ag(`/svc/tasks/${AG.cur.id}/stop`, {}); } catch (e) { toast(e.message); } await agOpen(AG.cur.id); } };
+$('ag-ask').onkeydown = e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); agSend(); } };
 $('q').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('f').requestSubmit(); } };
 
 /* ------------------------------------------------------------------ measure */

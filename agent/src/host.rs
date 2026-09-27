@@ -60,6 +60,7 @@ pub struct Hub {
     api_key: String,                  // other machines on the link use the API with this key
     last_run: Mutex<Option<String>>,  // model file of the last run that got ready, kept across restarts
     api_port: u16,          // the port this panel serves on, which is what the benchmark asks
+    agent_token: String,    // the agent service (desktop/service.py) only answers calls that carry this
 }
 
 fn config() -> std::path::PathBuf {
@@ -1037,8 +1038,9 @@ pub fn host(port: u16) -> Result<(), String> {
         engine: Default::default(), usb_ports: Default::default(), models: Default::default(), run_gen: Default::default(),
         benching: Default::default(),
         chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
-        api_port: port,
+        api_port: port, agent_token: random_hex(16),
     });
+    { let h = hub.clone(); thread::spawn(move || agent_service(&h)); }
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
     { let h = hub.clone(); thread::spawn(move || loop { tell_phones(&h); thread::sleep(Duration::from_secs(2)); }); }
@@ -1107,6 +1109,52 @@ fn state(hub: &Hub) -> Value {
     })
 }
 
+// ---------------------------------------------------------------- the coding agent: one task runner for every page
+
+const AGENT_PORT: u16 = 8091;
+
+/// desktop/ in this checkout: the agent service and the desktop app's page live there.
+fn desktop_dir() -> std::path::PathBuf {
+    std::env::var("MESH_DESKTOP").map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("desktop"))
+}
+
+/// Keep desktop/service.py running on 127.0.0.1:AGENT_PORT: it runs Aider on a project against this mesh and records
+/// every step. The dashboard's Agent page and the desktop app both reach it through /svc/ here, so there is one task
+/// runner and one history. It dies with the host.
+fn agent_service(hub: &Hub) {
+    loop {
+        let mut cmd = Command::new("python3");
+        cmd.arg(desktop_dir().join("service.py")).env("PORT", AGENT_PORT.to_string())
+            .env("MESH_AGENT_TOKEN", &hub.agent_token).env("MESH_HOST_URL", format!("http://127.0.0.1:{}", hub.api_port))
+            .stdout(Stdio::null()).stderr(fs::File::create("/tmp/mesh-agent.log").map(Stdio::from).unwrap_or(Stdio::null()));
+        unsafe {
+            use std::os::unix::process::CommandExt;
+            cmd.pre_exec(|| { libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGTERM); Ok(()) });
+        }
+        match cmd.spawn() {
+            Ok(mut c) => { let _ = c.wait(); hub.say("agent service stopped; starting it again".into()); }
+            Err(e) => hub.say(format!("agent service did not start: {e}")),
+        }
+        thread::sleep(Duration::from_secs(3));
+    }
+}
+
+/// /svc/... from a page on this laptop, passed to the agent service with its token.
+fn proxy_agent(mut s: TcpStream, first: &str, body: &[u8], token: &str) -> std::io::Result<()> {
+    let mut parts = first.split_whitespace();
+    let (method, path) = (parts.next().unwrap_or("GET"), parts.next().unwrap_or("/"));
+    match TcpStream::connect(("127.0.0.1", AGENT_PORT)) {
+        Ok(mut up) => {
+            up.set_read_timeout(Some(Duration::from_secs(700)))?;
+            write!(up, "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Mesh-Token: {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len())?;
+            up.write_all(body)?;
+            std::io::copy(&mut up, &mut s).map(|_| ())
+        }
+        Err(e) => crate::reply_status(&mut s, 503, "application/json", json!({"error": format!("agent service not running yet: {e}")}).to_string().as_bytes()),
+    }
+}
+
 fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     let (first, headers, body) = crate::read_request(&s)?;
     let path = first.split_whitespace().nth(1).unwrap_or("/").to_string();
@@ -1120,6 +1168,14 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
             let msg = json!({"error": {"message": "from another machine: /v1 only, with Authorization: Bearer <key> (key on the laptop's Use page)"}}).to_string();
             return write!(s, "HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{msg}", msg.len());
         }
+    }
+    if path.starts_with("/svc/") {
+        return proxy_agent(s, &first, &body, &hub.agent_token);
+    }
+    if path == "/app" || path == "/app/" || path.starts_with("/app/#") {
+        // the desktop app's page, from disk, so it can be changed without rebuilding the host
+        let page = fs::read(desktop_dir().join("ui").join("index.html")).unwrap_or_else(|e| format!("no desktop page: {e}").into_bytes());
+        return crate::reply(&mut s, "text/html; charset=utf-8", &page);
     }
     let req: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
     let ok = |s: &mut TcpStream, v: Value| crate::reply(s, "application/json", v.to_string().as_bytes());

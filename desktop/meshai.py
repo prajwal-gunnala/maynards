@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """MeshAI for Linux: an agent workspace on top of the mesh.
 
-The window is a thin shell. The UI is desktop/ui/index.html, served with the task runner by desktop/service.py on
-127.0.0.1 (random port, a token only this window knows). The brain is still `mesh host` (agent/src/host.rs): this
-window starts it if nothing answers and leaves it running when it closes. The page asks the window for the two
+The window is a thin shell around http://localhost:8080/app/: the host serves desktop/ui/index.html there and runs
+the one task runner (desktop/service.py) behind /svc/, which the dashboard's Agent page uses too, so both show the
+same tasks. The brain is `mesh host` (agent/src/host.rs): this window starts it if nothing answers and leaves it
+running when it closes. The page asks the window for the two
 things a web page cannot do: a native folder picker, and the full mesh dashboard in its own window.
 """
 import fcntl
@@ -21,9 +22,6 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 gi.require_version("WebKit2", "4.1")
 from gi.repository import Gdk, Gtk, WebKit2  # noqa: E402
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import service  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOST = os.environ.get("MESH_HOST_URL", "http://localhost:8080")
@@ -131,11 +129,15 @@ def main():
         print("MeshAI is already open.")
         return
     ensure_host()
-    svc = service.Service()
-    port = service.serve(svc)
-    log(f"app start: service on 127.0.0.1:{port}")
+    for _ in range(40):                       # a host that is just starting takes a few seconds to answer
+        try:
+            urllib.request.urlopen(HOST + "/api/state", timeout=2).read()
+            break
+        except Exception:
+            time.sleep(0.5)
+    log("app start: " + HOST + "/app/")
     Gtk.Settings.get_default().set_property("gtk-application-prefer-dark-theme", True)
-    win = Window(f"http://127.0.0.1:{port}/#k={svc.token}")
+    win = Window(HOST + "/app/")
     win.connect("destroy", Gtk.main_quit)
     win.show_all()
     Gtk.main()

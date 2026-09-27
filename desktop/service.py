@@ -168,7 +168,8 @@ class Task:
 class Service:
     def __init__(self):
         os.makedirs(TASKS, exist_ok=True)
-        self.token = secrets.token_hex(16)
+        # the host passes its own token when it starts this service for the dashboard
+        self.token = os.environ.get("MESH_AGENT_TOKEN") or secrets.token_hex(16)
         self.tasks = {}
         self.lock = threading.Lock()
         self.load()
@@ -229,6 +230,27 @@ class Service:
             t.run()
         except Exception as e:              # a bug here must end the task, not leave it "running" forever
             t.finish("failed", f"{e.__class__.__name__}: {e}")
+
+    def run_tests(self, project, test_cmd):
+        """The project's test command, now, without the agent: what the owner asked for, and nothing else."""
+        if not os.path.isdir(os.path.join(project, ".git")):
+            raise ValueError("not a git repository")
+        with self.lock:
+            if any(t.meta["status"] == "running" for t in self.tasks.values()):
+                raise ValueError("a task is running: its own test run comes at the end")
+        cmd = test_cmd or guess_tests(project)
+        t0 = now()
+        try:
+            r = subprocess.run(cmd, shell=True, cwd=project, capture_output=True, text=True, timeout=600)
+            out, ok = (r.stdout + r.stderr)[-6000:], r.returncode == 0
+        except subprocess.TimeoutExpired:
+            out, ok = "tests took longer than 10 minutes", False
+        tail = out.strip().splitlines()[-1] if out.strip() else ""
+        passed = int(PASSED.search(tail).group(1)) if PASSED.search(tail) else None
+        failed = int(FAILED.search(tail).group(1)) if FAILED.search(tail) else (0 if ok and passed is not None else None)
+        code, head, _ = git(project, "log", "-1", "--format=%h %s")
+        return {"ok": ok, "passed": passed, "failed": failed, "summary": tail, "output": out, "cmd": cmd,
+                "seconds": round(now() - t0, 1), "head": head.strip()}
 
     def undo(self, t, commit):
         if not t.meta.get("perms", {}).get("commit", True):
@@ -328,6 +350,14 @@ def make_handler(svc):
             if route == "/svc/diff":
                 code, out, err = git(q["project"], "show", "--stat", "--patch", "--format=%h %s", q["commit"])
                 return {"diff": out[:200000] if code == 0 else err}
+            if route == "/svc/project":
+                p = q["path"]
+                _, branch, _ = git(p, "rev-parse", "--abbrev-ref", "HEAD")
+                _, head, _ = git(p, "log", "-1", "--format=%h %s")
+                _, dirty, _ = git(p, "status", "--porcelain")
+                _, files, _ = git(p, "ls-files")
+                return {"branch": branch.strip(), "head": head.strip(), "dirty": [l[3:] for l in dirty.splitlines()][:50],
+                        "files": len(files.splitlines())}
             if route == "/svc/mesh":
                 return svc.mesh() or {"offline": True}
             raise KeyError(route)
@@ -343,6 +373,8 @@ def make_handler(svc):
             if path.startswith("/svc/tasks/") and path.endswith("/undo"):
                 svc.undo(svc.tasks[path.split("/")[3]], b["commit"])
                 return {"ok": True}
+            if path == "/svc/tests":
+                return svc.run_tests(b["project"], b.get("test_cmd", ""))
             if path in ("/svc/run", "/svc/stop", "/svc/pin", "/svc/unpin", "/svc/newqr"):   # the mesh's own, passed through
                 req = urllib.request.Request(HOST + path.replace("/svc", "/api"), data=json.dumps(b).encode(), method="POST")
                 return json.loads(urllib.request.urlopen(req, timeout=10).read() or b"{}")
