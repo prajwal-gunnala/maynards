@@ -452,30 +452,31 @@ def build():
 
     # 8 · proof
     s = slide(prs)
-    y = head(s, "07 · Proof", "13% to 47%, on the same tests.",
+    y = head(s, "07 · Proof", "13% to 100%, on the same tests.",
              "Same 15 coding problems for every setup. We ran each answer against its own tests. Right or wrong, nothing in between.")
     cw = (W - 2 * M - Inches(0.3)) * 0.56
-    card(s, M, y, cw, Inches(3.3))
-    base = y + Inches(2.3)
-    for i, (lab, pct, h, col, sp) in enumerate([("0.6B alone\n2 of 15", "13%", 0.4, LINE, "20.9 tok/s"),
-                                                ("1.7B alone\n7 of 15", "47%", 1.45, GREEN, "8.6 tok/s"),
-                                                ("1.7B split\n7 of 15", "47%", 1.45, VIOLET, "7.4 tok/s")]):
-        bx = M + Inches(0.45 + 2.1 * i)
-        bar(s, bx, base - Inches(h), Inches(1.5), Inches(h), col)
-        text(s, bx, base - Inches(h) - Inches(0.36), Inches(1.5), Inches(0.3), pct, 20,
+    card(s, M, y, cw, Inches(3.5))
+    base = y + Inches(2.45)                 # bar height is the score: 100% is 1.9 in
+    for i, (lab, pct, h, col, sp) in enumerate([("0.6B alone\n2 of 15", "13%", 0.25, LINE, "20.9 tok/s"),
+                                                ("1.7B alone\n7 of 15", "47%", 0.89, FG3, "8.6 tok/s"),
+                                                ("1.7B split\n7 of 15", "47%", 0.89, VIOLET, "7.4 tok/s"),
+                                                ("30B split\n15 of 15", "100%", 1.9, GREEN, "6.8 tok/s")]):
+        bx = M + Inches(0.4 + 1.55 * i)
+        bar(s, bx, base - Inches(h), Inches(1.2), Inches(h), col)
+        text(s, bx, base - Inches(h) - Inches(0.36), Inches(1.2), Inches(0.3), pct, 20,
              col if col != LINE else FG3, MONO, bold=True, align=PP_ALIGN.CENTER)
-        text(s, bx, base + Inches(0.1), Inches(1.5), Inches(0.6), lab.replace("\n", "\n"), 13, FG3, MONO,
+        text(s, bx, base + Inches(0.1), Inches(1.2), Inches(0.6), lab, 13, FG3, MONO,
              align=PP_ALIGN.CENTER, line=1.3)
-        text(s, bx, base + Inches(0.62), Inches(1.5), Inches(0.3), sp, 13, FG2, MONO, align=PP_ALIGN.CENTER)
+        text(s, bx, base + Inches(0.62), Inches(1.2), Inches(0.3), sp, 13, FG2, MONO, align=PP_ALIGN.CENTER)
     x2 = M + cw + Inches(0.3)
-    card(s, x2, y, W - M - x2, Inches(3.3))
+    card(s, x2, y, W - M - x2, Inches(3.5))
     text(s, x2 + Inches(0.3), y + Inches(0.26), Inches(4.5), Inches(0.3), "WHAT THIS SHOWS", 13, FG3, MONO)
     bullets(s, x2 + Inches(0.3), y + Inches(0.7), W - M - x2 - Inches(0.6), [
-        ("A bigger model is three times better", "13% becomes 47% on the same problems"),
-        ("Splitting costs a little speed", "8.6 becomes 7.4 words a second"),
-        ("Splitting does not change the answers", "the split got the same 8 wrong as the single device"),
+        ("A bigger model gets it right", "13% becomes 47%, then 100%, on the same problems"),
+        ("Splitting does not change the answers", "the 1.7B split got the same 8 wrong as the single device"),
+        ("Only the split can run the 30B", "no device here holds 18.6 GB; split, it solves all 15"),
     ], size=15, gap=0.62)
-    text(s, x2 + Inches(0.3), y + Inches(2.85), W - M - x2 - Inches(0.6), Inches(0.6),
+    text(s, x2 + Inches(0.3), y + Inches(3.0), W - M - x2 - Inches(0.6), Inches(0.6),
          "Speed drops a little. Accuracy jumps a lot.", 16, GREEN, SANS, line=1.3)
     foot(s, "MeshAI", "one button in the app runs this · results/REPORT.md")
 
@@ -559,12 +560,10 @@ def build():
     text(s, M + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "WHAT RAN", 11, GREEN, MONO)
     text(s, M + Inches(0.28), y + Inches(0.6), cw - Inches(0.56), Inches(0.4), "Qwen3-Coder 30B", 19, FG, SANS, bold=True)
     bullets(s, M + Inches(0.28), y + Inches(1.1), cw - Inches(0.56), [
-        "18.6 GB across a laptop and two phones", "The phones held 9.6 GB of it",
-        "Ready in 70 seconds", "6.6 words a second", "Three coding questions, all correct",
+        "18.6 GB across a laptop and two phones", "The phones held 10.8 GB of it",
+        "Ready in 70 seconds", "6.6 words a second", "15 of 15 coding problems solved",
         "Internet off the whole time",
     ], size=15, gap=0.36)
-    text(s, M + Inches(0.28), y + Inches(3.1), cw - Inches(0.56), Inches(0.4),
-         "Cable at 2–3 ms · context 4096 · laptop capped at 8 GB · 27 September", 10, FG3, MONO, line=1.3)
     x2 = M + cw + Inches(0.3)
     card(s, x2, y, cw, Inches(3.5))
     text(s, x2 + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "BUILT IN THE WINDOW", 13, FG3, MONO)
@@ -572,21 +571,50 @@ def build():
         "llama.cpp built for phones", "The app: host and helper", "The laptop agent and its panel",
         "Our own model reader and planner", "The layer store", "The test harness", "The CLI and the git hook",
     ], size=15, gap=0.38)
-    text(s, x2 + Inches(0.28), y + Inches(3.15), cw - Inches(0.56), Inches(0.3),
-         "Every commit timestamped. Nothing pre-built.", 12, FG3, SANS)
     x3 = M + 2 * (cw + Inches(0.3))
     card(s, x3, y, cw, Inches(3.5))
     text(s, x3 + Inches(0.28), y + Inches(0.26), cw - Inches(0.56), Inches(0.3), "IF SOMETHING GOES WRONG", 13, FG3, MONO)
     pairs = [("Slow link", "refused above 60 ms"), ("Phone short of memory", "we reserve, and you can cap it"),
-             ("A device drops", "it comes back by itself"), ("Engine missing a flag", "we ask it what it has"),
+             ("A device drops", ""), ("Engine missing a flag", "we ask it what it has"),
              ("Bad model file", "every read is checked"), ("A strange machine", "one button checks everything")]
     for i, (a, b) in enumerate(pairs):
         yy = y + Inches(0.68 + 0.45 * i)
         text(s, x3 + Inches(0.28), yy, Inches(1.9), Inches(0.3), a, 13, FG, SANS)
-        text(s, x3 + Inches(2.2), yy, cw - Inches(2.5), Inches(0.3), b, 14, FG3, SANS)
+        if b:
+            text(s, x3 + Inches(2.2), yy, cw - Inches(2.5), Inches(0.3), b, 14, FG3, SANS)
     text(s, x3 + Inches(0.28), y + Inches(3.15), cw - Inches(0.56), Inches(0.3),
          "It says no before it disappoints you.", 15, GREEN, SANS, bold=True)
     foot(s, "MeshAI", "two 16 GB phones and one budget laptop · nothing else was bought")
+
+    # 11b · how we built it: Office Kit
+    s = slide(prs)
+    y = head(s, "11 · How we built it", "One laptop drove both phones.",
+             "Through iQOO Office Kit, the bridge between the laptop and the phones while we built and tested.")
+    cw = (W - 2 * M - Inches(0.6)) / 3
+    for i, (tag, big, items) in enumerate([
+            ("REMOTE CONTROL", "Phones on the laptop", ["Mirror each phone", "Mouse and keys on the phone", "No reaching over mid-test"]),
+            ("FILE TRANSFER", "The 18.6 GB model", ["Sent through Office Kit", "Same checksum on the phone", "Once per phone, then kept"]),
+            ("TESTING", "Every screen, remotely", ["Scan to join, Helper screen", "Light and dark, Speed card", "Heat during a 30B run"])]):
+        x = M + (cw + Inches(0.3)) * i
+        card(s, x, y, cw, Inches(2.2), PANEL_HI if i == 0 else PANEL, GREEN if i == 0 else LINE)
+        text(s, x + Inches(0.28), y + Inches(0.22), cw - Inches(0.56), Inches(0.3), tag, 11, GREEN, MONO)
+        text(s, x + Inches(0.28), y + Inches(0.52), cw - Inches(0.56), Inches(0.4), big, 18, FG, SANS, bold=True)
+        bullets(s, x + Inches(0.28), y + Inches(1.05), cw - Inches(0.56), items, size=14, gap=0.36)
+    ty = y + Inches(2.4)
+    card(s, M, ty, W - 2 * M, Inches(1.55))
+    cols = [M + Inches(0.3), M + Inches(3.0), M + Inches(6.0), M + Inches(9.0)]
+    colw = Inches(2.8)
+    for x, h in zip(cols, ["MOVING 18.6 GB", "OFFICE KIT", "ADB PUSH", "IN-APP DOWNLOAD"]):
+        text(s, x, ty + Inches(0.2), colw, Inches(0.3), h, 11, FG3 if x == cols[0] else GREEN, MONO)
+    rows = [("Time", [("[fill in]", AMBER), ("[fill in]", AMBER), ("~13 min · 24 MB/s", FG)]),
+            ("Needs", [("Office Kit on both", FG2), ("USB debugging", FG2), ("the app, same network", FG2)]),
+            ("Best for", [("files, testing by hand", FG2), ("scripts and logs", FG2), ("users, no tools", FG2)])]
+    for r, (lab, cells) in enumerate(rows):
+        yy = ty + Inches(0.52 + 0.32 * r)
+        text(s, cols[0], yy, colw, Inches(0.3), lab, 13, FG, SANS, bold=True)
+        for x, (v, col) in zip(cols[1:], cells):
+            text(s, x, yy, colw, Inches(0.3), v, 13, col, MONO if r == 0 else SANS)
+    foot(s, "MeshAI", "in-app measured 26 Sep · the others to be timed")
 
     # 15 · close
     s = slide(prs)
