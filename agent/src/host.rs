@@ -299,6 +299,13 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
 
 struct Dev { id: String, name: String, usable: f64, rtt: f64, battery: i64, charging: bool, host: bool }
 
+/// How many tokens a conversation can hold. 4096 fits a chat; a coding agent such as Aider sends its own
+/// instructions plus the files it edits, so it needs 16384 or more (MESH_CTX=16384). The planner counts the KV
+/// cache for this many tokens on every device, since each device keeps the cache for its own layers.
+fn ctx_tokens() -> u64 {
+    std::env::var("MESH_CTX").ok().and_then(|v| v.parse().ok()).filter(|&n: &u64| n >= 512).unwrap_or(4096)
+}
+
 const HOST_RESERVE: f64 = 0.30 * GB;
 const HELPER_RESERVE: f64 = 0.15 * GB;
 
@@ -418,7 +425,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     // models this laptop cannot hold alone will need helpers: each phone keeps their layers from its own copy,
     // so the engine asks for a layer by hash and nothing crosses the cable
     let host_only = devices(&hub).into_iter().take(1).collect::<Vec<_>>();
-    let need: Vec<String> = scan_models(&hub).iter().filter(|m| plan(m, &host_only, 4096)["verdict"] == "not_possible").map(|m| m.file.clone()).collect();
+    let need: Vec<String> = scan_models(&hub).iter().filter(|m| plan(m, &host_only, ctx_tokens())["verdict"] == "not_possible").map(|m| m.file.clone()).collect();
     if !need.is_empty() { let _ = send(&wire, json!({"t": "store", "models": need})); }
 
     let alive = Arc::new(Mutex::new(true));
@@ -575,7 +582,7 @@ fn start(hub: Arc<Hub>, file: String) {
     stop(&hub, "");
     let gen = *hub.run_gen.lock().unwrap();
     let Some(m) = scan_models(&hub).into_iter().find(|m| m.file == file) else { set_run(&hub, "failed", "model not found"); return; };
-    let p = plan(&m, &devices(&hub), 4096);
+    let p = plan(&m, &devices(&hub), ctx_tokens());
     if p["verdict"] == "not_possible" { set_run(&hub, "failed", p["reason"].as_str().unwrap_or("does not fit")); return; }
     { let mut r = hub.run.lock().unwrap();
       *r = Run { status: "starting".into(), step: "Planning".into(), model: m.name.clone(), plan: p.clone(), started: Some(Instant::now()) }; }
@@ -630,7 +637,7 @@ fn start(hub: Arc<Hub>, file: String) {
         }
         let help = engine_help(&bin);
         let threads = thread::available_parallelism().map(|n| n.get()).unwrap_or(4).saturating_sub(2).max(2);
-        let mut args: Vec<String> = vec!["-m".into(), crate::models_dir().join(&m.file).to_string_lossy().into(), "-c".into(), "4096".into(),
+        let mut args: Vec<String> = vec!["-m".into(), crate::models_dir().join(&m.file).to_string_lossy().into(), "-c".into(), ctx_tokens().to_string(),
             "-t".into(), threads.to_string(), "--host".into(), "127.0.0.1".into(), "--port".into(), ENGINE_PORT.to_string()];
         // every one of these is a preference, not a requirement, so a build without it still runs
         for (flag, val) in [("--jinja", &[][..]), ("--fit", &["off"]), ("--reasoning", &["off"]),
@@ -995,7 +1002,7 @@ fn state(hub: &Hub) -> Value {
     }).collect();
     let devs = devices(hub);
     let models: Vec<Value> = scan_models(hub).iter().map(|m| {
-        let p = plan(m, &devs, 4096);
+        let p = plan(m, &devs, ctx_tokens());
         json!({"file": m.file, "name": m.name, "gb": m.bytes as f64 / GB, "layers": m.layers.len(), "plan": p})
     }).collect();
     let run = hub.run.lock().unwrap().clone();
