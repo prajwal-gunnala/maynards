@@ -28,7 +28,12 @@ HEADS = {
     "PRESENTED BY: HARPER RUSSO": "PRAJWAL GUNNALA · YUVA RAJ AMBATI",
 }
 
-KEEP = [1, 2, 3, 4, 5, 6, 7, 8, 10, 16, 11, 12, 13, 14, 15, 17, 18]
+KEEP = [1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+
+# The order a pitch wants, which is not the order the template shipped in: hook, problem, what it is,
+# what you do with it, how it is built, what it took, proof, prior art, the business, the honest limits,
+# who it is for, what it is made of, and the ask.
+ORDER = [1, 2, 3, 4, 6, 7, 8, 5, 15, 16, 17, 11, 12, 13, 14, 10, 18]
 
 # (slide number in the template) -> {shape id: new text}
 TEXT = {
@@ -39,70 +44,56 @@ TEXT = {
      14: "REVIEWS YOUR CODE", 17: "ON A BUDGET LAPTOP", 20: "OFFLINE"},
 
  3: {2: "PROBLEM",
-     3: "The model decides the answer, and memory decides the model. A 30B coding model needs "
-        "about 18.6 GB of memory to run. A budget laptop has around 4 GB free once a browser and "
-        "an editor are open. A phone has 2 to 10 GB. Neither can hold it, so you run a small model "
-        "instead and you get answers you cannot use.\n\n"
-        "We measured exactly what that costs. The same 15 coding problems, asked of each setup, "
-        "scored by running every answer against its own tests. {LADDER}\n\n"
-        "Buying a machine that can hold the big model costs more than the laptop. The devices that "
-        "could hold it together are already on the table."},
+     3: "A 30B coding model needs 18.6 GB to run\n"
+        "A budget laptop has about 4 GB free\n"
+        "A phone has 2 to 10 GB\n"
+        "Neither can hold it, so you run something small\n"
+        "\n"
+        "Small models are not almost as good. They are unusable:\n"
+        "{LADDER}\n"
+        "\n"
+        "A machine that can hold the big model costs more than the laptop"},
 
  4: {26: "THE MESH",
-     27: "MeshAI pools the free memory of the devices you already own. Phones and laptop join over "
-         "a USB cable, one device plans which layers sit where, and the model runs across all of "
-         "them behind a single OpenAI compatible endpoint, so the tools you already use do not "
-         "change.\n\n"
-         "Only a few kilobytes cross the link for each word, because the embeddings and the output "
-         "head stay on the host.\n\n"
-         "On top of it sits the developer tool: mesh review for a file, mesh tests to write tests for "
-         "one, mesh diff for what you are about to commit, and a git hook that reviews every commit "
-         "before it lands. All of it against your own devices.",
+     27: "Pool the free memory of devices you already own\n"
+         "One device plans, the others hold layers\n"
+         "One OpenAI-compatible endpoint, so your tools do not change\n"
+         "About 4 KB crosses the cable per word\n"
+         "The 18.6 GB of weights never move\n"
+         "Internet off throughout",
      7: "ONE ENDPOINT", 10: "PLANS THE SPLIT", 13: "REFUSES BAD DEVICES",
      16: "MESH REVIEW · TESTS · DIFF", 19: "GIT PRE-COMMIT HOOK", 22: "NOTHING LEAVES"},
 
  5: {2: "WHY NOT BEFORE?",
-     "body": "Splitting a model across machines is not new. Doing it across phones is, and the reasons "
-        "are physical rather than clever.\n\n"
-        "Generating a word reads the whole model out of memory, so a device that holds part of the "
-        "model is asked for it once per word. That makes the link, not the chip, the thing that "
-        "decides whether a split is usable. Venue Wi-Fi measured 266 to 483 ms round trip and the "
-        "planner refuses it. A USB cable measures 2 to 3 ms and it works.\n\n"
-        "Loading was the second wall. The first 30B split took 517 seconds, because the engine read "
-        "the file in scattered pieces while pushing layers out. Reading it once, front to back, "
-        "brought that to 70.\n\n"
-        "The research agrees on where the line falls. Petals, the only peer reviewed system to do this at "
-        "scale, measured 0.83 tokens per second across two continents. A split is worth it on a link you "
-        "own and worthless on one you do not, which is exactly where we drew it."},
+     "body": "Every word waits for the link, so the link decides everything\n"
+        "Venue Wi-Fi: 266 to 483 ms. The planner refuses it\n"
+        "A USB cable: 2 to 3 ms. It works\n"
+        "\n"
+        "Loading was the second wall\n"
+        "First 30B split: 517 seconds\n"
+        "Read the file once, front to back: 70 seconds\n"
+        "\n"
+        "Petals measured 0.83 tokens per second across two continents\n"
+        "A split is worth it on a link you own, and worthless on one you do not"},
 
  6: {2: "WHAT YOU DO WITH IT",
-     "body": "You are about to commit. You tap one button on your phone.\n\n"
-        "The phone asks your laptop what you have changed and not committed. The laptop answers over the "
-        "cable with the diff. A 30B coding model running across the two phones and the laptop reviews it, "
-        "and the review appears on the phone. No internet, no account, no API bill, and the code never "
-        "left the desk.\n\n"
-        "The same review runs as a git pre-commit hook, so every commit is read before it lands, and as "
-        "mesh review on a file, or mesh tests to write the tests for one. One command to install, and it "
-        "costs nothing on the ten thousandth run."},
+     "body": "You are about to commit. You tap one button on your phone\n"
+        "The phone asks your laptop what you changed\n"
+        "A 30B across two phones and the laptop reviews it\n"
+        "The review appears on the phone\n"
+        "\n"
+        "No internet · no account · no API bill · the code never left the desk\n"
+        "The same review installs as a git pre-commit hook, in one command"},
 
- 7: {2: "HOW IT WORKS",
-     "body": "One device is the host. It reads every device's free memory, heat, battery and round trip "
-        "time, then gives each one an unbroken run of layers it can actually hold, largest first. "
-        "The embeddings and the output head stay on the host.\n\n"
-        "Measured on our own hardware: laptop layers 0 to 22, one phone 23 to 42, the other 43 to 47. "
-        "The phones hold 9.6 GB of the 18.6. What crosses the cable is one hidden state per word, about "
-        "4 KB, read from the model's own header. The 18.6 GB of weights never move, and the app draws "
-        "that traffic live while it answers."},
+ 7: {2: "ARCHITECTURE"},
 
  8: {2: "WHAT MADE IT WORK",
-     "body": "Read the file once, front to back: load 517 s to 70 s.\n\n"
-        "Every phone keeps its own layers on its own storage, so a split it has never used before is "
-        "ready in 70 s instead of 437.\n\n"
-        "One conversation slot, so a long chat stops falling out of the cache.\n\n"
-        "The median of ten round trips, not the average, so one Wi-Fi spike does not evict a healthy "
-        "phone.\n\n"
-        "And it refuses. Too slow to reach, too hot, nearly flat, or the model already fits one "
-        "device: it says which, in a sentence you can read."},
+     "body": "Read the file once, front to back: load 517 s to 70 s\n"
+        "Each device keeps its own layers: an unseen split 437 s to 70 s\n"
+        "One conversation slot, so a long chat stays in the cache\n"
+        "Embeddings and output head pinned to the host\n"
+        "Median of ten round trips, so one spike does not evict a good device\n"
+        "It refuses, in words: too slow, too hot, nearly flat, or it already fits"},
 
  10: {3: "TECH STACK",
       4: "Any GGUF model",
@@ -117,29 +108,32 @@ TEXT = {
 
  11: {3: "FEASIBILITY",
       6: "IT RUNS TODAY: 30B ACROSS A LAPTOP AND TWO PHONES",
-      9: "READY IN 70 SECONDS, 6.6 TOKENS PER SECOND",
+      9: "READY IN 70 SECONDS · 6.6 TOKENS PER SECOND",
       12: "BUILT AND MEASURED INSIDE THE EVENT WINDOW"},
 
  12: {2: "LIMITS",
-      6: "NOT FASTER. IT BUYS MEMORY, NOT SPEED",
-      3: "Every word crosses the link once, so a split is slower than one device that can already "
-         "hold the model. Our own planner will tell you so and refuse to involve your phone. We "
-         "split only when the model fits nowhere else.",
-      10: "PRIVATE ACROSS YOUR OWN DEVICES ONLY",
-      7: "Nothing leaves the devices you own, and the demo runs with the internet off. We do not "
-         "claim that activations sent to someone else's phone are private, because published work "
-         "turns them back into text."},
+      6: "NOT FASTER. IT BUYS MEMORY",
+      3: "Every word crosses the link once\n"
+         "A split is slower than one device that already fits\n"
+         "Our planner says so and refuses your phone\n"
+         "We split only when the model fits nowhere else",
+      10: "PRIVATE ACROSS YOUR OWN DEVICES",
+      7: "Nothing leaves the devices you own\n"
+         "The demo runs with the internet off\n"
+         "We do not claim activations sent to a stranger are private\n"
+         "Published work turns them back into text"},
 
  13: {2: "IMPACT",
       6: "THE CEILING MOVES",
-      3: "The quality of AI you can run on your own hardware is set by memory. Pool the memory and "
-         "the ceiling moves: the same devices that could only hold a small model now hold a 30B "
-         "coding model, and the answers change accordingly.",
-      10: "PHONE FIRST IS NOT A GIMMICK HERE",
-      7: "In rural India 94.2% of households have a phone and 4.2% have a computer (MoSPI, 2022-23). "
-         "That is not our first user and we will not pretend it is. It is why the phone has to be the "
-         "device that works rather than the accessory: for most people it is the only computer in the "
-         "house, and as open models improve at a given size, what it can hold matters more every year."},
+      3: "Memory decides which model you can run\n"
+         "Pool the memory and the ceiling moves\n"
+         "The same devices now hold a 30B\n"
+         "The answers change accordingly",
+      10: "PHONE FIRST IS NOT A GIMMICK",
+      7: "Rural India: 94.2% have a phone, 4.2% a computer\n"
+         "Not our first user, and we will not pretend it is\n"
+         "It is why the phone has to be the device that works\n"
+         "As open models improve, what it holds matters more"},
 
  14: {2: "WHO IT IS FOR",
       8: "DEVELOPERS ON A WEAK LAPTOP", 11: "TWO PERSON TEAMS", 14: "NO-CLOUD WORKPLACES",
@@ -147,14 +141,9 @@ TEXT = {
 
  15: {7: "THE EVIDENCE"},
 
- # the timeline layout, reused: six systems, and what each one leaves undone
  16: {2: "WHAT ALREADY EXISTS"},
 
- 17: {2: "THE NUMBERS",
-      5: "30B RUNNING ACROSS THREE DEVICES, 18.6 GB POOLED",
-      8: "PHONES HOLD 9.6 GB OF IT, THE LAPTOP HOLDS THE HEAD",
-      11: "READY IN 70 SECONDS, 6.6 TOKENS PER SECOND",
-      14: "4 KB CROSSES PER WORD, 18.6 GB NEVER MOVES"},
+ 17: {},   # the whole slide is the picture, heading included
 
  18: {5: "TEAM MAYNARDS",
       9: "Prajwal Gunnala", 10: "github.com/prajwal-gunnala/maynards",
@@ -163,16 +152,16 @@ TEXT = {
 
 # slides whose template layout is a title only: we add the body box ourselves
 # slides whose title the template centres down the page: ours sits where every other title sits
-TITLE_TOP = {5, 6, 7, 8, 11, 15, 17}
+TITLE_TOP = {5, 6, 7, 8, 11, 15}
 
-BODY_BOX = {5: (0.52, 4.40, 18.95, 6.00), 6: (0.52, 4.40, 18.95, 6.00),
-            7: (0.52, 4.40, 18.95, 2.60), 8: (0.52, 4.40, 18.95, 6.00)}
+BODY_BOX = {5: (0.52, 4.20, 18.95, 6.40), 6: (0.52, 4.20, 18.95, 6.40),
+            8: (0.52, 4.20, 18.95, 6.40)}
 
 # template shapes to remove: display type left over from a layout we are reusing for body copy
 DROP = {6: [9], 15: [8]}
 
 # slides where we keep the title and the running heads and nothing else, because the picture is the slide
-ONLY = {16: [22, 23, 24, 25]}   # 16 carries its own heading inside the picture
+ONLY = {7: [2, 3, 4, 5, 6], 16: [22, 23, 24, 25], 17: [15, 16, 17, 18]}   # 16 carries its own heading inside the picture
 DROP_MORE = {18: [17, 18]}      # the template's third person; this team is two
 
 # Slides whose text was white because a photograph sat behind it. The photograph is gone, so the
@@ -183,21 +172,23 @@ INK_TEXT = {11}
 TITLE_ID = {11: 3, 15: 7}
 
 # a long title in the template's display size runs off the slide; these get their own size, in points
-TITLE_PT = {2: 88, 12: 150, 14: 120, 17: 88}   # 15: a decorative bar that sat behind the template's photography
+TITLE_PT = {2: 88, 12: 150, 14: 120}   # 15: a decorative bar that sat behind the template's photography
 
 # pictures: (slide, image file, left, top, width) in inches. The stock photos are removed first.
 PICTURES = {
  3: [("fits.png", 0.44, 5.35, 10.20)],
- 4: [("app-host.png", 15.90, 4.30, 3.11)],
+ 4: [("app-new.png", 11.60, 5.90, 7.90)],
  6: [("flow.png", 0.52, 7.15, 18.95)],
  7: [("split.png", 0.52, 7.55, 18.95)],
  15: [("accuracy.png", 3.25, 4.60, 13.50)],
+ 7: [("arch.png", 1.30, 3.35, 17.40)],
  16: [("compare.png", 0.90, 1.00, 18.20)],
+ 17: [("biz.png", 0.90, 1.00, 18.20)],
 }
 
 
 def ladder_sentence():
-    """One sentence of real benchmark numbers, or nothing if they are not measured yet."""
+    """The measured ladder, one configuration per line. Empty if nothing has been measured yet."""
     rows = []
     d = HERE.parent.parent / "maynards" / "results"
     for f in sorted(d.glob("*.json")) if d.exists() else []:
@@ -205,14 +196,18 @@ def ladder_sentence():
         if r.get("tasks") == 15:
             rows.append(r)
     if not rows:
-        return "The results table is in the repository."
+        return "The results table is in the repository"
     rows.sort(key=lambda r: r["accuracy"])
-    bits = [f"{r['label']} passed {r['passed']} of {r['tasks']}" for r in rows]
-    return "; ".join(bits) + "."
+    return "\n".join(f"{r['label']}: {r['passed']} of {r['tasks']} correct" for r in rows)
 
 
 def set_text(shape, text):
-    """Replace the words, keep every bit of formatting the template gave the first run."""
+    """
+    Replace the words, keep the formatting the template gave the first run.
+
+    A line break starts a new paragraph. Nothing here is ever a paragraph of prose: a deck is read at
+    a glance from the back of a room, so every body is a short line that can be taken in whole.
+    """
     tf = shape.text_frame
     first = tf.paragraphs[0]
     keep = first.runs[0] if first.runs else None
@@ -220,20 +215,30 @@ def set_text(shape, text):
         p._p.getparent().remove(p._p)
     for r in list(first.runs)[1:]:
         r._r.getparent().remove(r._r)
-    blocks = text.split("\n\n")
+    lines = [l for l in text.split("\n") if l.strip()]
+    if not lines:
+        lines = [""]
     if keep is None:
-        tf.text = blocks[0]
+        tf.text = lines[0]
     else:
-        keep.text = blocks[0]
-    for b in blocks[1:]:
-        p = copy.deepcopy(first._p)
-        first._p.getparent().append(p)
+        keep.text = lines[0]
+    for b in lines[1:]:
+        el = copy.deepcopy(first._p)
+        first._p.getparent().append(el)
         from pptx.text.text import _Paragraph
-        para = _Paragraph(p, tf)
+        para = _Paragraph(el, tf)
         if para.runs:
             para.runs[0].text = b
             for r in list(para.runs)[1:]:
                 r._r.getparent().remove(r._r)
+    if len(lines) > 1:
+        # a list is read down the left edge: justified text stretches short lines into nonsense,
+        # and a line needs air under it to be taken in on its own
+        from pptx.enum.text import PP_ALIGN
+        from pptx.util import Pt
+        for para in tf.paragraphs:
+            para.alignment = PP_ALIGN.LEFT
+            para.space_after = Pt(9)
 
 
 def add_body(slide, template_body, text, box):
@@ -366,11 +371,15 @@ def main():
             else:
                 print(f"  missing picture: {name}")
 
-    # drop the slides we are not using, last first so the indices hold
+    # Drop what we are not using, then put the rest in ORDER. The template's sequence was written for a
+    # different talk; this one is ours.
     lst = prs.slides._sldIdLst
     ids = list(lst)
-    for i in sorted(set(range(1, len(ids) + 1)) - set(KEEP), reverse=True):
-        lst.remove(ids[i - 1])
+    keep_els = {n: ids[n - 1] for n in KEEP}
+    for el in ids:
+        lst.remove(el)
+    for n in ORDER:
+        lst.append(keep_els[n])
 
     for slide in prs.slides:
         morph(slide)

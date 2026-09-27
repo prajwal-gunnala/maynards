@@ -19,8 +19,8 @@ import pathlib
 
 RESULTS = pathlib.Path(__file__).resolve().parent.parent / "results"
 
-INK, MUTED, BAR, BAR2, GRID = "#111418", "#5b6475", "#f26b1d", "#3d6bff", "#d8dde6"
-PAPER = "#fff"   # what the chart sits on, used to keep a label readable where it crosses a bar
+INK, MUTED, BAR, BAR2, GRID = "#0F0F0E", "#6B6B66", "#1F6F4A", "#9A9A93", "#D8D6CF"
+PAPER = "#F2F1EC"   # what the chart sits on, used to keep a label readable where it crosses a bar
 
 
 def bars(runs, width=760, height=320):
