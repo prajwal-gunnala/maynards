@@ -142,7 +142,7 @@ TEXT = {
          "house, and as open models improve at a given size, what it can hold matters more every year."},
 
  14: {2: "WHO IT IS FOR",
-      8: "DEVELOPERS ON A WEAK LAPTOP", 11: "TWO PERSON TEAMS", 14: "WORKPLACES THAT FORBID CLOUD AI",
+      8: "DEVELOPERS ON A WEAK LAPTOP", 11: "TWO PERSON TEAMS", 14: "NO-CLOUD WORKPLACES",
       17: "STUDENTS WITH A GOOD PHONE", 20: "FIELD WORK WITH NO SIGNAL", 23: "ANY CAPABLE ANDROID"},
 
  15: {7: "THE EVIDENCE"},
@@ -183,7 +183,7 @@ INK_TEXT = {11}
 TITLE_ID = {11: 3, 15: 7}
 
 # a long title in the template's display size runs off the slide; these get their own size, in points
-TITLE_PT = {17: 88}   # 15: a decorative bar that sat behind the template's photography
+TITLE_PT = {2: 88, 12: 150, 14: 120, 17: 88}   # 15: a decorative bar that sat behind the template's photography
 
 # pictures: (slide, image file, left, top, width) in inches. The stock photos are removed first.
 PICTURES = {
@@ -315,15 +315,17 @@ def main():
                 set_text(sh, HEADS[sh.text_frame.text.strip()])
         # after the words are in, because replacing the text rebuilds the runs and would undo this
         title_id = TITLE_ID.get(n, 2)
-        if n in TITLE_TOP and title_id in ids:
+        if title_id in ids and (n in TITLE_TOP or n in TITLE_PT):
             from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
             from pptx.util import Pt
             t = ids[title_id]
-            t.left, t.top, t.width, t.height = Inches(0.52), Inches(1.16), Inches(18.43), Inches(2.92)
+            if n in TITLE_TOP:
+                t.left, t.top, t.width, t.height = Inches(0.52), Inches(1.16), Inches(18.43), Inches(2.92)
+                t.text_frame.vertical_anchor = MSO_ANCHOR.TOP
             t.text_frame.word_wrap = True
-            t.text_frame.vertical_anchor = MSO_ANCHOR.TOP
             for para in t.text_frame.paragraphs:
-                para.alignment = PP_ALIGN.LEFT      # some template titles are centred in their own box
+                if n in TITLE_TOP:
+                    para.alignment = PP_ALIGN.LEFT   # some template titles are centred in their own box
                 if n in TITLE_PT:
                     # both the paragraph default and every run: renderers disagree about which one wins
                     para.font.size = Pt(TITLE_PT[n])
