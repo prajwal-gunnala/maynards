@@ -299,7 +299,7 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
 
 // ---------------------------------------------------------------- the planner (same rules as the phone app)
 
-struct Dev { id: String, name: String, usable: f64, rtt: f64, battery: i64, charging: bool, host: bool, heat: f64 }
+struct Dev { id: String, name: String, usable: f64, rtt: f64, battery: i64, charging: bool, host: bool }
 
 /// How many tokens a conversation can hold. 4096 fits a chat; a coding agent such as Aider sends its own
 /// instructions plus the files it edits, so it needs 16384 or more (MESH_CTX=16384). The planner counts the KV
@@ -308,64 +308,28 @@ fn ctx_tokens() -> u64 {
     std::env::var("MESH_CTX").ok().and_then(|v| v.parse().ok()).filter(|&n: &u64| n >= 512).unwrap_or(4096)
 }
 
-/// What a device's thermal headroom does to its speed. `heat` is Android's `getThermalHeadroom`:
-/// 0 is cool, 1 means it is about to throttle, and -1 means the device could not tell us.
-///
-/// The numbers come from our own sustained run on an iQOO 15 (`docs/sustained-8b-iqoo.csv`): a phone
-/// that started at 11.44 tok/s was down to 5.29 by ten minutes, which is 0.46 of where it began. So a
-/// device at the edge of throttling is worth a little under half of a cool one, and we interpolate
-/// straight between the two. A device that cannot report heat is assumed cool, because guessing it is
-/// hot would quietly push work off every phone with an older Android.
-fn heat_factor(heat: f64) -> f64 {
-    if !(0.0..=1.0).contains(&heat) { return 1.0; }
-    1.0 - 0.54 * heat
-}
-
-/// How much memory we are willing to ask of a device, given how hot it is.
-///
-/// This is deliberately not `heat_factor`. Heat costs us throughput, not capacity: a hot phone still
-/// has the same RAM. But in a layer pipeline every token walks through every device in turn, so a slow
-/// device holding many layers sets the pace for the whole mesh, and the fix is to give it fewer. Taking
-/// a slice off its capacity is the smallest change that produces that behaviour with the planner we
-/// already have.
-///
-/// It is capped at a quarter and only applies past the halfway mark, for two reasons: thermal headroom
-/// is a lagging signal (1.0 means the device is *already* being throttled), and a derate large enough
-/// to change the plan is also large enough to make a working setup stop fitting. `plan_for` falls back
-/// to the plain plan if this one does not fit, so the worst case is that we ignore heat, never that we
-/// refuse to run.
-fn heat_capacity(heat: f64) -> f64 {
-    if !(0.5..=1.0).contains(&heat) { return 1.0; }
-    1.0 - 0.25 * ((heat - 0.5) / 0.5)
-}
-
 const HOST_RESERVE: f64 = 0.30 * GB;
 const HELPER_RESERVE: f64 = 0.15 * GB;
 
-fn plan(m: &Model, devs: &[Dev], ctx: u64, thermal: bool) -> Value {
+fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let kv = (m.kv_per_token * ctx * 17 / 32) as f64; // 8-bit KV cache
     let kv_layer = kv / m.layers.len().max(1) as f64;
     let extra = m.proj.as_ref().map(|p| p.1 as f64).unwrap_or(0.0);
     let need = m.bytes as f64 + kv + HOST_RESERVE + extra;
     let host = &devs[0];
     let biggest = m.layers.iter().copied().max().unwrap_or(0) as f64 + kv_layer;
-    // What we will actually ask of a helper: its memory, shaded by how close it is to throttling.
-    let room = |d: &Dev| d.usable * if thermal { heat_capacity(d.heat) } else { 1.0 };
     let mut skipped = serde_json::Map::new();
     let mut helpers: Vec<&Dev> = devs[1..].iter().filter(|d| {
         let why = if d.rtt > 60.0 { Some(format!("link too slow ({:.0} ms)", d.rtt)) }
             else if !d.charging && d.battery >= 0 && d.battery < 20 { Some(format!("battery {}%", d.battery)) }
-            else if room(d) - HELPER_RESERVE < biggest {
-                Some(if thermal && heat_capacity(d.heat) < 1.0 { "too little memory while this hot".into() } else { "too little memory".to_string() })
-            }
+            else if d.usable - HELPER_RESERVE < biggest { Some("too little memory".into()) }
             else { None };
         if let Some(w) = &why { skipped.insert(d.name.clone(), json!(w)); }
         why.is_none()
     }).collect();
-    helpers.sort_by(|a, b| room(b).partial_cmp(&room(a)).unwrap().then(a.id.cmp(&b.id)));
+    helpers.sort_by(|a, b| b.usable.partial_cmp(&a.usable).unwrap().then(a.id.cmp(&b.id)));
     let verdict = |have: f64, need: f64| if have - need >= need * 0.15 { "doable" } else { "tight" };
-    let slice = |d: &Dev, from: usize, to: usize, bytes: f64| json!({"id": d.id, "name": d.name, "from": from, "to": to,
-        "gb": bytes / GB, "host": d.host, "heat": d.heat, "speed": heat_factor(d.heat)});
+    let slice = |d: &Dev, from: usize, to: usize, bytes: f64| json!({"id": d.id, "name": d.name, "from": from, "to": to, "gb": bytes / GB, "host": d.host});
     if host.usable >= need {
         return json!({"verdict": verdict(host.usable, need), "reason": "Runs on this laptop alone", "need_gb": need / GB,
             "slices": [slice(host, 0, m.layers.len(), m.bytes as f64)], "skipped": skipped});
@@ -378,11 +342,10 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64, thermal: bool) -> Value {
     let mut tail = Vec::new();
     for d in &helpers {
         if end == 0 { break; }
-        let cap = room(d) - HELPER_RESERVE;
+        let cap = d.usable - HELPER_RESERVE;
         let (to, mut used) = (end, 0.0);
         while end > 0 && used + cost(end - 1) <= cap { used += cost(end - 1); end -= 1; }
         if end < to { tail.push(slice(d, end, to, used)); capacity += cap + HELPER_RESERVE; }
-        else if thermal && heat_capacity(d.heat) < 1.0 { skipped.insert(d.name.clone(), json!("too hot to take a share right now")); }
     }
     let fixed = m.other as f64 + HOST_RESERVE + extra;
     let front: f64 = (0..end).map(cost).sum();
@@ -409,27 +372,7 @@ fn pinned() -> Option<Value> {
 
 /// The plan for a model: the pinned split when there is one for it, otherwise the planner's.
 fn plan_for(m: &Model, devs: &[Dev], ctx: u64) -> Value {
-    pinned().filter(|p| p["model"] == m.file.as_str()).and_then(|p| pinned_plan(m, devs, ctx, &p)).unwrap_or_else(|| plan_warm(m, devs, ctx))
-}
-
-/// The plan to run right now, with heat taken into account.
-///
-/// Shading hot devices can make a model stop fitting, and a mesh that runs slowly is worth more than
-/// one that refuses to start, so if the thermal plan does not fit we fall back to the plan that ignores
-/// heat and record that we did. The `thermal` field says which of the two this is, so the panel can
-/// show why a device is holding fewer layers than its memory would allow.
-fn plan_warm(m: &Model, devs: &[Dev], ctx: u64) -> Value {
-    if !devs.iter().any(|d| heat_capacity(d.heat) < 1.0) { return plan(m, devs, ctx, false); }
-    let mut hot = plan(m, devs, ctx, true);
-    if hot["verdict"] == "not_possible" {
-        let mut cool = plan(m, devs, ctx, false);
-        if cool["verdict"] != "not_possible" {
-            cool["thermal"] = json!("set aside: nothing fits once the hot devices are given less");
-            return cool;
-        }
-    }
-    hot["thermal"] = json!("applied: hot devices are holding fewer layers");
-    hot
+    pinned().filter(|p| p["model"] == m.file.as_str()).and_then(|p| pinned_plan(m, devs, ctx, &p)).unwrap_or_else(|| plan(m, devs, ctx))
 }
 
 fn pinned_plan(m: &Model, devs: &[Dev], ctx: u64, pin: &Value) -> Option<Value> {
@@ -483,17 +426,14 @@ fn devices(hub: &Hub) -> Vec<Dev> {
     let me = laptop_specs();
     let caps = hub.caps.lock().unwrap().clone();
     let cap = caps.get("laptop").copied().unwrap_or(f64::MAX);
-    // The laptop reports a CPU package temperature in degrees, not a 0-1 headroom, so it is left out of
-    // the thermal maths rather than fed in on a different scale. advice() still warns when it is hot.
     let mut v = vec![Dev { id: "laptop".into(), name: me["name"].as_str().unwrap_or("This laptop").into(), usable: usable(&me).min(cap),
-        rtt: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true, heat: -1.0 }];
+        rtt: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true }];
     for (id, p) in hub.peers.lock().unwrap().iter() {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v.push(Dev { id: id.clone(), name: p.name.clone(), usable: usable(&p.specs).min(caps.get(id).copied().unwrap_or(f64::MAX)), rtt: r.get(r.len() / 2).copied().unwrap_or(0.0),
             battery: p.specs["battery"].as_i64().unwrap_or(100),
-            charging: p.specs["charging"].as_bool().unwrap_or(true), host: false,
-            heat: p.specs["heat"].as_f64().unwrap_or(-1.0) });
+            charging: p.specs["charging"].as_bool().unwrap_or(true), host: false });
     }
     v
 }
@@ -548,7 +488,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     // models this laptop cannot hold alone will need helpers: each phone keeps their layers from its own copy,
     // so the engine asks for a layer by hash and nothing crosses the cable
     let host_only = devices(&hub).into_iter().take(1).collect::<Vec<_>>();
-    let need: Vec<String> = scan_models(&hub).iter().filter(|m| plan(m, &host_only, ctx_tokens(), false)["verdict"] == "not_possible").map(|m| m.file.clone()).collect();
+    let need: Vec<String> = scan_models(&hub).iter().filter(|m| plan(m, &host_only, ctx_tokens())["verdict"] == "not_possible").map(|m| m.file.clone()).collect();
     if !need.is_empty() { let _ = send(&wire, json!({"t": "store", "models": need})); }
 
     let alive = Arc::new(Mutex::new(true));
@@ -996,19 +936,7 @@ fn advice(hub: &Hub) -> Vec<String> {
         if usable(s) < 1.5 * GB && !(running && held.iter().any(|h| h == id)) {
             a.push(format!("{} is low on memory: close its other apps", p.name));
         }
-        // Heat is worth saying something precise about, because we measured what it costs. The advice
-        // differs by whether this device is already carrying layers: a running split cannot be changed
-        // without restarting the engine, so the honest suggestion is to re-plan between tasks, not now.
-        let heat = s["heat"].as_f64().unwrap_or(-1.0);
-        if heat >= 0.8 {
-            let lost = ((1.0 - heat_factor(heat)) * 100.0).round() as i64;
-            if running && held.iter().any(|h| h == id) {
-                a.push(format!("{} is hot and holding layers: expect about {lost}% less speed from it. \
-                                Starting again would give it fewer layers; the split cannot change while the engine runs", p.name));
-            } else {
-                a.push(format!("{} is hot: expect about {lost}% less speed, so it will be given fewer layers", p.name));
-            }
-        }
+        if s["heat"].as_f64().unwrap_or(0.0) >= 0.8 { a.push(format!("{} is hot: it will slow down", p.name)); }
         if r.get(r.len() / 2).copied().unwrap_or(0.0) > 60.0 { a.push(format!("{} has a slow link: use USB tethering", p.name)); }
     }
     a
@@ -1261,7 +1189,7 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
             let file = req["model"].as_str().unwrap_or("").to_string();
             let Some(m) = scan_models(&hub).into_iter().find(|m| m.file == file) else { return ok(&mut s, json!({"ok": false, "error": "model not found"})); };
             let run = hub.run.lock().unwrap().clone();
-            let p = if run.status == "ready" && run.model == m.name { run.plan } else { plan_warm(&m, &devices(&hub), ctx_tokens()) };
+            let p = if run.status == "ready" && run.model == m.name { run.plan } else { plan(&m, &devices(&hub), ctx_tokens()) };
             let slices: Vec<Value> = p["slices"].as_array().cloned().unwrap_or_default().iter()
                 .map(|x| json!({"id": x["id"], "name": x["name"], "from": x["from"], "to": x["to"]})).collect();
             if slices.is_empty() { return ok(&mut s, json!({"ok": false, "error": p["reason"]})); }
@@ -1330,109 +1258,5 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
             }
         }
         _ => write!(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
-    }
-}
-
-// ---------------------------------------------------------------- tests
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A model shaped like the 30B we actually run: 48 layers of roughly equal size, plus the
-    /// embeddings and output head that always stay on the host.
-    fn model(layer_gb: f64, layers: usize) -> Model {
-        Model {
-            proj: None,
-            file: "test.gguf".into(),
-            name: "test".into(),
-            bytes: ((layer_gb * layers as f64 + 1.0) * GB) as u64,
-            layers: vec![(layer_gb * GB) as u64; layers],
-            other: (1.0 * GB) as u64,
-            kv_per_token: 0,
-        }
-    }
-
-    fn dev(id: &str, gb: f64, heat: f64, host: bool) -> Dev {
-        Dev { id: id.into(), name: id.into(), usable: gb * GB, rtt: 2.0,
-              battery: 100, charging: true, host, heat }
-    }
-
-    /// How many layers a given device was given by a plan.
-    fn layers_on(p: &Value, id: &str) -> u64 {
-        p["slices"].as_array().unwrap().iter().find(|s| s["id"] == id)
-            .map(|s| s["to"].as_u64().unwrap() - s["from"].as_u64().unwrap()).unwrap_or(0)
-    }
-
-    #[test]
-    fn heat_factor_matches_the_measured_curve() {
-        // cool is full speed; at the throttling edge we measured 5.29 from 11.44, which is 0.46
-        assert_eq!(heat_factor(0.0), 1.0);
-        assert!((heat_factor(1.0) - 0.46).abs() < 0.001);
-        // a device that cannot report heat is assumed cool, not assumed hot
-        assert_eq!(heat_factor(-1.0), 1.0);
-        assert_eq!(heat_factor(f64::NAN), 1.0);
-    }
-
-    #[test]
-    fn capacity_is_only_shaded_past_halfway_and_never_by_more_than_a_quarter() {
-        assert_eq!(heat_capacity(0.0), 1.0);
-        assert_eq!(heat_capacity(0.49), 1.0);
-        assert_eq!(heat_capacity(0.5), 1.0);
-        assert!((heat_capacity(1.0) - 0.75).abs() < 1e-9);
-        assert_eq!(heat_capacity(-1.0), 1.0);
-    }
-
-    #[test]
-    fn a_hot_phone_is_given_fewer_layers_than_a_cool_one_of_the_same_size() {
-        let m = model(0.35, 48);
-        // two identical phones, one cool and one nearly throttling
-        let devs = vec![dev("laptop", 8.0, -1.0, true), dev("cool", 8.0, 0.0, false), dev("hot", 8.0, 1.0, false)];
-        let cold = plan(&m, &devs, 4096, false);
-        let warm = plan(&m, &devs, 4096, true);
-        assert_ne!(cold["verdict"], "not_possible");
-        assert_ne!(warm["verdict"], "not_possible");
-        // heat-blind, the two phones are interchangeable and take the same share
-        assert_eq!(layers_on(&cold, "cool"), layers_on(&cold, "hot"));
-        // heat-aware, the hot one carries strictly less and the cool one picks up the slack
-        assert!(layers_on(&warm, "hot") < layers_on(&warm, "cool"),
-                "hot {} should be under cool {}", layers_on(&warm, "hot"), layers_on(&warm, "cool"));
-        assert!(layers_on(&warm, "hot") < layers_on(&cold, "hot"));
-        // and nothing is dropped on the floor: every layer is still placed somewhere
-        let total: u64 = warm["slices"].as_array().unwrap().iter()
-            .map(|s| s["to"].as_u64().unwrap() - s["from"].as_u64().unwrap()).sum();
-        assert_eq!(total, 48);
-    }
-
-    #[test]
-    fn slices_report_the_heat_and_the_speed_we_expect() {
-        let m = model(0.35, 48);
-        let devs = vec![dev("laptop", 12.0, -1.0, true), dev("hot", 24.0, 1.0, false)];
-        let p = plan(&m, &devs, 4096, true);
-        assert_ne!(p["verdict"], "not_possible");
-        let s = p["slices"].as_array().unwrap().iter().find(|s| s["id"] == "hot").unwrap().clone();
-        assert_eq!(s["heat"], json!(1.0));
-        assert!((s["speed"].as_f64().unwrap() - 0.46).abs() < 0.001);
-    }
-
-    /// The safety property that matters most: being careful about heat must never be the reason a model
-    /// will not run. plan_warm falls back to the heat-blind plan and says that it did.
-    #[test]
-    fn a_tight_fit_falls_back_rather_than_refusing_to_run() {
-        // sized so the model fits only if the hot phone gives everything it has
-        let m = model(0.5, 48);
-        let devs = vec![dev("laptop", 3.0, -1.0, true), dev("hot", 23.0, 1.0, false)];
-        let strict = plan(&m, &devs, 4096, true);
-        let fallback = plan_warm(&m, &devs, 4096);
-        assert_eq!(strict["verdict"], "not_possible", "the shaded plan should not fit here");
-        assert_ne!(fallback["verdict"], "not_possible", "but plan_warm must still find a way to run");
-        assert!(fallback["thermal"].as_str().unwrap().starts_with("set aside"));
-    }
-
-    #[test]
-    fn a_cool_mesh_is_planned_exactly_as_before() {
-        let m = model(0.35, 48);
-        let devs = vec![dev("laptop", 8.0, -1.0, true), dev("a", 8.0, 0.1, false), dev("b", 8.0, 0.2, false)];
-        assert_eq!(plan_warm(&m, &devs, 4096), plan(&m, &devs, 4096, false));
     }
 }
