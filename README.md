@@ -35,6 +35,8 @@ Host phone                                Helper phone
         └── laptop: `mesh join` (third helper) · `mesh ask` / `mesh review` (uses the Host's /v1)
 ```
 
+**Mesh Compiler** (per-device, per-task tuning and repeated-task reuse, measured on the iQOO 15): see `docs/mesh-compiler/` and github.com/prajwal-gunnala/mesh-compiler.
+
 ## Layout
 
 ```
