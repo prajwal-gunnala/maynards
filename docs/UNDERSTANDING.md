@@ -14,14 +14,14 @@ This is a description, not a set of instructions. It explains the state of under
 
 0. [The short version](#0)
 1. [The problem, from first principles](#1)
-2. [How MeshAI works](#2)
+2. [How MeshAI works](#2) — including [why Mixture-of-Experts is what makes it usable](#26)
 3. [What actually exists in the repository](#3)
 4. [Every measurement, and what it means](#4)
 5. [What the Adaptive Mesh Compiler document proposes](#5)
 6. [The research: every paper, quoted](#6)
 7. [What is new and what is not](#7)
 8. [What is possible, what is not, and why](#8)
-9. [The business model](#9)
+9. [The business model](#9) — including [renting memory, measured correctly](#96)
 10. [Risks](#10)
 11. [What remains unknown](#11)
 12. [Questions worth asking](#12)
@@ -197,6 +197,61 @@ The three things worth noticing about this diagram:
 3. **The control link is separate from the data path.** Devices continuously report memory, heat, battery
    and latency on port 7070, while the model's traffic goes over the RPC connection. This separation is
    what makes it possible to know a phone is overheating without disturbing the run.
+
+<a name="26"></a>
+### 2.6 Mixture-of-Experts — why the whole thing is usable at all
+
+This is the piece that makes the architecture work rather than merely function, and it is easy to miss
+because it is a property of the *model* rather than of anything built here.
+
+**What a Mixture-of-Experts model is.** Inside each layer, instead of one block of weights that every token
+passes through, there are many small blocks called **experts** plus a tiny **router** that picks a few of
+them per token. Qwen3-Coder-30B-A3B has **128 experts per layer and activates 8 of them** for any given
+token (verified from Qwen's official configuration: `Qwen3MoeForCausalLM`). The name encodes it —
+**A3B** means *3 billion active* parameters out of 30 billion total.
+
+**Why that matters here, and it follows directly from [§1.2](#12).** Decode speed is governed by how many
+bytes must be read from memory per token. A dense model reads *all* of its weights every token. An MoE
+model reads only the shared parts plus the handful of experts the router selected:
+
+| | Per token |
+|---|---|
+| Active fraction | **3.3B of 30.5B = 10.8%** |
+| Bytes read per token | **~2.0 GB** |
+| Bytes a *dense* 30B would read | **18.56 GB** |
+| **Memory traffic avoided** | **~9.2×** |
+
+**A cross-check against a measurement actually taken here**, because the above is arithmetic and arithmetic
+can be wrong. A *dense* 8B model running alone on one phone measured **11.8 tok/s**
+([§4.7](#47)). An 8B at 4-bit is about 4.7 GB, all of it read every token, so that phone was sustaining
+roughly **55 GB/s** of effective memory bandwidth — entirely plausible for flagship LPDDR5X with a peak
+around 68–77 GB/s. At that same bandwidth, a **dense** 30B would manage about **3 tok/s**, while the MoE
+30B's 2.0 GB per token leaves headroom for far more. The measured figure across laptop plus two phones is
+**6.8 tok/s**, with the gap to theoretical accounted for by the pipeline running devices in sequence rather
+than in parallel, plus RPC and synchronisation overhead.
+
+> **The conclusion, and it is the cleanest argument in the whole project.** Pooling memory solves
+> *capacity*. Mixture-of-Experts solves *bandwidth*. Neither is sufficient alone. Adding phones adds
+> capacity cheaply and adds almost no bandwidth — each device still reads at its own speed, and in a
+> pipeline they take turns. So a dense 30B would be roughly nine times slower and the project would be a
+> curiosity. **An MoE model is the specific thing that makes pooled consumer memory usable.**
+
+**And it explains why phones in particular are the right hardware for this.** Phones are
+**memory-rich and bandwidth-poor** relative to graphics cards — a flagship has 12–16 GB at perhaps
+70 GB/s, where an RTX 3090 has 24 GB at 936 GB/s. MoE models are the workload that needs *lots of memory
+and little bandwidth per token*. The pairing is not a coincidence; it is the one model architecture for
+which a phone mesh is the natural host.
+
+**One structural constraint it imposes on the design.** Which 8 of 128 experts fire is decided by the
+router **per token**, dynamically. There is no way to know in advance which experts a request will need, so
+any device holding a layer must hold **all of that layer's experts**. That is why the split is by *layer*
+and not by *expert*, and why each device's share is a contiguous layer range rather than a selection of
+experts.
+
+**One risk it creates**, developed in [§8.5](#85): because routing decisions are close calls, small
+numerical differences can change *which* expert fires, and that changes the answer rather than merely
+perturbing it. This is why an executed test suite is a more trustworthy check than any internal quality
+metric.
 
 ---
 
@@ -1223,6 +1278,95 @@ baseline is policy-set and partly fictional, so a percentage of it is **unaudita
 per month to keep this fleet efficient" is a line item a public-sector procurement office can actually
 sign. The same conclusion arrives from the comparables: every vendor doing real runtime optimisation
 charges per accelerator or per hour, not per saving.
+
+<a name="96"></a>
+### 9.6 Renting memory, measured correctly — where the model does close
+
+The analysis in [§9.3](#93) measures **cost per token**, and on that basis the phone loses by 3.4× even as
+free salvage hardware. That analysis is arithmetically right and it answers the wrong question.
+
+**Why it is the wrong question.** Battery wear accrues *per joule consumed*, which means per token actually
+generated. A phone that is **holding** a model but not computing barely cycles its battery at all. It is
+drawing idle power and refreshing RAM. So a business that sells **residency** — "this model is loaded and
+available to you" — has a completely different cost structure from one that sells **throughput**.
+
+**The arithmetic for a phone at rest**, plugged in, screen off, 7–8 GB of layers resident:
+
+| Term | Value | Basis |
+|---|---|---|
+| Idle power | **1.0 W** | **ESTIMATE** — SoC idle plus LPDDR5X refresh for ~7 GB resident. *Not measured; this is the single most important unverified input in this section and it is measurable in an afternoon.* |
+| Electricity | 0.730 kWh/month = **$0.049/month** | at ₹6.52/kWh ÷ ₹96.795/USD = $0.0674/kWh |
+| Capital | **$1.29/month** | $31 salvage phone written off over 24 months |
+| **Total** | **$1.34/month for 8 GB resident** | **= $0.168 per GB-month** |
+
+**Against what the same memory costs elsewhere**, normalised to dollars per GB of accelerator memory per
+month (730 hours):
+
+| Source | $/GB-month | Multiple of the phone |
+|---|---|---|
+| **Phone at rest** | **0.168** | — |
+| Owned used RTX 3090, 3 yr @ 100% duty | 2.33 | **13.9×** |
+| Azure A100 spot, US East | 6.19 | **36.9×** |
+| AWS A10G spot, US East | 12.45 | **74.3×** |
+
+So **memory at rest in a phone is roughly 14× cheaper than in an owned consumer graphics card and 37×
+cheaper than the cheapest cloud spot pricing.** This is consistent with the capital figures in
+[§9.3](#93) — $3.88/GB for salvage phones against $54.30/GB for DGX Spark memory, also about 14× — which is
+a useful cross-check: two independent routes to the same ratio.
+
+**And the inversion, stated precisely so it cannot be forgotten.** At full duty — 5.29 tok/s sustained,
+around the clock — a phone produces about **13.9 million tokens a month** and consumes about **130 full
+battery cycles**, which is **13% of a 1,000-cycle battery life every month.** The asset is gone inside a
+year. Per token, the phone never wins at any duty cycle: solving the inequality in [§9.3](#93) for the
+device price that would make it competitive gives **C < $0.885**, and no phone costs under a dollar.
+
+> **So the two facts are both true and they are not in conflict.** Phones are the cheapest way to **hold**
+> model weights and among the most expensive ways to **produce** tokens. Which fact dominates is decided
+> entirely by duty cycle, and a business built on the first while metering the second is coherent.
+
+**What this implies about the product's shape**, as a matter of arithmetic rather than preference:
+
+- The unit sold is **residency** — a large open model loaded, warm and available — not tokens.
+- The economics hold at **low duty cycle** and inverted at high. Any such offer needs a usage ceiling or
+  metered overage, or a single heavy user consumes the margin on a whole rack.
+- One mesh holds **one model resident at a time**, so several customers can share a rack only if they want
+  the same model. Low utilisation is therefore *structural* — which suits the cost model and limits
+  revenue per phone.
+
+**The genuine competitive edge over renting a cloud GPU on demand, which is the real alternative.** A
+rational customer with intermittent needs would not rent a GPU monthly; they would rent by the hour. But
+every such session pays a **cold-start penalty** — the model must be loaded before it can answer. The
+measurement in [§4.2](#42) is the relevant one: **517 seconds** for a first load from disk, against
+**70–87 seconds** once layers are resident. A phone mesh holding a model is *already warm*, permanently,
+for five cents of electricity a month.
+
+So the defensible claim is not "cheaper tokens." It is **always-warm residency of a large open model at
+near-zero idle cost** — which is exactly what the per-token framing in [§9.3](#93) is structurally unable
+to see.
+
+**What this still requires to be true**, each of which is a real exposure rather than a formality:
+
+- **The 1 W idle figure.** If a phone holding 7 GB resident actually draws 3–4 W, the electricity term
+  grows but stays small; if it cannot keep layers resident at all without compute, the whole framing fails.
+  Unmeasured.
+- **Wired links, which means custody.** [§4.3](#43) — 1.1 s to first word over a 2–3 ms cable against 94 s
+  and a dropped connection on 373 ms Wi-Fi. Renting memory from phones *in other people's homes over the
+  internet* runs straight into that. Racked phones on a controlled local link, serving requests over the
+  internet, does not: the customer's request crosses the internet once, while the per-token traffic stays
+  local. **The architecture only works in custody**, which also happens to resolve the trust problem
+  ([§10.4](#104)), the privacy problem ([§10.3](#103)) and the Indian tax and gig-worker questions
+  ([§10.6](#106)).
+- **Throughput that suits the buyer.** 6.8 tok/s is comfortable for an autonomous agent working for minutes
+  ([§7.5](#75)) and poor for interactive chat.
+- **Maintenance.** A phone-farm operator reported *"20 phones, 3 of them have a swelled battery"* — a 15%
+  hardware failure rate ([§9.3](#93)). Holding at 40–60% charge rather than full more than halves annual
+  degradation ([§10.2](#102)), and at rest there is no cycling to add to it.
+
+**And one external tailwind that is verifiable rather than hopeful.** NVIDIA's DGX Spark 128 GB went
+**$3,999 at launch → $4,699 (Feb 2026) → $6,950**, a 74% rise in under a year, attributed to LPDDR5x supply
+constraints ([§6.1](#61)). New memory is getting *more expensive*, for physical reasons. Every month that
+holds, memory already manufactured and already paid for — sitting in drawers and in pockets — becomes
+relatively more valuable. No paper in this research makes that argument.
 
 ---
 
