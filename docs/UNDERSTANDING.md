@@ -14,7 +14,7 @@ This is a description, not a set of instructions. It explains the state of under
 
 0. [The short version](#0)
 1. [The problem, from first principles](#1)
-2. [How MeshAI works](#2) — including [why Mixture-of-Experts is what makes it usable](#26)
+2. [How MeshAI works](#2) — including [why Mixture-of-Experts is what makes it usable](#26) and [a phone as the Host](#27)
 3. [What actually exists in the repository](#3)
 4. [Every measurement, and what it means](#4)
 5. [What the Adaptive Mesh Compiler document proposes](#5)
@@ -227,6 +227,42 @@ The three things worth noticing about this diagram:
 3. **The control link is separate from the data path.** Devices continuously report memory, heat, battery
    and latency on port 7070, while the model's traffic goes over the RPC connection. This separation is
    what makes it possible to know a phone is overheating without disturbing the run.
+
+<a name="27"></a>
+### 2.7 Either role, on either kind of device — a phone can be the Host
+
+The Host is the device that answers the user, holds the embeddings and output head, runs the planner and
+starts the engine. A helper lends memory and holds a layer range. **Neither role is tied to a kind of
+hardware**, and the app ships both modes as first-class screens (`ui/HostScreen.kt`, `ui/HelperScreen.kt`).
+
+Measured, in `docs/measurements.md:9-14`:
+
+| Run | Setup | Result |
+|---|---|---|
+| 26 Sep 14:09 | **POCO F5 alone as Host** | 23.1 tok/s on a 0.6B, first word 0.3 s |
+| 26 Sep 14:11 | **POCO F5 Host + laptop joined** (`mesh join`) | *"Host shows 2 devices, 8.9 GB pooled"* |
+| 26 Sep 15:04 | **iQOO 15 alone as Host** | 11.8 tok/s on an 8B, ready ~8 s |
+| 26 Sep 15:50 | **iQOO 15 Host + laptop helper** | phone holds layers **0–21**, **the laptop holds 22–35** (679 MB), 9.2 tok/s |
+
+**Why the last row matters more than it looks.** The phone is in charge and the *laptop* is the one lending
+memory. So "phone-first" is a measured property of the system rather than a way of describing it — a phone
+can run the mesh and recruit a laptop as support, which is the inverse of how every comparable system is
+built ([§6.1](#61): in prima.cpp the phone assists two desktop GPUs; Cascadia has no phone tier at all).
+
+**Naming that follows from it.** Because the roles are not hardware-bound, any name for the helper package
+has to describe a *role*. The team's term for it is a **Ned Capsule** — Spider-Man's friend Ned Leeds being
+*"the guy in the chair"*, the one holding the information so the hero can work in the field. In the 15:50
+run the laptop is the Ned. The metaphor survives every topology because it names what a device is doing,
+not what it is. (`Spider-Sense` is the matching name for the live telemetry — heat, battery, link latency,
+free memory — in [§3.5](#35).)
+
+**One gap, so nobody overstates this.** Every 30B run used the **laptop** as Host
+([§4.2](#42)). A phone hosting the 30B would have to carry the embeddings and output head — which are
+pinned to whoever hosts ([§2.4](#24)) — on top of its layer share. That is heavier than the 3 GB-capped
+Qwen2.5-VL-3B of the 15:50 run and is **untested**. "A phone can run the mesh" is measured. "A phone can
+host the 30B" is not.
+
+---
 
 <a name="26"></a>
 ### 2.6 Mixture-of-Experts — why the whole thing is usable at all
