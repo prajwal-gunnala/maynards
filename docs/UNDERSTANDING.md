@@ -32,26 +32,56 @@ This is a description, not a set of instructions. It explains the state of under
 <a name="0"></a>
 ## 0. The short version
 
-A large language model has to fit in memory to run. A laptop has about 8 GB spare; a 30-billion-parameter
-model needs about 18.5 GB. So it does not run — not slowly, *at all*.
+**The problem.** A large language model has to fit in memory to run. A laptop has about 8 GB spare; a
+30-billion-parameter model needs about 18.5 GB. So it does not run — not slowly, *at all*.
 
-MeshAI splits the model across several devices — a laptop and two Android phones — so that together they
-hold it. The phones are connected by USB cable. Each device holds a slice of the model's layers; a token
-passes through all of them in turn. Behind one OpenAI-compatible address, it looks like a single server.
+**What MeshAI does.** It splits the model across several devices — a laptop and two Android phones — so
+that together they hold it. The phones are connected by USB cable. Each device holds a slice of the
+model's layers; a token passes through all of them in turn, and only **4 KB** crosses each boundary
+because the weights never move. Behind one OpenAI-compatible address, it looks like a single server.
 
-It works. A 30B coding model runs across one laptop and two phones at about 6.8 words per second and
-scores **15 out of 15** on a coding benchmark where the biggest model the laptop could hold alone scored
-7 out of 15. An autonomous coding agent runs on it, fixes a real bug, commits, and passes the project's
-tests — offline.
+**Why it is usable rather than merely clever, which is the part most easily missed.** Two things have to be
+true at once, and each solves a different problem:
 
-The new document in the folder proposes extending this into an "Adaptive Mesh Compiler": software that
-profiles the task and each device, decides the cheapest way to execute, builds a custom package for each
-device, and keeps adjusting. It proposes charging 10% of the money it saves a customer.
+- **Pooling solves capacity.** More devices means more memory, and memory is what was missing.
+- **Mixture-of-Experts solves bandwidth.** Speed is governed by how many bytes are read per token, and
+  adding phones adds almost no bandwidth — in a pipeline the devices take turns. This model activates only
+  **3.3B of its 30.5B parameters per token**, so it reads about **2.0 GB** where a dense model of the same
+  size would read 18.56 GB. That is **~9× less memory traffic.** A dense 30B would be roughly nine times
+  slower and this would be a curiosity.
 
-The research found: **every mechanism the document claims as new is already published.** One combination
-is not — joining "decide across devices" with "build per device" — and eight survey papers confirm no
-category exists for it. The 10%-of-savings business does not close at any scale reachable here. A real
-buyer does exist, but it is narrower and differently motivated than the document assumes.
+**It works.** A 30B coding model runs across one laptop and two phones at about **6.8 words per second**,
+with the **phones holding 74% of it**. An autonomous coding agent runs on it — fixes a real bug, commits,
+and passes the project's own tests, offline, with the tests run by our software rather than judged by the
+model.
+
+**What is measured, and the honest limit on it.** On a 15-problem coding benchmark scored by executing the
+code: 0.6B → 13%, 1.7B → 47%, the same 1.7B *split* → 47% failing **the same eight problems**, and the 30B
+on the mesh → **15/15**. The durable finding there is the identical failure set, which shows splitting does
+not change what a model answers. The perfect score is weaker than it looks: a benchmark solved completely
+has hit its ceiling and stopped discriminating. The defensible reading is the *shape* — capability rising
+with pooled memory while speed falls only modestly — not the top number.
+
+**The new document in the folder** proposes extending this into an "Adaptive Mesh Compiler": software that
+profiles the task and each device, decides the cheapest way to execute, builds a custom package per device,
+and keeps adjusting. It proposes charging 10% of the money it saves a customer.
+
+**What the research found about that.** **Every mechanism it claims as new is already published** — pooling
+memory is a shipping NVIDIA product, per-device compilation has been TensorRT since 2016, and a July 2026
+paper called Voltron already re-plans layer placement *and* precision every conversation turn from live
+state. One *combination* is unoccupied: joining "decide across devices" with "build per device," and eight
+survey taxonomies confirm no category exists for it. Separately, a project called **Pooled** independently
+reached nearly this exact architecture and already shipped the browser version of it.
+
+**What the research found about the business.** The 10%-of-savings model does not close at any reachable
+scale — the document's own example workload has a **$1.40 monthly bill.** But the memory-rental model does
+close, provided the right thing is measured. Per *token*, a phone loses to a cloud GPU by 3.4× even as free
+salvage hardware, because the binding cost is **battery cycles, not electricity** — 9.38 full cycles per
+million tokens against 1.5 cents of power. Per *GB held at rest*, a phone costs **$0.168 per GB-month**
+against $2.33 for an owned RTX 3090 and $6.19 for the cheapest cloud spot pricing — **14× and 37× cheaper.**
+Both are true; duty cycle decides which one matters. So the coherent unit of sale is **residency**, not
+throughput, and the real edge over renting a cloud GPU on demand is being permanently **warm**: 70–87
+seconds to be ready against a 517-second cold load.
 
 ---
 
@@ -200,6 +230,11 @@ The three things worth noticing about this diagram:
 
 <a name="26"></a>
 ### 2.6 Mixture-of-Experts — why the whole thing is usable at all
+
+> **In one breath.** Pooling devices gives you *memory*. It gives you almost no extra *bandwidth*, because
+> in a pipeline the devices take turns rather than working at once. A Mixture-of-Experts model reads only
+> about a tenth of its weights per token, so it needs little bandwidth — which is the one thing pooling
+> cannot supply. That is why this model runs at a usable speed and a dense one of the same size would not.
 
 This is the piece that makes the architecture work rather than merely function, and it is easy to miss
 because it is a property of the *model* rather than of anything built here.
@@ -1281,6 +1316,12 @@ charges per accelerator or per hour, not per saving.
 
 <a name="96"></a>
 ### 9.6 Renting memory, measured correctly — where the model does close
+
+> **In one breath.** A phone loses badly when it *produces* tokens and wins overwhelmingly when it merely
+> *holds* a model, because battery wear is paid per token computed and almost nothing is paid while idle.
+> Holding 8 GB costs about **$1.34 a month**; the same memory costs 14× that in an owned graphics card and
+> 37× in the cloud. So the thing worth selling is **residency**, not throughput — and the advantage over
+> renting a cloud GPU by the hour is being permanently warm rather than paying a cold start every session.
 
 The analysis in [§9.3](#93) measures **cost per token**, and on that basis the phone loses by 3.4× even as
 free salvage hardware. That analysis is arithmetically right and it answers the wrong question.
