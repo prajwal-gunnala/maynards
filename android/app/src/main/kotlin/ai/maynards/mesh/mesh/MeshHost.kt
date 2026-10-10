@@ -146,8 +146,11 @@ class MeshHost(private val ctx: Context) {
                     "pong" -> {
                         rtts.addLast((System.nanoTime() - m.optLong("at")) / 1e6)
                         if (rtts.size > 10) rtts.removeFirst()
-                        val median = rtts.sorted()[rtts.size / 2]
-                        _peers.update { p -> p[id]?.let { p + (id to it.copy(rttMs = median, rttWorstMs = rtts.max())) } ?: p }
+                        // the link's speed is its best recent ping, not the median: an idle Wi-Fi radio sleeps
+                        // between pings 2 s apart and adds ~100 ms that is gone once the model runs (iQOO to
+                        // iQOO over Wi-Fi: 103 ms median at idle, 17.6 ms with steady traffic)
+                        val best = rtts.min()
+                        _peers.update { p -> p[id]?.let { p + (id to it.copy(rttMs = best, rttWorstMs = rtts.max())) } ?: p }
                     }
                     else -> _events.tryEmit(id to m)
                 }
