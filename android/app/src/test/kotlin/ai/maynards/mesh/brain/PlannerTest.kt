@@ -66,6 +66,41 @@ class PlannerTest {
         assertTrue(p.slices.any { it.deviceId == "hot" })
     }
 
+    @Test fun splitFillsEveryDeviceToTheSameShare() {
+        // today's mesh: Host phone, laptop, second phone. Filling in order gave 18 / 28 / 2 layers,
+        // the second phone almost empty while the laptop was full.
+        val devs = listOf(host(7.8), helper("laptop", 11.0), helper("b", 7.0))
+        val p = Planner.plan(coder30b, devs)
+        println("${p.verdict} ${p.reason} ${p.slices.map { "${it.name} ${it.from}-${it.to}" }}")
+        assertEquals(3, p.slices.size)
+        assertEquals(0, p.slices[0].from)
+        for (i in 1 until p.slices.size) assertEquals(p.slices[i - 1].to, p.slices[i].from)   // one unbroken run each
+        assertEquals(48, p.slices.last().to)
+        // the share of its room each device fills: all within one layer of each other, none over its room
+        val kvLayer = Planner.kvBytes(coder30b, 4096) / 48
+        val layer = 377_600_000L + kvLayer
+        val rooms = mapOf("host" to (7.8 * GB).toLong() - 430_000_000L - Planner.HOST_RESERVE,
+            "laptop" to 11 * GB - Planner.HELPER_RESERVE, "b" to 7 * GB - Planner.HELPER_RESERVE)
+        val fill = p.slices.map { it.count * layer.toDouble() / rooms.getValue(it.deviceId) }
+        println("fill ${fill.map { "%.2f".format(it) }}")
+        fill.forEach { assertTrue("over its room: $fill", it <= 1.0) }
+        val oneLayer = layer.toDouble() / rooms.values.min()
+        assertTrue("uneven: $fill", fill.max() - fill.min() <= oneLayer)
+        assertTrue("second phone still nearly empty: ${p.slices}", p.slices.first { it.deviceId == "b" }.count >= 10)
+    }
+
+    @Test fun balanceMatchesTheRoomExactlyWhenItCan() {
+        // 12 equal layers, room 1 : 2 : 3 -> 2, 4, 6 layers
+        val c = Planner.balance(12, { 10L }, listOf(100L, 200L, 300L))
+        assertEquals(listOf(2, 4, 6), c.toList())
+    }
+
+    @Test fun balanceFallsBackToFillInOrderWhenRoundingWouldOverflow() {
+        // full to the brim: 3 layers of 10 into rooms 10 / 20; any other layout overflows
+        val c = Planner.balance(3, { 10L }, listOf(10L, 20L))
+        assertEquals(listOf(1, 2), c.toList())
+    }
+
     @Test fun argsForTwoHelpersMatchTheVerifiedSplit() {
         // 28 layers: host 4, helpers 11 and 13 -> -ngl 25, tensor split 11/25 and (13+1)/25
         val plan = Plan(small, Verdict.DOABLE, "", listOf(
