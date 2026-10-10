@@ -164,6 +164,15 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
             StatTile(Icons.Outlined.Hub, "Devices", "${peers.size + 1}", if (peers.isEmpty()) "alone" else "joined", Modifier.weight(1f))
             StatTile(Icons.Outlined.Memory, "Pooled", gb(pool), "GB", Modifier.weight(1f))
         }
+        // the split of the model that is running: which device holds which layers, and how many GB
+        live?.let { plan ->
+            NBox(pad = 12.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Label("${plan.model.name} · split")
+                    LayerBar(plan)
+                }
+            }
+        }
         NBox(pad = 8.dp) {
             MeshWeb(
                 listOf(WebNode("This phone", HostGreen, isHost = true, note = layersOf(run.plan, me.id))) +
@@ -188,8 +197,8 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
 
         Section("Devices")
         DeviceRow(me.name, "this phone · host", me.usableBytes, me.heat, me.battery, me.charging, -1.0, HostGreen, false,
-            holding = live?.slices?.firstOrNull()?.bytes)
-        peers.values.sortedBy { it.specs.name }.forEach { p -> PeerRow(p, live?.slices?.firstOrNull { it.deviceId == p.id }?.bytes) }
+            holding = live?.slices?.firstOrNull())
+        peers.values.sortedBy { it.specs.name }.forEach { p -> PeerRow(p, live?.slices?.firstOrNull { it.deviceId == p.id }) }
         if (peers.isEmpty()) NBox {
             EmptyState(
                 "No other device yet",
@@ -225,7 +234,7 @@ private fun layersOf(plan: ai.maynards.mesh.brain.Plan?, id: String): String =
     plan?.slices?.firstOrNull { it.deviceId == id }?.let { "${it.count} layers" } ?: ""
 
 @Composable
-private fun PeerRow(p: Peer, holding: Long? = null) = DeviceRow(
+private fun PeerRow(p: Peer, holding: ai.maynards.mesh.brain.Slice? = null) = DeviceRow(
     p.specs.name, "${p.addr} · helper", p.specs.usableBytes, p.specs.heat, p.specs.battery, p.specs.charging,
     p.rttMs, HelperPurple, p.specs.kind == "laptop", holding,
 )
@@ -280,7 +289,7 @@ private data class Q5(
 @Composable
 private fun DeviceRow(
     name: String, sub: String, usable: Long, heat: Float, battery: Int, charging: Boolean, rtt: Double,
-    fill: Color, laptop: Boolean, holding: Long? = null,
+    fill: Color, laptop: Boolean, holding: ai.maynards.mesh.brain.Slice? = null,
 ) {
     NBox(fill = fill, shadow = 4.dp, pad = 12.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -292,8 +301,8 @@ private fun DeviceRow(
                     Mono(sub, 10, Muted)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("${gb(holding ?: usable)} GB", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Ink)
-                    Mono(if (holding != null) "holding · ${gb(usable)} free" else "for models", 10, Muted)
+                    Text("${gb(holding?.bytes ?: usable)} GB", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Ink)
+                    Mono(if (holding != null) "layers ${holding.from}-${holding.to - 1} · ${gb(usable)} free" else "for models", 10, Muted)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
