@@ -16,6 +16,12 @@ class PlannerTest {
     private val small = ModelInfo("small.gguf", "Qwen3-0.6B", "qwen3", 639_446_688L,
         List(28) { 16_720_896L }, 165_310_464L, 114_688L, 40_960)
 
+    /** Qwen3.5-like 3:1 hybrid: 24 recurrent blocks, 8 full-attention blocks. */
+    private val qwen35 = ModelInfo("qwen35.gguf", "Qwen3.5-9B", "qwen35", 6_700_000_000L,
+        List(32) { 170_000_000L }, 450_000_000L,
+        8L * 8 * (256 + 256) * 2, 262_144,
+        recurrentLayers = List(32) { it % 4 != 3 }, recurrentStateBytesPerLayer = 2_000_000L)
+
     private fun host(gb: Double) = Device("host", "iQOO A", (gb * GB).toLong(), isHost = true)
     private fun helper(id: String, gb: Double, rtt: Double = 5.0) = Device(id, "iQOO $id", (gb * GB).toLong(), rttMs = rtt)
 
@@ -24,6 +30,36 @@ class PlannerTest {
         assertEquals(Verdict.DOABLE, p.verdict)
         assertFalse(p.split)
         assertEquals("not needed", p.skipped["b"])
+    }
+
+    @Test fun preferredSplitUsesAttachedHelperEvenWhenHostCanFitTheModel() {
+        val p = Planner.plan(small, listOf(host(6.0), helper("b", 9.0)), preferSplit = true)
+        assertTrue("expected requested distributed placement: ${p.slices}", p.split)
+        assertEquals(28, p.slices.last().to)
+        assertTrue(p.slices[0].count > 0)
+        assertTrue(p.slices[1].count > 0)
+    }
+
+    @Test fun hybridCacheKeepsRecurrentStateFixedAsContextGrows() {
+        val at4k = Planner.kvBytes(qwen35, 4096)
+        val at8k = Planner.kvBytes(qwen35, 8192)
+        val recurrent = 24L * qwen35.recurrentStateBytesPerLayer
+        assertEquals(recurrent, at4k - qwen35.kvBytesPerToken * 4096 * 17 / 32)
+        assertEquals(at4k + qwen35.kvBytesPerToken * 4096 * 17 / 32, at8k)
+    }
+
+    @Test fun hybridSplitChargesEachRecurrentLayerToItsDevice() {
+        val p = Planner.plan(qwen35, listOf(host(5.5), helper("b", 8.0)), ctx = 4096)
+        assertTrue("expected distributed placement: ${p.slices}", p.split)
+        assertEquals(32, p.slices.last().to)
+        for (i in 1 until p.slices.size) assertEquals(p.slices[i - 1].to, p.slices[i].from)
+        p.slices.forEach { slice ->
+            val expected = (slice.from until slice.to).sumOf { layer ->
+                qwen35.layerBytes[layer] + if (qwen35.recurrentLayers[layer]) qwen35.recurrentStateBytesPerLayer
+                else qwen35.kvBytesPerToken * 4096 * 17 / 32 / 8
+            } + if (slice.deviceId == "host") qwen35.otherBytes else 0
+            assertEquals(expected, slice.bytes)
+        }
     }
 
     @Test fun bigModelNeedsBothPhones() {

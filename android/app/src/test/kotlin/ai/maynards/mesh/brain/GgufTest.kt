@@ -33,4 +33,17 @@ class GgufTest {
         assertEquals(48, m.layers)
         assertTrue(m.weightBytes in 18_000_000_000L..18_600_000_000L)
     }
+
+    @Test fun qwen35_hybrid_header() {
+        val f = File(dir, "Qwen3.5-9B-Q4_K_M.gguf")
+        assumeTrue(f.exists())
+        val m = Gguf.read(f)
+        println("${m.name} ${m.arch} layers=${m.layers} recurrent=${m.recurrentLayers.count { it }} " +
+            "state/layer=${m.recurrentStateBytesPerLayer} KV/token=${m.kvBytesPerToken}")
+        assertEquals("qwen35", m.arch)
+        assertEquals(32, m.layers)
+        assertEquals(24, m.recurrentLayers.count { it })
+        assertTrue("recurrent state missing", m.recurrentStateBytesPerLayer > 0)
+        assertTrue("weights should match the source file", m.weightBytes > 5_300_000_000L)
+    }
 }

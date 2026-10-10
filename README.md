@@ -50,6 +50,7 @@ agent/     `mesh`, the laptop's side (Rust): `mesh host` (web panel, the laptop 
 scripts/   build-llama.sh · sync-natives.sh · two-phone-proof.sh · demo-up.sh · bench.py · bench-report.py
 results/   what each configuration scored on the same task set, and the chart
 docs/      measurements.md (every number we took) · pre-event/ (notes drafted before the event)
+origami/   standalone Kotlin/Compose app for screwless flat-pack design; independent from MeshAI
 ```
 
 ## Build

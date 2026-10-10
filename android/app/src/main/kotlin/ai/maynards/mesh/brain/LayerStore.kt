@@ -19,9 +19,10 @@ data class StoreState(
     val total: Int = 0,
     val working: Boolean = false,
     val bytes: Long = 0,      // everything in the store, all models
+    val error: String = "",
 ) {
     fun json(): JSONObject = JSONObject().put("model", model).put("done", done).put("total", total)
-        .put("working", working).put("bytes", bytes)
+        .put("working", working).put("bytes", bytes).put("error", error)
 }
 
 /**
@@ -41,16 +42,21 @@ class LayerStore(ctx: Context) {
     val state: StateFlow<StoreState> = _state
 
     /** Store every big layer of these models (files in [models]). Runs once; already stored layers are skipped. */
-    fun fill(models: File, files: List<String>) {
-        if (job?.isActive == true) return
-        job = scope.launch {
+    @Synchronized
+    fun fill(models: File, files: List<String>, layerRange: IntRange? = null): Job {
+        job?.takeIf { it.isActive }?.let { return it }
+        val first = files.firstOrNull().orEmpty()
+        _state.value = StoreState(model = first, working = files.isNotEmpty(), bytes = size())
+        return scope.launch {
             for (name in files) {
                 val f = File(models, name)
                 if (!f.canRead() || !isActive) continue
-                runCatching { fillOne(f) }.onFailure { _state.value = _state.value.copy(working = false) }
+                runCatching { fillOne(f, layerRange) }.onFailure {
+                    _state.value = _state.value.copy(working = false, error = it.message ?: it.javaClass.simpleName)
+                }
             }
             _state.value = _state.value.copy(working = false, bytes = size())
-        }
+        }.also { job = it }
     }
 
     fun clear() {
@@ -62,12 +68,19 @@ class LayerStore(ctx: Context) {
 
     private fun size(): Long = dir.listFiles()?.sumOf { it.length() } ?: 0
 
-    private fun fillOne(f: File) {
-        val key = "${f.name}:${f.length()}"
+    private fun fillOne(f: File, layerRange: IntRange?) {
+        android.util.Log.i("mesh-cache", "prepare ${f.name} (${f.length()} bytes) for the llama.cpp RPC tensor cache")
+        val rangeKey = layerRange?.let { "${it.first}-${it.last}" } ?: "all"
+        val key = "${f.name}:${f.length()}:$rangeKey"
         val known = runCatching { JSONObject(index.readText()) }.getOrElse { JSONObject() }
-        val big = Gguf.tensors(f).filter { it.name.startsWith("blk.") && it.size > HASH_THRESHOLD }
+        val big = Gguf.tensors(f).filter { tensor ->
+            val layer = tensor.name.removePrefix("blk.").substringBefore('.').toIntOrNull()
+            tensor.name.startsWith("blk.") && tensor.size > HASH_THRESHOLD &&
+                (layerRange == null || layer in layerRange)
+        }
         val hashes = known.optJSONArray(key)
         if (hashes != null && hashes.length() == big.size && (0 until hashes.length()).all { File(dir, hashes.getString(it)).length() > 0 }) {
+            android.util.Log.i("mesh-cache", "cache hit: ${big.size} large tensors already indexed for ${f.name}")
             _state.value = StoreState(f.name, big.size, big.size, false, size())
             return
         }
@@ -98,6 +111,7 @@ class LayerStore(ctx: Context) {
         }
         index.parentFile?.mkdirs()
         index.writeText(known.put(key, done).toString())
+        android.util.Log.i("mesh-cache", "cache ready: ${big.size} large tensors, ${size()} bytes total")
         _state.value = StoreState(f.name, big.size, big.size, false, size())
     }
 

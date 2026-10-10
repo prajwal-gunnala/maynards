@@ -4,6 +4,7 @@ import ai.maynards.mesh.MeshService
 import ai.maynards.mesh.engine.gb
 import ai.maynards.mesh.mesh.MeshHost
 import ai.maynards.mesh.mesh.Peer
+import ai.maynards.origami.OrigamiTab
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Hub
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.PhoneAndroid
@@ -35,6 +37,8 @@ import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.flow.first
@@ -45,6 +49,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +61,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.outlined.Memory
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private data class Tab(val label: String, val icon: ImageVector)
 
@@ -64,6 +72,7 @@ private val TABS = listOf(
     Tab("Models", Icons.Outlined.Inventory2),
     Tab("Use", Icons.Outlined.Chat),
     Tab("Stats", Icons.Outlined.BarChart),
+    Tab("Origami", Icons.Outlined.Edit),
 )
 
 @Composable
@@ -84,7 +93,8 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                 .firstOrNull { it.file.contains(autoRun, ignoreCase = true) }
             if (m != null) {
                 val p = ai.maynards.mesh.brain.Planner.plan(m, meshDevices(ai.maynards.mesh.engine.Specs.read(ctx), host.peers.value.values, hostCap),
-                    hostExtra = shelf.projector(m)?.length() ?: 0)
+                    hostExtra = shelf.projector(m)?.length() ?: 0,
+                    preferSplit = autoRunHelpers > 0)
                 if (p.verdict != ai.maynards.mesh.brain.Verdict.NOT_POSSIBLE) { runner.run(p); tab = 2 }
             }
         }
@@ -95,7 +105,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
     LaunchedEffect(Unit) { while (true) { online = ai.maynards.mesh.engine.Net.online(ctxNow); kotlinx.coroutines.delay(4_000) } }
     Column(Modifier.fillMaxSize()) {
         // the one line that says, from across a room, what this phone is doing (the chat page has its own header)
-        if (tab != 2) StatusStrip(
+        if (tab != 2 && tab != 4) StatusStrip(
             state = when (runNow.status) {
                 ai.maynards.mesh.brain.RunState.Status.READY -> "ready"
                 ai.maynards.mesh.brain.RunState.Status.LOADING -> "loading"
@@ -127,9 +137,11 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                         system = { meshNote(run.plan, me, peers.values) },
                     ) { a ->
                         run.plan?.let { stats.add(it, a, me.heat) }
+                        runner.record(a)
                     }
                 }
                 3 -> StatsTab(stats)
+                4 -> OrigamiTab(aiEndpoint = "http://127.0.0.1:8080")
                 else -> Soon(TABS[tab])
             }
         }
@@ -140,11 +152,24 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
 @Composable
 private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onChangeRole: () -> Unit,
                     onGo: (Int) -> Unit) {
+    val context = LocalContext.current
     val run by runner.state.collectAsState()
     val peers by host.peers.collectAsState()
+    val metrics by runner.metrics.collectAsState()
     val token by host.token.collectAsState()
+    val remoteInvite by host.remoteInvite.collectAsState()
+    val remoteState by host.remoteState.collectAsState()
+    val remoteRoute by host.remoteRoute.collectAsState()
     val me = rememberSpecs()
     var showQr by remember { mutableStateOf(host.peers.value.isEmpty()) }   // once someone joined, the web comes first
+    var showRemoteQr by remember { mutableStateOf(false) }
+    var publicUrl by rememberSaveable {
+        mutableStateOf(context.getSharedPreferences("mesh-host", android.content.Context.MODE_PRIVATE)
+            .getString("remote-service-url", "") ?: "")
+    }
+    var forceRelay by rememberSaveable { mutableStateOf(false) }
+    var remoteError by remember { mutableStateOf("") }
+    val remoteScope = rememberCoroutineScope()
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -164,6 +189,9 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
             StatTile(Icons.Outlined.Hub, "Devices", "${peers.size + 1}", if (peers.isEmpty()) "alone" else "joined", Modifier.weight(1f))
             StatTile(Icons.Outlined.Memory, "Pooled", gb(pool), "GB", Modifier.weight(1f))
         }
+        if (run.status != ai.maynards.mesh.brain.RunState.Status.IDLE) {
+            LiveMetricsCard(run, metrics, peers.values)
+        }
         // the split of the model that is running: which device holds which layers, and how many GB
         live?.let { plan ->
             NBox(pad = 12.dp) {
@@ -182,18 +210,68 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
             )
         }
 
-        if (showQr) {
-            NBox(fill = Yellow) {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    IconLabel(Icons.Outlined.QrCode2, "Scan with a Helper")
-                    Box(Modifier.background(Paper, RoundedCornerShape(8.dp)).border(Border, Ink, RoundedCornerShape(8.dp)).padding(10.dp)) {
-                        QrImage(remember(token, peers.size) { host.invite().toJson() }, Modifier.size(220.dp))
+        NBox(fill = Paper) {
+            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                Label("Remote Internet link · WebRTC")
+                OutlinedTextField(
+                    value = publicUrl,
+                    onValueChange = { publicUrl = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    placeholder = { Text("https://your-mesh-host.example") },
+                    label = { Text("Signaling service URL") },
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Force TURN relay", Modifier.weight(1f), fontSize = 13.sp)
+                    Switch(checked = forceRelay, onCheckedChange = { forceRelay = it })
+                }
+                if (remoteState != "idle") Mono(remoteState, 11)
+                remoteRoute?.let { route ->
+                    Mono("ICE ${if (route.relayed) "relay" else "direct"} · ${route.localType} → ${route.remoteType}" +
+                        (route.rttMs?.let { " · %.1f ms RTT".format(it) } ?: "") +
+                        (route.jitterMs?.let { " · %.1f ms jitter".format(it) } ?: ""), 11, Term)
+                }
+                host.remoteProbe.collectAsState().value?.let { probe ->
+                    Mono(if (probe.passed) "8 MiB each direction · SHA-256 verified · %.2f MiB/s".format(probe.megabytesPerSecond)
+                        else "Binary test failed: ${probe.error}", 11, if (probe.passed) Term else Bad)
+                }
+                if (remoteError.isNotBlank()) Mono(remoteError, 11, Bad)
+                NButton(if (remoteInvite == null) "Create WebRTC invite" else "Create a fresh WebRTC invite", fill = Term) {
+                    remoteError = ""
+                    remoteScope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                context.getSharedPreferences("mesh-host", android.content.Context.MODE_PRIVATE).edit()
+                                    .putString("remote-service-url", publicUrl.trim()).apply()
+                                host.createRemoteInvite(publicUrl.trim(), forceRelay)
+                            }
+                        }.onSuccess { showRemoteQr = true }
+                            .onFailure { remoteError = it.message ?: "Could not create remote session" }
                     }
-                    Mono(host.invite().hosts.joinToString("  "), 11)
                 }
             }
         }
-        NButton(if (showQr) "Hide the code" else "Add a device", fill = if (showQr) Paper else Term) { showQr = !showQr }
+
+        if (showQr || showRemoteQr) {
+            NBox(fill = Yellow) {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    IconLabel(Icons.Outlined.QrCode2, if (showRemoteQr && remoteInvite != null) "Scan for WebRTC remote pairing" else "Scan with a Helper")
+                    Box(Modifier.background(Paper, RoundedCornerShape(8.dp)).border(Border, Ink, RoundedCornerShape(8.dp)).padding(10.dp)) {
+                        val inviteJson = if (showRemoteQr) remoteInvite?.toJson() ?: host.invite().toJson() else host.invite().toJson()
+                        QrImage(remember(inviteJson, token, peers.size) { inviteJson }, Modifier.size(220.dp))
+                    }
+                    val qrRemoteInvite = remoteInvite
+                    if (showRemoteQr && qrRemoteInvite != null) Mono("${qrRemoteInvite.remoteUrl} · expires in 10 minutes", 11)
+                    else Mono(host.invite().hosts.joinToString("  "), 11)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NButton(if (showQr) "Hide local QR" else "Add locally", modifier = Modifier.weight(1f), fill = if (showQr) Paper else Term) {
+                showQr = !showQr; showRemoteQr = false
+            }
+            if (showRemoteQr) NButton("Hide remote QR", modifier = Modifier.weight(1f), fill = Paper) { showRemoteQr = false }
+        }
 
         Section("Devices")
         DeviceRow(me.name, "this phone · host", me.usableBytes, me.heat, me.battery, me.charging, -1.0, HostGreen, false,
@@ -232,6 +310,56 @@ private fun meshNote(plan: ai.maynards.mesh.brain.Plan?, me: ai.maynards.mesh.en
 /** "25 layers" for a device in the running plan, or nothing. */
 private fun layersOf(plan: ai.maynards.mesh.brain.Plan?, id: String): String =
     plan?.slices?.firstOrNull { it.deviceId == id }?.let { "${it.count} layers" } ?: ""
+
+/** Small, live dashboard for the Host. It contains only numbers produced on these phones. */
+@Composable
+private fun LiveMetricsCard(
+    run: ai.maynards.mesh.brain.RunState,
+    metrics: ai.maynards.mesh.brain.LiveMetrics,
+    peers: Collection<Peer>,
+) {
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(metrics.startedAtMs, run.status) {
+        while (run.status == ai.maynards.mesh.brain.RunState.Status.LOADING ||
+            run.status == ai.maynards.mesh.brain.RunState.Status.STARTING ||
+            run.status == ai.maynards.mesh.brain.RunState.Status.READY) {
+            now = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1_000)
+        }
+    }
+    val elapsed = if (metrics.startedAtMs > 0) ((now - metrics.startedAtMs) / 1_000).coerceAtLeast(0) else 0
+    val link = peers.mapNotNull { it.rttMs.takeIf { ms -> ms >= 0 } }.minOrNull()
+    NBox(pad = 12.dp) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Label("LIVE MESH METRICS")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricCell("STATE", run.status.name.lowercase(), Modifier.weight(1f))
+                MetricCell("UPTIME", "${elapsed}s", Modifier.weight(1f))
+                MetricCell("LINK RTT", link?.let { "%.0f ms".format(it) } ?: "—", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                MetricCell("DECODE", metrics.lastTokPerSec.takeIf { it > 0 }?.let { "%.1f tok/s".format(it) } ?: "waiting", Modifier.weight(1f))
+                MetricCell("PREFILL", metrics.lastPromptPerSec.takeIf { it > 0 }?.let { "%.1f tok/s".format(it) } ?: "—", Modifier.weight(1f))
+                MetricCell("FIRST TOKEN", metrics.lastFirstTokenMs.takeIf { it >= 0 }?.let { "%.1f s".format(it / 1000.0) } ?: "—", Modifier.weight(1f))
+            }
+            val plan = run.plan
+            Mono(
+                "${plan?.slices?.size ?: 0} device${if ((plan?.slices?.size ?: 0) == 1) "" else "s"} executing · " +
+                    "${metrics.completedRequests} completed request${if (metrics.completedRequests == 1) "" else "s"} · " +
+                    "last output ${metrics.lastTokens} tokens",
+                10, Muted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MetricCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier.background(Raised, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 7.dp)) {
+        Mono(label, 8, Muted)
+        Text(value, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
 
 @Composable
 private fun PeerRow(p: Peer, holding: ai.maynards.mesh.brain.Slice? = null) = DeviceRow(

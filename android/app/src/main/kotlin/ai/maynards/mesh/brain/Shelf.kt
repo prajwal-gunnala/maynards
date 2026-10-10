@@ -28,11 +28,18 @@ class Shelf(ctx: Context) {
 
     /** The image projector that lets a vision model see, e.g. mmproj-Qwen2.5-VL-3B-Instruct-f16.gguf. */
     fun projector(m: ModelInfo): File? {
-        val base = m.file.removeSuffix(".gguf").substringBeforeLast('-')
-        return dir.listFiles { f -> f.name.startsWith("mmproj-$base") }?.firstOrNull()
+        val prefix = projectorPrefix(m.file)
+        return dir.listFiles { f -> f.name.startsWith(prefix) }?.firstOrNull()
     }
 
     companion object {
         private val NOT_CHAT = setOf("clip", "qwen3tts", "qwen3asr", "whisper")
     }
+}
+
+/** Removes only a known quantization suffix, retaining names such as `-Instruct`. */
+internal fun projectorPrefix(modelFile: String): String {
+    val stem = modelFile.removeSuffix(".gguf")
+    val base = stem.replace(Regex("-(?:Q[0-9].*|F16|BF16|F32)$", RegexOption.IGNORE_CASE), "")
+    return "mmproj-$base"
 }

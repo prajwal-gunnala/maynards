@@ -31,6 +31,16 @@ data class RunState(
     enum class Status { IDLE, STARTING, LOADING, READY, FAILED }
 }
 
+/** Live values shown on the Host while a model is loading or answering. */
+data class LiveMetrics(
+    val startedAtMs: Long = 0,
+    val lastTokPerSec: Double = 0.0,
+    val lastPromptPerSec: Double = 0.0,
+    val lastFirstTokenMs: Long = -1,
+    val lastTokens: Int = 0,
+    val completedRequests: Int = 0,
+)
+
 /**
  * Carries out a plan: helpers start their engines, report where they listen, the Host checks it can
  * reach each one, then starts llama-server and waits until /health answers 200.
@@ -41,12 +51,15 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
 
     private val _state = MutableStateFlow(RunState())
     val state: StateFlow<RunState> = _state
+    private val _metrics = MutableStateFlow(LiveMetrics())
+    val metrics: StateFlow<LiveMetrics> = _metrics
 
     /** The OpenAI-compatible API, on every address of this phone. */
     val endpoint = "http://127.0.0.1:$API_PORT"
 
     fun run(plan: Plan, ctx: Int = 4096) {
         stop()
+        _metrics.value = LiveMetrics(startedAtMs = System.currentTimeMillis())
         job = scope.launch {
             val t0 = System.currentTimeMillis()
             fun step(s: String, st: RunState.Status = RunState.Status.STARTING) {
@@ -63,18 +76,33 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                     val answer = async(start = CoroutineStart.UNDISPATCHED) {
                         host.events.filter { (id, m) -> id == s.deviceId && m.optString("t") in setOf("ready", "failed", "gone") }.first()
                     }
-                    host.send(s.deviceId, msg("run", "layers" to "${s.from}-${s.to - 1}", "model" to plan.model.name))
+                    host.send(s.deviceId, msg("run", "layers" to "${s.from}-${s.to - 1}",
+                        "model" to plan.model.name, "model_file" to plan.model.file))
                     answer.await()
                 }
                 val m = reply?.second
                 if (m == null || m.optString("t") != "ready") return@launch fail("${s.name}: ${m?.optString("reason")?.ifBlank { null } ?: "no answer"}")
                 val addr = m.optString("addr").ifBlank { return@launch fail("${s.name}: no address") }
-                addrs += addr
+                // The Helper reports the address it bound to. If the control socket crossed a
+                // laptop tether relay, the Host cannot route directly to that address; the
+                // control peer address is the laptop's Host-side tether IP and the relay exposes
+                // the Helper RPC port there. On a direct connection both addresses are the same.
+                val peerAddress = host.peers.value[s.deviceId]?.addr
+                val localRpcProxy = host.peers.value[s.deviceId]?.rpcProxyAddress
+                addrs += localRpcProxy ?: rpcEndpoint(addr, peerAddress)
             }
             // 2. llama.cpp aborts on an unreachable helper, so check each one first
             for ((i, a) in addrs.withIndex()) {
                 step("Reaching ${plan.helpers[i].name}")
-                if (!reachable(a)) return@launch fail("Cannot reach ${plan.helpers[i].name} at $a")
+                val helperId = plan.helpers[i].deviceId
+                val remoteRpc = host.peers.value[helperId]?.rpcProxyAddress != null
+                if (remoteRpc) {
+                    val ready = withTimeoutOrNull(20_000) {
+                        while (!host.remoteRpcReady(helperId)) delay(100)
+                        true
+                    } ?: false
+                    if (!ready) return@launch fail("WebRTC RPC channel for ${plan.helpers[i].name} did not open")
+                } else if (!reachable(a)) return@launch fail("Cannot reach ${plan.helpers[i].name} at $a")
             }
             // 3. start the model on this phone
             step("Loading ${plan.model.name}", RunState.Status.LOADING)
@@ -99,8 +127,21 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
         // stopAll() waits on a process and writes to peer sockets; called from a tap handler it
         // froze the screen for ~2 s, which Android shows as "isn't responding"
         _state.value = RunState()
+        _metrics.value = LiveMetrics()
         job?.cancel()
         scope.launch { stopAll() }
+    }
+
+    fun record(answer: Answer) {
+        if (answer.tokens <= 0) return
+        val old = _metrics.value
+        _metrics.value = old.copy(
+            lastTokPerSec = answer.tokPerSec,
+            lastPromptPerSec = answer.promptPerSec,
+            lastFirstTokenMs = answer.firstTokenMs,
+            lastTokens = answer.tokens,
+            completedRequests = old.completedRequests + 1,
+        )
     }
 
     private fun stopAll() {
@@ -127,4 +168,11 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
     companion object {
         const val API_PORT = 8080
     }
+}
+
+internal fun rpcEndpoint(helperAddress: String, controlPeerAddress: String?): String {
+    val port = helperAddress.substringAfterLast(':')
+    val host = controlPeerAddress?.takeIf { it.isNotBlank() }
+        ?: helperAddress.substringBeforeLast(':')
+    return "$host:$port"
 }

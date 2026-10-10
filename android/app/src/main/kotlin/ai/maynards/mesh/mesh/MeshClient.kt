@@ -5,9 +5,14 @@ import ai.maynards.mesh.engine.Engine
 import ai.maynards.mesh.engine.EngineState
 import ai.maynards.mesh.engine.Specs
 import android.content.Context
+import okhttp3.WebSocket
+import org.json.JSONObject
+import org.webrtc.DataChannel
+import org.webrtc.PeerConnection
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +24,10 @@ import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.io.Closeable
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.ConcurrentHashMap
 
 /** The Helper's link to its Host. */
 /** The whole mesh, as the Host sees it (sent every 2 s). */
@@ -45,6 +54,14 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     private val prefs = ctx.getSharedPreferences("mesh-helper", Context.MODE_PRIVATE)
     private var job: Job? = null
     private var wire: Wire? = null
+    private var remoteSignal: WebSocket? = null
+    private var remotePeer: RtcPeer? = null
+    private val remoteRpcStreams = ConcurrentHashMap<String, DataChannelStream>()
+    private val remoteRpcBridges = ConcurrentHashMap<String, Closeable>()
+    private val attachedRpcChannels = ConcurrentHashMap.newKeySet<String>()
+    @Volatile private var remoteRpcPort: Int? = null
+    private val remoteRpcExecutor = Executors.newCachedThreadPool { r -> Thread(r, "mesh-helper-rpc-channel").apply { isDaemon = true } }
+    private val remoteProbeExecutor = Executors.newCachedThreadPool { r -> Thread(r, "mesh-helper-probe").apply { isDaemon = true } }
 
     private val _link = MutableStateFlow(Link())
     val link: StateFlow<Link> = _link
@@ -61,6 +78,26 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     fun join(invite: Invite) {
         leave()
         prefs.edit().putString("invite", invite.toJson()).apply()
+        if (invite.remoteUrl != null && invite.remoteSession != null) {
+            job = scope.launch {
+                _link.value = Link(state = Link.State.CONNECTING)
+                try {
+                    val error = runCatching { sessionRemote(invite) }.exceptionOrNull()
+                    if (_link.value.state != Link.State.FAILED) {
+                        _link.value = Link(state = Link.State.FAILED, error = error?.message ?: "remote session ended")
+                    }
+                } finally {
+                    remoteRpcPort = null
+                    remoteRpcBridges.values.forEach { runCatching { it.close() } }; remoteRpcBridges.clear()
+                    remoteRpcStreams.values.forEach { runCatching { it.close() } }; remoteRpcStreams.clear()
+                    attachedRpcChannels.clear()
+                    remotePeer?.close(); remotePeer = null
+                    remoteSignal?.close(1000, "remote session ended"); remoteSignal = null
+                    engine.stop()
+                }
+            }
+            return
+        }
         job = scope.launch {
             var backoff = 1_000L
             while (isActive) {
@@ -77,6 +114,12 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     fun leave() {
         job?.cancel()
         wire?.close()
+        remoteRpcPort = null
+        remoteRpcBridges.values.forEach { runCatching { it.close() } }; remoteRpcBridges.clear()
+        remoteRpcStreams.values.forEach { runCatching { it.close() } }; remoteRpcStreams.clear()
+        attachedRpcChannels.clear()
+        remotePeer?.close(); remotePeer = null
+        remoteSignal?.close(1000, "helper left"); remoteSignal = null
         engine.stop()
         _link.value = Link()
     }
@@ -85,7 +128,11 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
         val sock = connectAny(invite) ?: throw IllegalStateException("cannot reach the Host")
         sock.tcpNoDelay = true
         sock.soTimeout = 60_000     // the Host pings every 2 s; allow for busy moments during a run
-        val w = Wire(sock).also { wire = it }
+        sessionWire(invite, Wire(sock), sock.inetAddress.hostAddress ?: "", sock.localAddress.hostAddress ?: "", remote = false)
+    }
+
+    private suspend fun sessionWire(invite: Invite, w: Wire, hostIp: String, engineBind: String, remote: Boolean) {
+        wire = w
         val me = Specs.read(ctx)
         val secretKey = "secret:${invite.mesh}"
         w.send(msg("hello", "id" to me.id, "token" to invite.token, "secret" to prefs.getString(secretKey, null),
@@ -97,7 +144,6 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
             w.close(); return
         }
         prefs.edit().putString(secretKey, first.getString("secret")).apply()
-        val hostIp = sock.inetAddress.hostAddress ?: ""
         _link.value = Link(Link.State.JOINED, first.optString("host"), hostIp)
 
         val reporter = scope.launch {
@@ -112,7 +158,8 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 val m = w.read() ?: break
                 when (m.optString("t")) {
                     "ping" -> w.send(msg("pong", "at" to m.optLong("at")))
-                    "run" -> run(w, bind = sock.localAddress.hostAddress ?: "", layers = m.optString("layers"), model = m.optString("model"))
+                    "run" -> run(w, bind = engineBind, layers = m.optString("layers"), model = m.optString("model"),
+                        modelFile = m.optString("model_file"), remote = remote)
                     // the Host names the models that need helpers: keep their layers on this phone, once
                     "store" -> m.optJSONArray("models")?.let { a ->
                         store.fill(File(ctx.getExternalFilesDir(null), "models"), List(a.length()) { a.getString(it) })
@@ -139,17 +186,161 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
         }
     }
 
+    private suspend fun sessionRemote(invite: Invite) {
+        val service = RemoteSignaling(invite.remoteUrl!!)
+        val sessionId = invite.remoteSession!!
+        // Resume credentials belong to one pairing session. Keying only by mesh
+        // reuses stale credentials when a Host creates a fresh invite for that mesh.
+        val resumeKey = "remote-resume:$sessionId"
+        val signalingToken = prefs.getString(resumeKey, null)?.takeIf { it.isNotBlank() } ?: invite.token
+        val turn = service.turnCredentials(sessionId, "helper", signalingToken).iceConfig()
+        val control = CompletableDeferred<Wire>()
+        val signalingFailed = CompletableDeferred<String>()
+        val pendingSignals = ArrayList<Pair<String, JSONObject>>()
+        fun dispatchSignal(type: String, payload: JSONObject) {
+            when (type) {
+                    "offer" -> remotePeer?.acceptOffer(payload.optString("sdp"))
+                "ice" -> remotePeer?.addIce(payload)
+                "hangup" -> signalingFailed.complete("host ended the remote session")
+            }
+        }
+        remoteSignal = service.connect(sessionId, "helper", signalingToken, object : RemoteSignaling.Listener {
+            override fun onOpen(socket: WebSocket) = Unit
+            override fun onMessage(type: String, payload: JSONObject) {
+                when (type) {
+                    "joined" -> prefs.edit().putString(resumeKey, payload.optString("resumeToken")).apply()
+                    else -> synchronized(pendingSignals) {
+                        if (remotePeer == null) pendingSignals += type to payload else dispatchSignal(type, payload)
+                    }
+                }
+            }
+            override fun onClosed(code: Int, reason: String) { signalingFailed.complete("signaling closed: $reason") }
+            override fun onFailure(message: String) { signalingFailed.complete(message) }
+        })
+        remotePeer = RtcPeer(ctx, listOf(turn), forceRelay = invite.forceRelay, signal = { type, payload ->
+            remoteSignal?.send(JSONObject().put("type", type).put("payload", payload).toString())
+        }, onChannel = { channel ->
+            val label = channel.label()
+            when {
+                label == "control" -> control.complete(Wire(DataChannelStream(channel)))
+                label.startsWith("rpc:") -> {
+                    val stream = DataChannelStream(channel)
+                    remoteRpcStreams[label] = stream
+                    remoteRpcPort?.let { attachRemoteRpc(label, stream, it) }
+                }
+                label == "probe" -> {
+                    val stream = DataChannelStream(channel)
+                    val task = remoteProbeExecutor.submit<BinaryProbeResult> { BinaryTransportProbe.helper(stream) }
+                    scope.launch {
+                        val result = runCatching { task.get(90, TimeUnit.SECONDS) }
+                            .getOrElse { stream.close(); BinaryProbeResult(false, 0, 0, it.message ?: "binary probe timed out") }
+                        if (!result.passed) signalingFailed.complete("binary transport integrity failed: ${result.error}")
+                    }
+                }
+                else -> channel.close()
+            }
+        }, onState = { state ->
+            _link.value = _link.value.copy(hostIp = "WebRTC · $state")
+            if (state == PeerConnection.IceConnectionState.DISCONNECTED) {
+                val old = remotePeer
+                scope.launch {
+                    delay(15_000)
+                    if (remotePeer === old && old?.iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED) {
+                        signalingFailed.complete("WebRTC stayed disconnected for 15 seconds; the inference session was stopped")
+                        wire?.close()
+                    }
+                }
+            }
+            if (state == PeerConnection.IceConnectionState.FAILED || state == PeerConnection.IceConnectionState.CLOSED) {
+                signalingFailed.complete("WebRTC connection $state")
+                wire?.close()
+            }
+        }, onError = { signalingFailed.complete(it) })
+        synchronized(pendingSignals) {
+            pendingSignals.forEach { (type, payload) -> dispatchSignal(type, payload) }
+            pendingSignals.clear()
+        }
+        val result = kotlinx.coroutines.withTimeoutOrNull(60_000) {
+            kotlinx.coroutines.selects.select<Wire> {
+                control.onAwait { it }
+                signalingFailed.onAwait { throw IllegalStateException(it) }
+            }
+        } ?: throw IllegalStateException("timed out waiting for the WebRTC control channel")
+        sessionWire(invite, result, "remote peer", "127.0.0.1", remote = true)
+    }
+
     /** Start the engine on the link address, then tell the Host where to find it. */
-    private fun run(w: Wire, bind: String, layers: String, model: String) = scope.launch {
+    private fun run(w: Wire, bind: String, layers: String, model: String, modelFile: String, remote: Boolean) = scope.launch {
+        if (remote && modelFile.isNotBlank()) {
+            val models = File(ctx.getExternalFilesDir(null), "models")
+            val localModel = File(models, modelFile)
+            if (localModel.isFile && localModel.canRead()) {
+                _link.value = _link.value.copy(model = model, layers = layers, error = "preparing local RPC tensor cache")
+                val layerBounds = layers.split('-').mapNotNull(String::toIntOrNull)
+                if (layerBounds.size != 2 || layerBounds[0] < 0 || layerBounds[1] < layerBounds[0]) {
+                    runCatching { w.send(msg("failed", "reason" to "invalid assigned layer range: $layers")) }
+                    return@launch
+                }
+                val cacheJob = store.fill(models, listOf(modelFile), layerBounds[0]..layerBounds[1])
+                val finished = withTimeoutOrNull(10 * 60_000L) { cacheJob.join(); true } ?: false
+                val cache = store.state.value
+                if (!finished || cache.working || cache.error.isNotBlank()) {
+                    runCatching { w.send(msg("failed", "reason" to "local RPC tensor cache preparation failed: ${cache.error.ifBlank { "timed out" }}")) }
+                    return@launch
+                }
+            } else {
+                runCatching { w.send(msg("failed", "reason" to "Helper model file is missing: $modelFile")) }
+                return@launch
+            }
+        }
         engine.startHelper(bind, threads = (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)).join()
         val s = withTimeoutOrNull(20_000) {
             engine.state.first { it.status == EngineState.Status.RUNNING || it.status == EngineState.Status.FAILED }
         }
         if (s?.status == EngineState.Status.RUNNING) {
+            if (remote) {
+                val port = s.address.substringAfterLast(':').toIntOrNull()
+                if (port == null) {
+                    engine.stop(); runCatching { w.send(msg("failed", "reason" to "Helper RPC server address is invalid")) }; return@launch
+                }
+                remoteRpcPort = port
+                remoteRpcStreams.forEach { (label, stream) -> attachRemoteRpc(label, stream, port) }
+            }
             _link.value = _link.value.copy(layers = layers, model = model)
             runCatching { w.send(msg("ready", "addr" to s.address)) }
         } else {
             runCatching { w.send(msg("failed", "reason" to "engine did not start")) }
+        }
+    }
+
+    /** Each llama.cpp TCP connection gets its own DataChannel; RPC opens several during startup. */
+    private fun attachRemoteRpc(label: String, stream: DataChannelStream, port: Int) {
+        if (!attachedRpcChannels.add(label)) return
+        remoteRpcExecutor.execute {
+            runCatching {
+                val rpcSocket = Socket().apply {
+                    connect(InetSocketAddress("127.0.0.1", port), 5_000)
+                    tcpNoDelay = true
+                }
+                val bridge = TcpDataChannelBridge.bridgeConnected(
+                    rpcSocket,
+                    stream,
+                    onError = { _link.value = _link.value.copy(error = "RPC tunnel $label failed: ${it.message}") },
+                    onClosed = {
+                        remoteRpcStreams.remove(label, stream)
+                        remoteRpcBridges.remove(label)
+                        attachedRpcChannels.remove(label)
+                    },
+                )
+                remoteRpcBridges[label] = bridge
+                if (!stream.isOpen) remoteRpcBridges.remove(label, bridge)
+                android.util.Log.i("MeshRTC", "bridged $label to helper RPC port $port")
+            }.onFailure {
+                attachedRpcChannels.remove(label)
+                remoteRpcStreams.remove(label)
+                stream.close()
+                _link.value = _link.value.copy(error = "RPC tunnel $label failed: ${it.message}")
+            }
         }
     }
 

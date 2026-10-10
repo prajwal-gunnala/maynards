@@ -73,8 +73,11 @@ fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit,
     val get: (String) -> (() -> Unit)? = { file ->
         offers[file]?.takeIf { downloads != null }?.let { p -> { downloads!!.get(p.modelUrl(file), file, p.models.getValue(file)) } }
     }
-    val plans = models.map { Planner.plan(it, devices, hostExtra = shelf.projector(it)?.length() ?: 0) } +
-        Catalog.all.filter { it.info.file !in onPhone }.map { Planner.plan(it.info, devices) }
+    // Keep normal model recommendations conservative. Controlled distributed tests
+    // can request a split explicitly (for example, the ADB --helpers test path).
+    val preferSplit = false
+    val plans = models.map { Planner.plan(it, devices, hostExtra = shelf.projector(it)?.length() ?: 0, preferSplit = preferSplit) } +
+        Catalog.all.filter { it.info.file !in onPhone }.map { Planner.plan(it.info, devices, preferSplit = preferSplit) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),

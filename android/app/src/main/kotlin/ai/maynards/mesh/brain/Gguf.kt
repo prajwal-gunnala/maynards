@@ -14,10 +14,14 @@ data class ModelInfo(
     val fileBytes: Long,
     val layerBytes: List<Long>,      // weights of each repeating block, blk.0 … blk.N-1
     val otherBytes: Long,            // embeddings, output head, norms: these stay on the Host
-    val kvBytesPerToken: Long,       // KV cache per token at 16-bit, all layers together
+    val kvBytesPerToken: Long,       // attention KV per token at 16-bit; recurrent state is separate
     val contextMax: Int,
     /** One token's hidden state at 16-bit: the only thing that crosses the link per word. 0 if unknown. */
     val hiddenBytes: Long = 0,
+    /** True for recurrent blocks (for example Qwen3.5 Gated DeltaNet layers). */
+    val recurrentLayers: List<Boolean> = emptyList(),
+    /** F32 recurrent state per recurrent layer and sequence, excluding rollback slots. */
+    val recurrentStateBytesPerLayer: Long = 0,
 ) {
     val layers: Int get() = layerBytes.size
     val weightBytes: Long get() = layerBytes.sum() + otherBytes
@@ -102,7 +106,11 @@ object Gguf {
             is List<*> -> v.filterIsInstance<Number>().maxOfOrNull { it.toLong() }   // per-layer values
             else -> null
         }
-        val nLayer = num("block_count")?.toInt() ?: 0
+        // block_count includes any trailing next-token-prediction (MTP) blocks. llama.cpp's
+        // hparams.n_layer() subtracts nextn_predict_layers; those blocks are not part of the
+        // normal transformer stack and must not be assigned to an RPC helper as model layers.
+        val nLayerAll = num("block_count")?.toInt() ?: 0
+        val nLayer = (nLayerAll - (num("nextn_predict_layers")?.toInt() ?: 0)).coerceAtLeast(0)
         val layerBytes = LongArray(nLayer)
         var other = 0L
         names.forEachIndexed { i, n ->
@@ -115,6 +123,27 @@ object Gguf {
         val embd = num("embedding_length") ?: 0
         val kDim = num("attention.key_length") ?: (embd / nHead)
         val vDim = num("attention.value_length") ?: kDim
+        val recurrentFlags = (meta["$arch.attention.recurrent_layers"] as? List<*>)
+            ?.map { (it as? Number)?.toInt() != 0 }
+            ?.take(nLayer)
+            .orEmpty()
+        val recurrentLayers = when {
+            recurrentFlags.isNotEmpty() -> recurrentFlags
+            arch == "qwen35" || arch == "qwen35moe" -> {
+                val interval = num("full_attention_interval")?.toInt()?.coerceAtLeast(1) ?: 4
+                List(nLayer) { (it + 1) % interval != 0 }
+            }
+            else -> emptyList()
+        }
+        val convKernel = num("ssm.conv_kernel") ?: 0
+        val inner = num("ssm.inner_size") ?: 0
+        val state = num("ssm.state_size") ?: 0
+        val groups = num("ssm.group_count") ?: 0
+        // llama.cpp's Qwen3.5 recurrent cache stores the convolution and delta-attention
+        // state as F32. It is one row per sequence, not per context token.
+        val recurrentStateBytes = if (convKernel > 0 && inner > 0 && state > 0 && groups > 0) {
+            ((convKernel - 1) * (inner + 2 * groups * state) + state * inner) * 4
+        } else 0
 
         return ModelInfo(
             file = fileName,
@@ -123,9 +152,14 @@ object Gguf {
             fileBytes = fileBytes,
             layerBytes = layerBytes.toList(),
             otherBytes = other,
-            kvBytesPerToken = nLayer * nHeadKv * (kDim + vDim) * 2,
+            // Recurrent blocks have fixed state and no attention KV cache. If metadata is
+            // absent, preserve the existing all-attention estimate for older/unknown GGUFs.
+            kvBytesPerToken = (if (recurrentLayers.isEmpty()) nLayer else nLayer - recurrentLayers.count { it }) *
+                nHeadKv * (kDim + vDim) * 2,
             hiddenBytes = embd * 2,   // what actually travels between devices, once per word
             contextMax = num("context_length")?.toInt() ?: 4096,
+            recurrentLayers = recurrentLayers,
+            recurrentStateBytesPerLayer = recurrentStateBytes,
         )
     }
 

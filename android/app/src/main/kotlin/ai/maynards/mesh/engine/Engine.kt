@@ -90,6 +90,7 @@ class Engine(private val ctx: Context) {
             pb.environment()["LD_LIBRARY_PATH"] = libDir.path
             pb.environment()["HOME"] = ctx.filesDir.path
             pb.environment()["LLAMA_CACHE"] = File(ctx.filesDir, "cache").path  // helper's layer cache
+            pb.environment()["GGML_RPC_DEBUG"] = "1"
             val p = pb.start()
             proc = p
             scope.launch {
@@ -118,7 +119,10 @@ class Engine(private val ctx: Context) {
 
     private fun bin(name: String) = File(libDir, name).path
 
-    private fun log(line: String) = update { it.copy(log = (it.log + line).takeLast(60)) }
+    private fun log(line: String) {
+        android.util.Log.i("MeshEngine", line)
+        update { it.copy(log = (it.log + line).takeLast(60)) }
+    }
 
     private fun update(f: (EngineState) -> EngineState) {
         synchronized(this) { _state.value = f(_state.value) }

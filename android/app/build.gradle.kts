@@ -29,6 +29,9 @@ android {
     }
     kotlinOptions { jvmTarget = "17" }
     buildFeatures { compose = true }
+    // Compile Origami's existing UI and engineering engine directly into MeshAI as a tab.
+    // The standalone Origami app keeps using the same source files.
+    sourceSets.getByName("main").java.srcDir("../../origami/app/src/main/java")
     // The engine programs ship as lib*.so; they must be extracted to disk to be run.
     packaging { jniLibs { useLegacyPackaging = true } }
 }
@@ -37,6 +40,8 @@ dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.06.01"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.16.0")
@@ -44,6 +49,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // WebRTC is only the cross-network transport. llama.cpp RPC remains the inference protocol.
+    implementation("io.github.webrtc-sdk:android:150.7871.01")
 
     testImplementation("junit:junit:4.13.2")
 }

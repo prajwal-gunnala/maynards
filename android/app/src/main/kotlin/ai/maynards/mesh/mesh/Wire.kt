@@ -3,6 +3,9 @@ package ai.maynards.mesh.mesh
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.BufferedWriter
+import java.io.Closeable
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.Socket
 import java.security.MessageDigest
 import java.security.SecureRandom
@@ -15,9 +18,17 @@ import java.security.SecureRandom
  */
 const val CONTROL_PORT = 7070
 
-class Wire(val socket: Socket) {
-    private val reader: BufferedReader = socket.getInputStream().bufferedReader()
-    private val writer: BufferedWriter = socket.getOutputStream().bufferedWriter()
+class Wire private constructor(
+    private val input: InputStream,
+    private val output: OutputStream,
+    private val transport: Closeable,
+    val socket: Socket?,
+) {
+    constructor(socket: Socket) : this(socket.getInputStream(), socket.getOutputStream(), socket, socket)
+    constructor(stream: DataChannelStream) : this(stream.input, stream.output, stream, null)
+
+    private val reader: BufferedReader = input.bufferedReader()
+    private val writer: BufferedWriter = output.bufferedWriter()
 
     fun send(msg: JSONObject) = synchronized(writer) {
         writer.write(msg.toString())
@@ -32,7 +43,7 @@ class Wire(val socket: Socket) {
         return JSONObject(line)
     }
 
-    fun close() = runCatching { socket.close() }
+    fun close() = runCatching { transport.close() }
 
     companion object {
         private const val MAX_LINE = 64 * 1024
@@ -53,16 +64,31 @@ object Secrets {
 }
 
 /** What the QR code carries: where the Host is, and a one-time token to join. */
-data class Invite(val mesh: String, val hosts: List<String>, val port: Int, val token: String) {
+data class Invite(
+    val mesh: String,
+    val hosts: List<String>,
+    val port: Int,
+    val token: String,
+    val remoteUrl: String? = null,
+    val remoteSession: String? = null,
+    val forceRelay: Boolean = false,
+) {
     fun toJson(): String = JSONObject()
         .put("mesh", mesh).put("hosts", org.json.JSONArray(hosts)).put("port", port).put("token", token)
+        .also { j ->
+            remoteUrl?.let { j.put("remote_url", it) }
+            remoteSession?.let { j.put("remote_session", it) }
+            if (remoteUrl != null) j.put("force_relay", forceRelay)
+        }
         .toString()
 
     companion object {
         fun parse(text: String): Invite? = runCatching {
             val j = JSONObject(text.trim())
-            val hosts = j.getJSONArray("hosts").let { a -> List(a.length()) { a.getString(it) } }
-            Invite(j.getString("mesh"), hosts, j.optInt("port", CONTROL_PORT), j.getString("token"))
+            val hosts = j.optJSONArray("hosts")?.let { a -> List(a.length()) { a.getString(it) } } ?: emptyList()
+            Invite(j.getString("mesh"), hosts, j.optInt("port", CONTROL_PORT), j.getString("token"),
+                j.optString("remote_url").takeIf { it.isNotBlank() }, j.optString("remote_session").takeIf { it.isNotBlank() },
+                j.optBoolean("force_relay", false))
         }.getOrNull()
     }
 }

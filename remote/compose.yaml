@@ -1,0 +1,55 @@
+services:
+  signaling:
+    build: .
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      TURN_SECRET: ${TURN_SECRET:?set a random TURN_SECRET}
+      TURN_URLS: ${TURN_URLS:?set TURN_URLS to the public coturn endpoint}
+    expose: ["3000"]
+    networks: [mesh]
+
+  turn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - -n
+      - --no-cli
+      - --no-multicast-peers
+      - --no-loopback-peers
+      - --fingerprint
+      - --lt-cred-mech
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_SECRET:?set a random TURN_SECRET}
+      - --realm=${TURN_REALM:?set TURN_REALM to your public hostname}
+      - --listening-port=3478
+      - --tls-listening-port=5349
+      - --cert=/etc/turn-certs/fullchain.pem
+      - --pkey=/etc/turn-certs/privkey.pem
+      - --min-port=49160
+      - --max-port=49200
+      - --log-file=stdout
+      - --no-stdout-log
+    volumes:
+      - ./turn-certs:/etc/turn-certs:ro
+    profiles: [turn]
+
+  caddy:
+    image: caddy:2.9-alpine
+    restart: unless-stopped
+    environment:
+      MESH_DOMAIN: ${MESH_DOMAIN:?set MESH_DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [mesh]
+    depends_on: [signaling]
+
+networks:
+  mesh: {}
+volumes:
+  caddy_data: {}
+  caddy_config: {}

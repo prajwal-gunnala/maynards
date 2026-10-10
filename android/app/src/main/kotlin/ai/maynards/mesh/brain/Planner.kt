@@ -47,17 +47,33 @@ object Planner {
     const val MIN_BATTERY = 20
     const val SPARE = 0.15
 
-    /** KV cache stored at 8 bits (q8_0 is 34 bytes per 32 values). */
-    fun kvBytes(m: ModelInfo, ctx: Int): Long = m.kvBytesPerToken * ctx * 17 / 32
+    /** Attention KV at q8_0 plus fixed F32 recurrent state (one sequence, no rollback slots). */
+    fun kvBytes(m: ModelInfo, ctx: Int): Long {
+        val attention = m.kvBytesPerToken * ctx * 17 / 32
+        val recurrent = if (m.recurrentLayers.isEmpty()) 0L
+            else m.recurrentLayers.count { it } * m.recurrentStateBytesPerLayer
+        return attention + recurrent
+    }
 
-    fun plan(m: ModelInfo, devices: List<Device>, ctx: Int = 4096, hostExtra: Long = 0): Plan {
+    private fun layerCacheBytes(m: ModelInfo, layer: Int, ctx: Int): Long =
+        if (m.recurrentLayers.getOrNull(layer) == true) m.recurrentStateBytesPerLayer
+        else if (m.recurrentLayers.isEmpty()) kvBytes(m, ctx) / maxOf(m.layers, 1)
+        else (m.kvBytesPerToken * ctx * 17 / 32) /
+            maxOf(m.layers - m.recurrentLayers.count { it }, 1)
+
+    fun plan(
+        m: ModelInfo,
+        devices: List<Device>,
+        ctx: Int = 4096,
+        hostExtra: Long = 0,
+        preferSplit: Boolean = false,
+    ): Plan {
         val host = devices.firstOrNull { it.isHost } ?: error("no host")
         val kv = kvBytes(m, ctx)
-        val kvPerLayer = kv / maxOf(m.layers, 1)
         val need = m.weightBytes + kv + HOST_RESERVE + hostExtra
 
         val skipped = LinkedHashMap<String, String>()
-        val biggest = (m.layerBytes.maxOrNull() ?: 0) + kvPerLayer
+        val biggest = (0 until m.layers).maxOfOrNull { m.layerBytes[it] + layerCacheBytes(m, it, ctx) } ?: 0
         val helpers = devices.filter { !it.isHost }.filter { d ->
             val why = when {
                 d.rttMs > MAX_RTT_MS -> "link too slow (%.0f ms)".format(d.rttMs)
@@ -69,23 +85,29 @@ object Planner {
             why == null
         }.sortedByDescending { it.usableBytes }                // fewest devices: biggest first
 
-        // 1. Fits on the Host alone: never split.
-        if (host.usableBytes >= need) {
+        // 1. Fits on the Host alone unless the caller explicitly requests an attached Helper.
+        // This is used for the two-phone MeshAI mode, where proving distributed execution is
+        // more valuable than keeping the smaller model on one already-capable phone.
+        if (host.usableBytes >= need && !(preferSplit && helpers.isNotEmpty())) {
             helpers.forEach { skipped[it.id] = "not needed" }
             return Plan(m, spare(host.usableBytes, need), "Runs on this phone alone",
                 listOf(Slice(host.id, host.name, 0, m.layers, m.weightBytes)), need, skipped)
         }
 
         // 2. Split. First the fewest devices that can hold it: fill the Host, then the biggest helpers in turn.
-        val cost = { i: Int -> m.layerBytes[i] + kvPerLayer }
+        val cost = { i: Int -> m.layerBytes[i] + layerCacheBytes(m, i, ctx) }
         val chosen = ArrayList<Pair<Device, Long>>()     // device, room for layers
         var next = 0
         for (d in listOf(host) + helpers) {
             if (next >= m.layers) { skipped[d.id] = "not needed"; continue }
-            val cap = d.usableBytes - fixed(d, m, hostExtra)
+            // When a caller asks for an attached Helper to participate, leave at least one
+            // complete block for it. The following balancing pass then distributes the whole
+            // model by capacity, rather than keeping that one block as the final allocation.
+            val cap = (d.usableBytes - fixed(d, m, hostExtra)).coerceAtLeast(0)
+            val maxExclusive = if (d.isHost && preferSplit && helpers.isNotEmpty()) m.layers - 1 else m.layers
             var used = 0L
             val from = next
-            while (next < m.layers && used + cost(next) <= cap) { used += cost(next); next++ }
+            while (next < maxExclusive && used + cost(next) <= cap) { used += cost(next); next++ }
             if (next > from || d.isHost) chosen += d to maxOf(cap, 0)
         }
         if (next < m.layers) {
