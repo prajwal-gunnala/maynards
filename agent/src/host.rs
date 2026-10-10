@@ -365,13 +365,21 @@ fn job_worker_loop(hub: Arc<Hub>) {
                                             let elapsed = t0.elapsed().as_secs_f64();
                                             let cur_tps = if elapsed > 0.0 { tokens as f64 / elapsed } else { 0.0 };
 
+                                            let mut is_cancelled = false;
                                             if tokens % 5 == 0 {
                                                 let mut queue = hub.jobs.lock().unwrap();
                                                 if let Some(j) = queue.iter_mut().find(|j| j.id == job.id) {
-                                                    j.tokens_done = tokens;
-                                                    j.tps = cur_tps;
-                                                    j.result = answer.clone();
+                                                    if j.error.as_deref() == Some("cancelled by user") {
+                                                        is_cancelled = true;
+                                                    } else {
+                                                        j.tokens_done = tokens;
+                                                        j.tps = cur_tps;
+                                                        j.result = answer.clone();
+                                                    }
                                                 }
+                                            }
+                                            if is_cancelled {
+                                                break;
                                             }
                                         }
                                     }
@@ -398,7 +406,9 @@ fn job_worker_loop(hub: Arc<Hub>) {
         {
             let mut queue = hub.jobs.lock().unwrap();
             if let Some(j) = queue.iter_mut().find(|j| j.id == job.id) {
-                if let Some(e) = err_msg {
+                if j.error.as_deref() == Some("cancelled by user") {
+                    hub.say(format!("⚠ Job {}: cancelled by user", job.id));
+                } else if let Some(e) = err_msg {
                     j.status = "failed".into();
                     j.error = Some(e.clone());
                     hub.say(format!("✗ Job {}: failed ({e})", job.id));
@@ -803,9 +813,14 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let mut slices = vec![slice(host, 0, end, front + m.other as f64)];
     slices.extend(tail.into_iter().rev());
     let n = slices.len();
-    let primary = helpers.first().map(|d| d.name.clone()).unwrap_or_else(|| host.name.clone());
-    let bottleneck = helpers.last().map(|d| d.name.clone()).unwrap_or_else(|| host.name.clone());
-    let speed_mult = helpers.iter().map(|d| d.speed_score).fold(host.speed_score, f64::min);
+    let used_devs: Vec<&Dev> = std::iter::once(host)
+        .chain(helpers.iter().copied().filter(|d| slices.iter().any(|s| s["id"] == d.id)))
+        .collect();
+    let primary = used_devs.iter().max_by(|a, b| a.speed_score.partial_cmp(&b.speed_score).unwrap())
+        .map(|d| d.name.clone()).unwrap_or_else(|| host.name.clone());
+    let bottleneck = used_devs.iter().min_by(|a, b| a.speed_score.partial_cmp(&b.speed_score).unwrap())
+        .map(|d| d.name.clone()).unwrap_or_else(|| host.name.clone());
+    let speed_mult = used_devs.iter().map(|d| d.speed_score).fold(f64::MAX, f64::min);
     json!({"verdict": verdict(capacity, need + HELPER_RESERVE * (n as f64 - 1.0)), "reason": format!("Needs {n} devices (speed-optimized)"),
            "need_gb": need / GB, "slices": slices, "skipped": skipped,
            "pipeline": {"primary_compute": primary, "bottleneck_device": bottleneck, "pipeline_speed_score": speed_mult}})

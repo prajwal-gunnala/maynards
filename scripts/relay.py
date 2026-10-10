@@ -105,10 +105,11 @@ class RelayServer:
                 await asyncio.gather(t1, t2, return_exceptions=True)
                 logger.info(f"Session closed for {key}")
             else:
-                # Wait until matched or disconnected
+                # Wait until matched, disconnected, or timeout (120s)
+                wait_start = asyncio.get_event_loop().time()
                 while True:
                     await asyncio.sleep(1.0)
-                    if writer.is_closing():
+                    if writer.is_closing() or (asyncio.get_event_loop().time() - wait_start > 120.0):
                         break
                     # Verify we are still in waiting dict
                     async with self.lock:

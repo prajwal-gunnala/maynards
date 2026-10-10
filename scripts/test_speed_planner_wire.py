@@ -128,6 +128,20 @@ class TestSpeedPlanner(unittest.TestCase):
         self.assertIn("pipeline", plan_json_payload)
         self.assertEqual(plan_json_payload["pipeline"]["primary_compute"], "iQOO 15")
 
+    def test_unused_slow_helpers_do_not_contaminate_pipeline(self):
+        host = {"id": "laptop", "name": "Host Laptop", "speed_score": 1.8}
+        fast = {"id": "fast", "name": "iQOO 15", "speed_score": 3.0}
+        slow_unused = {"id": "slow", "name": "Old Potato Phone", "speed_score": 0.8}
+        slices = [{"id": "laptop"}, {"id": "fast"}]
+        all_helpers = [fast, slow_unused]
+        selected_helpers = [h for h in all_helpers if any(s["id"] == h["id"] for s in slices)]
+        analysis = analyze_pipeline(host, selected_helpers)
+        # Even though Old Potato Phone (0.8) is connected, it was not selected in slices
+        # Therefore, bottleneck is the Host Laptop (1.8), NOT the potato phone
+        self.assertEqual(analysis["bottleneck_device"], "Host Laptop")
+        self.assertNotEqual(analysis["bottleneck_device"], "Old Potato Phone")
+        self.assertEqual(analysis["pipeline_speed_score"], 1.8)
+
 
 if __name__ == "__main__":
     unittest.main()
