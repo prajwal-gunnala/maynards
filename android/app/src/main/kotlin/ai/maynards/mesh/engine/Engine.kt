@@ -40,10 +40,15 @@ class Engine(private val ctx: Context) {
     private val gate = Mutex()
 
     /** Helper: hold layers for a Host. Tries a few ports because Android sometimes reserves one. */
-    fun startHelper(bind: String, threads: Int, ports: List<Int> = HELPER_PORTS) = scope.launch { gate.withLock {
+    fun startHelper(bind: String, threads: Int, backend: String = "cpu", ports: List<Int> = HELPER_PORTS) = scope.launch { gate.withLock {
         stop()
+        val rpcBinary = if (backend.lowercase() == "opencl" && File(libDir, "libmesh_rpc_opencl.so").exists()) {
+            "libmesh_rpc_opencl.so"
+        } else {
+            "libmesh_rpc.so"
+        }
         for (port in ports) {
-            val cmd = listOf(bin("libmesh_rpc.so"), "-H", bind, "-p", "$port", "-t", "$threads", "-c")
+            val cmd = listOf(bin(rpcBinary), "-H", bind, "-p", "$port", "-t", "$threads", "-c")
             if (launch(cmd) && waitListening(bind, port)) {
                 update { it.copy(status = EngineState.Status.RUNNING, address = "$bind:$port") }
                 return@launch

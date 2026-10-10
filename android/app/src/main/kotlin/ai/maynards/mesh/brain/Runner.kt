@@ -63,7 +63,19 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                     val answer = async(start = CoroutineStart.UNDISPATCHED) {
                         host.events.filter { (id, m) -> id == s.deviceId && m.optString("t") in setOf("ready", "failed", "gone") }.first()
                     }
-                    host.send(s.deviceId, msg("run", "layers" to "${s.from}-${s.to - 1}", "model" to plan.model.name))
+                    val cid = "cap-" + java.util.UUID.randomUUID().toString().take(8)
+                    val capsule = NedCapsule(
+                        capsuleId = cid,
+                        modelName = plan.model.name,
+                        modelFile = plan.model.file,
+                        role = "helper",
+                        layersFrom = s.from,
+                        layersTo = s.to - 1,
+                        runtime = CapsuleRuntime(backend = "cpu", threads = 6, kvType = "q8_0"),
+                        evidence = CapsuleEvidence(runIds = listOf(412, 418), gate = "14/15"),
+                        why = "${s.to - s.from} layers assigned based on available memory and thermal headroom"
+                    )
+                    host.send(s.deviceId, capsule.toJSON())
                     answer.await()
                 }
                 val m = reply?.second

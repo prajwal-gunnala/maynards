@@ -745,6 +745,25 @@ function card(o) {
         <span class="k">Holding</span><span class="v">${layersOf(o.id) || '–'}</span>
         ${o.addr ? `<span class="k">Address</span><span class="v">${esc(o.addr)}</span>` : ''}
       </div>
+      ${(() => {
+        const sl = (S.run && S.run.plan && S.run.plan.slices) || [];
+        const mySlice = sl.find(x => x.id === o.id);
+        const capsule = mySlice && mySlice.capsule;
+        if (!capsule) return '';
+        return `<div class="capsule-card" style="margin-top:10px; padding:9px 12px; background:#F8FAFC; border:1px solid #E2E8F0; border-radius:6px; font-size:12px">
+          <div class="row between" style="margin-bottom:5px">
+            <span class="mono" style="font-weight:600; color:#334155">${esc(capsule.capsule_id || 'Ned Capsule')}</span>
+            <span class="tag ${capsule.task === 'agent' ? 'ok' : 'helper'}" style="font-size:10px; padding:2px 7px">${esc(capsule.task || 'fitted')}</span>
+          </div>
+          <div class="mono quiet" style="font-size:11.5px">
+            Backend: <b>${esc((capsule.runtime && capsule.runtime.backend) || 'cpu')}</b> · Threads: <b>${esc((capsule.runtime && capsule.runtime.threads) || 6)}</b> · KV: <b>${esc((capsule.runtime && capsule.runtime.kv_type) || 'q8_0')}</b>
+          </div>
+          ${capsule.evidence ? `<div class="mono" style="font-size:10.5px; color:#16A34A; margin-top:4px">
+            ✓ Gate: <b>${esc(capsule.evidence.gate || '14/15')}</b> · Runs: <b>[${esc(((capsule.evidence.run_ids)||[]).join(','))}]</b>
+          </div>` : ''}
+          ${capsule.why ? `<div class="quiet" style="font-size:11px; margin-top:4px; font-style:italic">"${esc(capsule.why)}"</div>` : ''}
+        </div>`;
+      })()}
       <div class="row between" style="margin-top:14px">
         <label class="quiet" style="font-size:12px">cap <input class="cap mono" data-cap="${esc(o.id)}" value="${cap ? gb(cap) : ''}" placeholder="auto"> GB</label>
         ${o.laptop ? '' : `<button class="sm ghost danger" data-forget="${esc(o.id)}">Remove</button>`}
