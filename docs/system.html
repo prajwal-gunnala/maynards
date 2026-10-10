@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MeshAI + Mesh Compiler — system drawing</title>
+<style>
+:root{
+  --ground:#0a1018; --plate:#0e1622; --plate2:#121c2a;
+  --line:#93b4cc; --dim:#4a6880; --text:#cfdce6; --text2:#7e94a6;
+  --lead:#e0a458; --live:#5bc98f; --stop:#d9636b; --grid:#16222f;
+  --sans:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+:root[data-sheet=paper]{
+  --ground:#efece2; --plate:#f7f5ef; --plate2:#fffefa;
+  --line:#2d4659; --dim:#8fa3b2; --text:#1b2630; --text2:#5d6d79;
+  --lead:#8a5410; --live:#1d7a4c; --stop:#a8323a; --grid:#ddd8cb;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--text);font-family:var(--sans);
+  font-size:15px;line-height:1.6;letter-spacing:-.005em;-webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:28px 28px;background-position:-1px -1px}
+.sheet{max-width:1160px;margin:0 auto;padding:0 20px 140px}
+.tb{border:1px solid var(--dim);background:var(--plate);margin:28px 0 36px;display:grid;grid-template-columns:1fr 250px}
+@media(max-width:780px){.tb{grid-template-columns:1fr}}
+.tb-m{padding:26px 28px}.tb-s{border-left:1px solid var(--dim);padding:18px 20px;
+  font-family:var(--mono);font-size:11.5px;color:var(--text2);line-height:1.9}
+.tb-s b{color:var(--line);font-weight:500}
+h1{font-size:29px;font-weight:600;margin:0 0 8px;letter-spacing:-.022em;line-height:1.15}
+.tb-m p{margin:0;color:var(--text2);max-width:62ch}
+.part{display:grid;grid-template-columns:72px 1fr;margin-bottom:4px}
+@media(max-width:780px){.part{grid-template-columns:1fr}}
+.pn{font-family:var(--mono);font-size:11.5px;color:var(--lead);padding:30px 0 0;border-right:1px solid var(--grid)}
+@media(max-width:780px){.pn{border:none;padding:22px 0 0}}
+.pb{padding:30px 0 34px 28px;min-width:0}
+@media(max-width:780px){.pb{padding-left:0}}
+h2{font-size:21px;font-weight:600;margin:0 0 4px;letter-spacing:-.018em}
+h2 em{font-style:normal;color:var(--text2);font-weight:400}
+h3{font-size:15px;font-weight:600;margin:26px 0 7px}
+p{margin:0 0 13px;max-width:74ch;color:var(--text2)}
+p strong,li strong,td b{color:var(--text);font-weight:600}
+ul{margin:0 0 14px;padding-left:20px;max-width:74ch;color:var(--text2)}li{margin-bottom:6px}
+code{font-family:var(--mono);font-size:.86em;color:var(--line);background:var(--plate2);
+  padding:.1em .34em;border:1px solid var(--grid);border-radius:2px}
+.plate{border:1px solid var(--dim);background:var(--plate);margin:20px 0 10px}
+.plate svg{display:block;width:100%;height:auto;padding:18px 16px 10px;overflow:visible}
+.ptb{border-top:1px solid var(--grid);display:flex;justify-content:space-between;gap:16px;
+  padding:9px 14px;font-family:var(--mono);font-size:10.5px;color:var(--text2);flex-wrap:wrap}
+.ptb b{color:var(--lead);font-weight:500}
+.cap{font-size:13.5px;color:var(--text2);margin:10px 0 0;max-width:78ch;line-height:1.55}
+table{width:100%;border-collapse:collapse;margin:16px 0 18px;font-size:13.5px}
+th{text-align:left;font-weight:600;color:var(--line);padding:0 12px 7px 0;border-bottom:1px solid var(--dim);font-size:12.5px}
+td{padding:9px 12px 9px 0;border-bottom:1px solid var(--grid);color:var(--text2);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.m{font-family:var(--mono);font-size:12.5px;white-space:nowrap}
+pre{font-family:var(--mono);font-size:12.5px;line-height:1.65;background:var(--plate2);
+  border:1px solid var(--grid);border-left:2px solid var(--dim);padding:14px 16px;
+  overflow-x:auto;margin:0 0 16px;color:var(--text2)}
+pre b{color:var(--line);font-weight:500}pre i{color:var(--text2);opacity:.7;font-style:normal}
+pre u{color:var(--lead);text-decoration:none}pre s{color:var(--live);text-decoration:none}
+.flag{border:1px solid var(--grid);border-left:2px solid var(--lead);background:var(--plate);
+  padding:13px 16px;margin:16px 0;font-size:14px;color:var(--text2);max-width:78ch}
+.flag.s{border-left-color:var(--stop)}.flag.g{border-left-color:var(--live)}
+.flag h4{margin:0 0 5px;font-size:12.5px;font-weight:600;color:var(--lead);font-family:var(--mono)}
+.flag.s h4{color:var(--stop)}.flag.g h4{color:var(--live)}
+.ctl{position:fixed;top:14px;right:14px;z-index:9;display:flex;gap:8px}
+.ctl button{font-family:var(--mono);font-size:11px;background:var(--plate);color:var(--text2);
+  border:1px solid var(--dim);padding:6px 11px;cursor:pointer}
+.ctl button:hover{color:var(--line)}
+.ctl button[aria-pressed=true]{color:var(--live);border-color:var(--live)}
+.rev{border-top:1px solid var(--dim);margin-top:40px;padding:16px 0 0;font-family:var(--mono);
+  font-size:11px;color:var(--text2);line-height:1.9}
+.t{font-family:var(--sans);font-size:12px;font-weight:600;fill:var(--text)}
+.s{font-family:var(--sans);font-size:10.5px;fill:var(--text2)}
+.v{font-family:var(--mono);font-size:10.5px;fill:var(--line)}
+.ld{font-family:var(--mono);font-size:10px;fill:var(--lead)}
+body.only-built [data-built=no]{opacity:.22}
+</style>
+
+<div class="ctl">
+  <button id="bfilter" aria-pressed="false" onclick="document.body.classList.toggle('only-built');this.setAttribute('aria-pressed',document.body.classList.contains('only-built'))">dim what isn&#8217;t built</button>
+  <button onclick="var r=document.documentElement;r.setAttribute('data-sheet',r.getAttribute('data-sheet')==='paper'?'film':'paper')">invert</button>
+</div>
+
+<div class="sheet">
+<div class="tb">
+  <div class="tb-m">
+    <h1>MeshAI and the Mesh Compiler</h1>
+    <p>Two repositories, what each one owns, the handoff between them that does not exist yet, and which of the seven layers is measured.</p>
+  </div>
+  <div class="tb-s">
+    <div><b>drawing</b> MESH-SYS-02</div>
+    <div><b>revision</b> B</div>
+    <div><b>date</b> 2026-10-10</div>
+    <div><b>runtime</b> maynards @ f048c2c</div>
+    <div><b>compiler</b> mesh-compiler @ e21545b</div>
+  </div>
+</div>
+
+<!-- ===== 1 ===== -->
+<div class="part"><div class="pn">1</div><div class="pb">
+<h2>Two projects, one missing wire</h2>
+<p>MeshAI runs models across devices. The Mesh Compiler measures what settings a device should use for a
+task and proves the answer against the task's own tests. <strong>The compiler already produces a settings
+file. MeshAI does not read it.</strong> That wire is the Ned Capsule.</p>
+
+<div class="plate">
+<svg viewBox="0 0 1100 390" role="img" aria-label="Two repositories and the handoff">
+<defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--line)"/></marker>
+<marker id="g" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--live)"/></marker>
+<marker id="o" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--lead)"/></marker></defs>
+
+<!-- compiler -->
+<rect x="24" y="30" width="400" height="300" fill="none" stroke="var(--live)" stroke-width="1.5"/>
+<text class="t" x="40" y="22" style="fill:var(--live)">mesh-compiler &#8212; measures and proves</text>
+<rect x="44" y="48" width="170" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="56" y="68">optimize.py</text><text class="s" x="56" y="84">Optuna TPE, 2 objectives</text>
+<rect x="232" y="48" width="172" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="244" y="68">speed.py</text><text class="s" x="244" y="84">llama-bench per config</text>
+<rect x="44" y="104" width="170" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="56" y="124">quality.py</text><text class="s" x="56" y="140">15 problems, pass/fail</text>
+<rect x="232" y="104" width="172" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="244" y="124">phone.py</text><text class="s" x="244" y="140">adb, state, cool-down</text>
+<rect x="44" y="160" width="360" height="44" fill="var(--plate2)" stroke="var(--lead)"/>
+<text class="v" x="56" y="180" style="fill:var(--lead)">store.py &#8594; runs.sqlite</text>
+<text class="s" x="56" y="196">every run kept, winners and losers, with phone state</text>
+<rect x="44" y="216" width="360" height="40" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="56" y="240">card.py &#183; report.py</text><text class="s" x="200" y="240">run cards screenshotted on the phone</text>
+<rect x="44" y="268" width="360" height="48" fill="var(--plate2)" stroke="var(--live)" stroke-width="1.4"/>
+<text class="t" x="56" y="288" style="fill:var(--live)">the settings file it already produces</text>
+<text class="v" x="56" y="306">chat &#8594; cpu, 6 threads, q8_0  &#183;  agent &#8594; gpu, f16, b512</text>
+
+<!-- the gap -->
+<path d="M424,292 L556,292" stroke="var(--stop)" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#a)"/>
+<text class="t" x="490" y="276" text-anchor="middle" style="fill:var(--stop)">no wire</text>
+<text class="s" x="490" y="322" text-anchor="middle" style="fill:var(--stop)">hand-copied today</text>
+<text class="s" x="490" y="338" text-anchor="middle" style="fill:var(--stop)">this is the Ned Capsule</text>
+
+<!-- maynards -->
+<rect x="560" y="30" width="516" height="300" fill="none" stroke="var(--line)" stroke-width="1.5"/>
+<text class="t" x="576" y="22">maynards &#8212; runs the model</text>
+<rect x="580" y="48" width="230" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="592" y="68">host.rs : plan()</text><text class="s" x="592" y="84">splits by free memory</text>
+<rect x="828" y="48" width="230" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="840" y="68">serve_control :7070</text><text class="s" x="840" y="84">telemetry every 2 s</text>
+<rect x="580" y="104" width="478" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="592" y="124">EngineArgs / Engine.kt</text>
+<text class="s" x="592" y="140">launches libmesh_rpc.so &#8212; threads, cache, port all hardcoded</text>
+<rect x="580" y="160" width="478" height="44" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="592" y="180">LayerStore.kt</text>
+<text class="s" x="592" y="196">all 144 tensors cached on every phone &#8212; 17.6 GB</text>
+<rect x="580" y="216" width="478" height="40" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="v" x="592" y="240">:8080/v1</text><text class="s" x="680" y="240">one address, OpenAI-compatible</text>
+<rect x="580" y="268" width="478" height="48" fill="none" stroke="var(--dim)" stroke-dasharray="4 3"/>
+<text class="s" x="592" y="288">what it would do with a capsule</text>
+<text class="s" x="592" y="306">read the file, launch each device with its own settings, record which capsule ran</text>
+</svg>
+</div>
+<div class="ptb"><span><b>1</b> the two projects</span><span>red = the only thing missing</span></div>
+<p class="cap"><b>Why they are separate repositories.</b> maynards puts GPU backends out of scope for the event build, and
+two people work in parallel. The compiler writes no engine code: every mechanism it uses already exists in
+llama.cpp. What it adds is choosing and combining them <b>per device, per task, from measurements</b>, and
+proving the result.</p>
+</div></div>
+
+<!-- ===== 2 ===== -->
+<div class="part"><div class="pn">2</div><div class="pb">
+<h2>The finding that makes this a compiler <em>&#8212; the best setting depends on the task</em></h2>
+<p>If one setting were best for everything, a tuner would be a lookup table. It is not. On the same phone
+and the same model, the GPU reads prompts three times faster and writes words thirty percent slower. So the
+right answer for a coding agent is the wrong answer for chat &#8212; and that is why the output is a file per
+task, not a global config.</p>
+
+<div class="plate">
+<svg viewBox="0 0 1100 340" role="img" aria-label="Per-task divergence between CPU and GPU">
+<!-- axes -->
+<line x1="120" y1="40" x2="120" y2="250" stroke="var(--dim)"/>
+<line x1="120" y1="250" x2="520" y2="250" stroke="var(--dim)"/>
+<text class="s" x="320" y="276" text-anchor="middle">prompt reading &#8212; 512 tokens, tok/s</text>
+<!-- bars -->
+<rect x="170" y="206" width="56" height="44" fill="var(--line)" opacity=".5"/>
+<text class="v" x="198" y="198" text-anchor="middle">65.8</text>
+<text class="s" x="198" y="266" text-anchor="middle">CPU cool</text>
+<rect x="250" y="220" width="56" height="30" fill="var(--line)" opacity=".3"/>
+<text class="v" x="278" y="212" text-anchor="middle">44.7</text>
+<text class="s" x="278" y="266" text-anchor="middle">CPU warm</text>
+<rect x="346" y="60" width="56" height="190" fill="var(--live)" opacity=".75"/>
+<text class="v" x="374" y="52" text-anchor="middle" style="fill:var(--live)">195</text>
+<text class="s" x="374" y="266" text-anchor="middle">GPU cool</text>
+<rect x="426" y="96" width="56" height="154" fill="var(--live)" opacity=".5"/>
+<text class="v" x="454" y="88" text-anchor="middle" style="fill:var(--live)">159</text>
+<text class="s" x="454" y="266" text-anchor="middle">GPU warm</text>
+<text class="ld" x="130" y="54">3&#215; faster</text>
+
+<!-- second axis -->
+<line x1="640" y1="40" x2="640" y2="250" stroke="var(--dim)"/>
+<line x1="640" y1="250" x2="1040" y2="250" stroke="var(--dim)"/>
+<text class="s" x="840" y="276" text-anchor="middle">writing words &#8212; sustained, tok/s</text>
+<rect x="700" y="124" width="70" height="126" fill="var(--line)" opacity=".5"/>
+<text class="v" x="735" y="116" text-anchor="middle">19.2</text>
+<text class="s" x="735" y="266" text-anchor="middle">CPU</text>
+<rect x="820" y="160" width="70" height="90" fill="var(--stop)" opacity=".45"/>
+<text class="v" x="855" y="152" text-anchor="middle" style="fill:var(--stop)">13.6</text>
+<text class="s" x="855" y="266" text-anchor="middle">GPU</text>
+<text class="ld" x="920" y="150">~30% slower</text>
+
+<line x1="120" y1="300" x2="1040" y2="300" stroke="var(--grid)"/>
+<text class="s" x="120" y="320" style="fill:var(--line)">So:</text>
+<text class="s" x="150" y="320">an agent step is mostly prompt reading &#8594; GPU wins by 28&#8211;43%. A chat turn is mostly writing &#8594; CPU stays best. One device, one model, two opposite answers.</text>
+</svg>
+</div>
+<div class="ptb"><span><b>2</b> CPU against GPU, by task</span><span>iQOO 15 &#183; Qwen3-4B &#183; measured 10 Oct</span></div>
+<p class="cap"><b>And quality held.</b> 14 of 15 coding problems passed on both, failing the same one
+(<code>parse_duration</code>). A setting that is faster and fails differently is not a win; this one changed
+nothing about the answers.</p>
+</div></div>
+
+<!-- ===== 3 ===== -->
+<div class="part"><div class="pn">3</div><div class="pb">
+<h2>The tuner&#8217;s loop <em>&#8212; how a setting becomes a proven setting</em></h2>
+
+<div class="plate">
+<svg viewBox="0 0 1100 310" role="img" aria-label="Tuner search loop">
+<rect x="24" y="90" width="150" height="56" fill="var(--plate2)" stroke="var(--lead)" stroke-width="1.3"/>
+<text class="t" x="99" y="114" text-anchor="middle" style="fill:var(--lead)">Optuna TPE</text>
+<text class="s" x="99" y="132" text-anchor="middle">proposes a config</text>
+
+<rect x="216" y="30" width="190" height="176" fill="none" stroke="var(--dim)" stroke-dasharray="4 3"/>
+<text class="s" x="232" y="24">search space, 7 knobs</text>
+<text class="v" x="232" y="52">format  Q4_K_M | Q4_0</text>
+<text class="v" x="232" y="72">engine  cpu | opencl</text>
+<text class="v" x="232" y="92">gpu layers  9&#8211;36</text>
+<text class="v" x="232" y="112">cache  q8_0 | f16</text>
+<text class="v" x="232" y="132">threads  4&#8211;8</text>
+<text class="v" x="232" y="152">ubatch  128&#8211;1024</text>
+<text class="v" x="232" y="172">flash attention</text>
+<text class="s" x="232" y="196" style="fill:var(--lead)">baseline tried first</text>
+
+<rect x="448" y="60" width="160" height="56" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="t" x="528" y="84" text-anchor="middle">cool to 40 &#176;C</text>
+<text class="s" x="528" y="102" text-anchor="middle">same start, every run</text>
+
+<rect x="448" y="134" width="160" height="56" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="t" x="528" y="158" text-anchor="middle">llama-bench</text>
+<text class="s" x="528" y="176" text-anchor="middle">read speed, write speed</text>
+
+<rect x="650" y="60" width="180" height="56" fill="var(--plate2)" stroke="var(--dim)"/>
+<text class="t" x="740" y="80" text-anchor="middle">two task times</text>
+<text class="v" x="740" y="100" text-anchor="middle">in&#247;read + out&#247;write</text>
+
+<rect x="650" y="134" width="180" height="56" fill="var(--plate2)" stroke="var(--live)" stroke-width="1.3"/>
+<text class="t" x="740" y="158" text-anchor="middle" style="fill:var(--live)">quality gate</text>
+<text class="s" x="740" y="176" text-anchor="middle">15 problems must still pass</text>
+
+<rect x="872" y="90" width="204" height="56" fill="var(--plate2)" stroke="var(--lead)" stroke-width="1.3"/>
+<text class="t" x="974" y="114" text-anchor="middle" style="fill:var(--lead)">runs.sqlite</text>
+<text class="s" x="974" y="132" text-anchor="middle">kept whether it won or lost</text>
+
+<path d="M174,118 L210,118" stroke="var(--lead)" stroke-width="1.2" marker-end="url(#o)"/>
+<path d="M406,100 L442,88" stroke="var(--line)" stroke-width="1.2" marker-end="url(#a)"/>
+<path d="M528,116 L528,130" stroke="var(--line)" stroke-width="1.2" marker-end="url(#a)"/>
+<path d="M608,88 L644,88" stroke="var(--line)" stroke-width="1.2" marker-end="url(#a)"/>
+<path d="M608,162 L644,162" stroke="var(--live)" stroke-width="1.2" marker-end="url(#g)"/>
+<path d="M830,118 L866,118" stroke="var(--lead)" stroke-width="1.2" marker-end="url(#o)"/>
+<path d="M974,150 L974,232 L99,232 L99,152" fill="none" stroke="var(--lead)" stroke-width="1.2"
+ stroke-dasharray="5 4" marker-end="url(#o)"/>
+<text class="s" x="536" y="250" text-anchor="middle" style="fill:var(--lead)">the score goes back and shapes the next proposal &#8212; 16 trials ran on the iQOO, resumed twice after the cable dropped</text>
+
+<line x1="24" y1="272" x2="1076" y2="272" stroke="var(--grid)"/>
+<text class="s" x="24" y="292" style="fill:var(--stop)">Noise guard:</text>
+<text class="s" x="112" y="292">a change counts only above 3% and above the run-to-run spread. Two units of the same phone agreed within 6%, so a second iQOO ran the gate and the heat baseline.</text>
+</svg>
+</div>
+<div class="ptb"><span><b>3</b> tuner loop</span><span>multi-objective: two task times at once</span></div>
+<p class="cap"><b>Why two objectives rather than one.</b> &#8220;Fastest&#8221; is meaningless when the GPU helps reading and hurts
+writing. Scoring both task times at once lets the search find the frontier instead of a single winner,
+which is what makes a per-task answer possible.</p>
+</div></div>
+
+<!-- ===== 4 ===== -->
+<div class="part"><div class="pn">4</div><div class="pb">
+<h2>Seven layers, and where each one stands</h2>
+<p>The compiler is organised as layers that each remove a different cost from a repeated task. Two are
+measured. One is the optimizer this drawing was originally about.</p>
+
+<table>
+<tr><th></th><th>Layer</th><th>What it removes</th><th>Status</th></tr>
+<tr data-built="yes"><td class="m">1</td><td><b>Settings per device per task</b></td><td>wrong engine, wrong cache, wrong thread count</td><td><b style="color:var(--live)">measured on the 4B</b> &#183; agent step &#8722;28 to &#8722;43%</td></tr>
+<tr data-built="yes"><td class="m">2</td><td><b>Reuse the fixed part of the prompt</b></td><td>re-reading instructions and files that repeat every call</td><td><b style="color:var(--live)">measured</b> &#183; repeat request &#8722;95 to &#8722;98% prompt work</td></tr>
+<tr data-built="no"><td class="m">3</td><td>Guess from what the task already said</td><td>one-word-per-step decoding on repetitive output</td><td>next &#183; prior work says the gain is small, so measure</td></tr>
+<tr data-built="no"><td class="m">4</td><td>Smallest model that still passes</td><td>paying for capability the task never uses</td><td>next &#183; one afternoon with the existing gate</td></tr>
+<tr data-built="no"><td class="m">5</td><td>Right-size the memory</td><td>context and answer length allocated and unused</td><td>next</td></tr>
+<tr data-built="no"><td class="m">6</td><td>Drop experts the task never routes to</td><td>~20% of the 30B&#8217;s memory</td><td>for the 30B step &#183; pruned files already published</td></tr>
+<tr data-built="no"><td class="m">7</td><td><b>Split by measured speed, not free memory</b></td><td>the slowest device holding the most layers</td><td><b style="color:var(--stop)">not built</b> &#8212; this is the optimizer</td></tr>
+</table>
+
+<div class="flag g"><h4>what layer 2 actually did</h4>
+Send the same ~1,900-token context seven times with different short tasks. Prompt work per repeat request
+fell from <b>48.7&#8211;54.8 s to 0.5&#8211;1.1 s</b> on CPU, and the whole reply from <b>50&#8211;56 s to 2.1&#8211;2.8 s</b> &#8212; about
+twenty times faster. For an agent that re-sends the same instructions and the same files every step, this is
+the largest single saving found.</div>
+
+<div class="flag s"><h4>and the honest failure inside it</h4>
+Editing in the <em>middle</em> of the context does not reuse the cache in this llama.cpp build. Checked with
+both cache formats and with flash attention on and off; the engine log shows no reuse. Only the part before
+the edit is reused &#8212; 1,435 of 1,778 tokens. A known limit for insertions. The fix to try is a prompt layout
+rule: fixed part first, byte-identical, edits appended at the end.</div>
+</div></div>
+
+<!-- ===== 5 ===== -->
+<div class="part"><div class="pn">5</div><div class="pb">
+<h2>Layer 7 &#8212; the split the optimizer would change</h2>
+<p>Today <code>plan()</code> gives layers in proportion to each device's <strong>free memory</strong>. The
+compiler knows something better: how fast each device actually runs a layer <em>for this task</em>. Those are
+different numbers, and using the wrong one leaves the slowest device holding the most work.</p>
+
+<div class="plate">
+<svg viewBox="0 0 1100 280" role="img" aria-label="Memory-proportional versus speed-proportional split">
+<text class="t" x="24" y="28" style="fill:var(--stop)">today &#8212; split by free memory</text>
+<rect x="24" y="44" width="300" height="34" fill="var(--line)" opacity=".28"/>
+<text class="v" x="36" y="66">laptop &#183; 20 layers</text>
+<rect x="334" y="44" width="220" height="34" fill="var(--line)" opacity=".45"/>
+<text class="v" x="346" y="66">phone A &#183; 14</text>
+<rect x="564" y="44" width="220" height="34" fill="var(--line)" opacity=".45"/>
+<text class="v" x="576" y="66">phone B &#183; 14</text>
+<text class="s" x="800" y="66" style="fill:var(--stop)">&#8592; a phone that reads prompts 3&#215; faster</text>
+<text class="s" x="800" y="82" style="fill:var(--stop)">gets no more work for it</text>
+
+<text class="t" x="24" y="140" style="fill:var(--live)">layer 7 &#8212; split by measured speed for this task</text>
+<rect x="24" y="156" width="200" height="34" fill="var(--live)" opacity=".25"/>
+<text class="v" x="36" y="178">laptop &#183; 13</text>
+<rect x="234" y="156" width="286" height="34" fill="var(--live)" opacity=".5"/>
+<text class="v" x="246" y="178">phone A &#183; 19  (GPU, f16 cache)</text>
+<rect x="530" y="156" width="254" height="34" fill="var(--live)" opacity=".4"/>
+<text class="v" x="542" y="178">phone B &#183; 16</text>
+<text class="s" x="800" y="178" style="fill:var(--live)">&#8592; work follows measured throughput</text>
+
+<line x1="24" y1="220" x2="1076" y2="220" stroke="var(--grid)"/>
+<text class="s" x="24" y="240" style="fill:var(--lead)">The constraint that makes this subtle:</text>
+<text class="s" x="268" y="240">memory still has to fit. Speed decides the split only among layouts that fit at all, so the optimizer</text>
+<text class="s" x="268" y="256">filters on memory first and scores on speed second &#8212; never the other way round.</text>
+</svg>
+</div>
+<div class="ptb"><span><b>5</b> layer 7, not built</span><span>bar widths illustrative; the two orderings are the point</span></div>
+
+<h3>What it needs, and all of it already exists somewhere</h3>
+<table>
+<tr><th>Input</th><th>Where it comes from</th></tr>
+<tr><td class="m">per-device read and write speed, per task</td><td><code>runs.sqlite</code> &#8212; the tuner already stores exactly this</td></tr>
+<tr><td class="m">free memory, heat, battery, latency</td><td>MeshAI&#8217;s control link, every 2 s</td></tr>
+<tr><td class="m">layer byte sizes, active fraction</td><td><code>read_gguf()</code> already parses the header</td></tr>
+<tr><td class="m">which layouts fit</td><td><code>plan()</code> already computes this and says &#8220;short by N GB&#8221;</td></tr>
+</table>
+<p>So layer 7 is not a new subsystem. It is a <strong>join</strong>: take the speeds the compiler measured,
+feed them into the splitter MeshAI already has, and score layouts by predicted task time instead of by
+memory share.</p>
+</div></div>
+
+<!-- ===== 6 ===== -->
+<div class="part"><div class="pn">6</div><div class="pb">
+<h2>The capsule <em>&#8212; the file that closes the gap in drawing 1</em></h2>
+<p>The compiler's output today is two lines of settings a human copies. As a file the device reads, it
+becomes the wire.</p>
+
+<pre><b>{</b>
+  <u>"capsule_id"</u>: "a3f9c1",
+  "device":  <b>{</b> "serial": "...8a75", "soc": "Snapdragon 8 Elite Gen 5" <b>}</b>
+  "model":   <b>{</b> "file": "Qwen3-4B-Q4_K_M.gguf", "sha_head": "94a16f7a" <b>}</b>
+
+  <i>// one entry per task, because the right answer differs by task</i>
+  "tasks": <b>{</b>
+    "chat":  <b>{</b> <s>"engine":"cpu"</s>,    "threads":6, "ctk":"q8_0", "ctv":"q8_0" <b>}</b>
+    "agent": <b>{</b> <s>"engine":"opencl"</s>, "threads":6, "ctk":"f16",  "ctv":"f16",
+               "ngl":99, "batch":512, "cache_prompt":true <b>}</b>
+  <b>}</b>
+
+  "limits":  <b>{</b> "thermal_ceiling":0.85, "min_battery_pct":20 <b>}</b>
+  <u>"evidence"</u>: <b>{</b> "run_ids":[412,418,431], "gate":"14/15", "baseline_gate":"14/15" <b>}</b>
+<b>}</b></pre>
+
+<div class="flag g"><h4>the field that makes it defensible</h4>
+<code>evidence</code>. Every setting points at the run ids that produced it and the quality gate it passed.
+A capsule is not an assertion about what is fast &#8212; it carries the measurements, so anyone can check it
+against <code>runs.sqlite</code>. That is the difference between a config file and a result.</p></div>
+
+<div class="flag s"><h4>what has to change in maynards to read it</h4>
+Three small things, none of them deep. <code>Engine.kt:47</code> hardcodes
+<code>-t cores&#8722;2 -c</code> &#8212; those come from the capsule instead. The backend needs <b>two
+<code>.so</code> files in the APK</b>, CPU and OpenCL, because the backend is compiled in, not chosen at
+runtime; the compiler has already built the OpenCL one. And <code>plan()</code> gains a task name, so it
+knows which entry in <code>tasks</code> to apply.</div>
+</div></div>
+
+<div class="rev">
+<b>MESH-SYS-02 rev B</b> &#8212; drawn 2026-10-10. Supersedes MESH-TS-01, which specified a capsule without
+knowing the compiler existed.<br>
+Compiler figures from <code>docs/mesh-compiler/00-overview.md</code> and <code>03-results.md</code>,
+measured on an iQOO 15 with Qwen3-4B on 10 Oct 2026. Runtime details read from
+<code>agent/src/host.rs</code>, <code>brain/EngineArgs.kt</code> and <code>engine/Engine.kt</code> at
+f048c2c.<br>
+Illustrative in this drawing: bar widths in plate 5, and the layer counts in the speed-proportional row.
+Everything in plate 2 and the layer-1 and layer-2 rows of plate 4 is measured.
+</div>
+</div>
+</html>
