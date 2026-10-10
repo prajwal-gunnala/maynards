@@ -299,6 +299,40 @@
   </div>
 </div>
 
+<!-- SECTION 5 -->
+<h2>5. Silicon Hardware Analysis: Why Not the Hexagon NPU for Distributed Split?</h2>
+
+<p>A frequent question at Qualcomm / iQOO hackathons is: <i>"The Snapdragon 8 Elite advertises 45 to 73+ TOPS on the Hexagon NPU. Why didn't you use the NPU for distributed layer-splitting?"</i></p>
+
+<p>Our research decision (Formal Design Decision <b>D006</b> in <code>docs/pre-event/MESHAI.md</code>) establishes the exact compute tiering: <b>CPU First → Adreno OpenCL (Prefill) → GenieX/Hexagon (Tier-S Whole-Model-Alone Only)</b>. Here are the five architectural reasons:</p>
+
+<div class="grid-2">
+  <div class="card" style="border-left: 3px solid var(--accent);">
+    <h4>1. Dynamic Layer Elasticity vs Static QNN Graphs</h4>
+    <p>The mesh runtime re-partitions layers dynamically on the fly (e.g. 14 layers to phone A, 14 to phone B; re-planning to 24 layers if one drops). Qualcomm Hexagon NPU requires <b>Ahead-of-Time (AOT) static graph compilation</b> via Qualcomm QNN SDK. Serializing, fusing, and compiling a static NPU binary per partition takes minutes to hours, which is completely incompatible with elastic runtime recovery.</p>
+  </div>
+
+  <div class="card" style="border-left: 3px solid var(--warn);">
+    <h4>2. Dynamic Growing KV-Cache Allocation</h4>
+    <p>Autoregressive LLM generation requires a dynamically growing Key-Value cache ($N \to N+1$ tokens per step). Hexagon's Vector (HVX) and Matrix (HMX) units operate on static shapes in tightly coupled TCM (Tightly Coupled Memory, 4–8 MB). Dynamic ragged pointer lookups are hostile to NPU silicon and caused garbled output upstream in <code>llama.cpp issue #25876</code>.</p>
+  </div>
+
+  <div class="card" style="border-left: 3px solid var(--mesh);">
+    <h4>3. Quantization Support: Q4_K_M & MoE Kernels</h4>
+    <p>Our 30B model is <b>Qwen3-Coder-30B-A3B (MoE)</b> quantized in <code>Q4_K_M</code> (mixed 4-bit/6-bit block scaling). Hexagon NPU natively requires uniform INT8 or symmetric INT4 tensors. Adreno 840 OpenCL runs custom GGML JIT assembly kernels (<code>gemm_moe_q4_k_*</code>) directly on GGUF files without destructive format conversions.</p>
+  </div>
+
+  <div class="card" style="border-left: 3px solid var(--gpu);">
+    <h4>4. The Shared 76.8 GB/s LPDDR5X Roofline Ceiling</h4>
+    <p>During token generation (decode), arithmetic intensity is $\approx 0.5$ FLOP/Byte. Compute is idle waiting for DRAM. Because the Hexagon NPU shares the exact same physical LPDDR5X bus (76.8 GB/s peak) as the CPU and GPU, <b>NPU compute TOPS do not increase memory bandwidth</b>. Extra TOPS cannot read 18.56 GB of weights any faster than 76.8 GB/s.</p>
+  </div>
+</div>
+
+<div class="callout">
+  <div class="callout-title">Qualcomm GenieX & The Roadmap Path</div>
+  Qualcomm's official GenieX runtime (<code>com.qualcomm.qti:geniex-android</code>) supports NPU execution for <b>single-device standalone execution</b>, but provides zero multi-device network layer-splitting (<code>--rpc</code>) capability. Thus, the Hexagon NPU is targeted for <b>Tier-S whole-model-alone execution</b> and static speculative draft verification, while distributed layer-pipelining is powered by Adreno OpenCL and Kryo CPU.
+</div>
+
 </div>
 </body>
 </html>
