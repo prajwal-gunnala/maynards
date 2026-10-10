@@ -312,6 +312,10 @@
           <div class="cb" id="ov-models"></div>
         </div>
       </div>
+      <div class="card" style="margin-top:14px">
+        <div class="ch"><svg class="i"><use href="#i-clock"/></svg><h3>Background Job Queue</h3><span class="d">asynchronous job execution &amp; dual-mode near/far scheduling</span></div>
+        <div class="cb" id="ov-jobs"></div>
+      </div>
     </section>
 
     <!-- ============================================================= DEVICES -->
@@ -568,6 +572,7 @@ function normalise(s) {
   s.laptop.specs = s.laptop.specs || {};
   s.caps = s.caps || {};
   s.meter = s.meter || { devices: [], total_residency_hours: 0, total_tokens_served: 0, total_earnings_usd: 0, total_cloud_equiv_usd: 0, savings_pct: 92.8 };
+  s.jobs = Array.isArray(s.jobs) ? s.jobs : [];
   return s;
 }
 async function pollUsb() {
@@ -634,8 +639,9 @@ function renderOverview() {
   // devices: the code to scan, then who has joined
   const peers = S.peers.map(p => {
     const quiet = num(p.quiet_s, 0) >= 10;
+    const modeTag = p.mode ? `<span class="tag ${p.mode === 'near' ? 'ok' : 'warn'}" style="font-size:10px">${p.mode}</span>` : '';
     return `<div class="row between" style="padding:7px 0; border-top:1px solid var(--line-soft)">
-      <span class="row" style="gap:8px">${ic('phone')}<b style="font-weight:500">${esc(p.name || p.id)}</b></span>
+      <span class="row" style="gap:8px">${ic('phone')}<b style="font-weight:500">${esc(p.name || p.id)}</b> ${modeTag}</span>
       <span class="mono quiet" style="font-size:11.5px">${quiet ? `quiet ${num(p.quiet_s)} s` :
         (p.rtt_ms != null ? num(p.rtt_ms).toFixed(1) + ' ms' : 'joining…')}${layersOf(p.id) ? ' · ' + layersOf(p.id) : ''} · ${gb(p.usable_gb)} GB</span></div>`;
   }).join('');
@@ -659,6 +665,45 @@ function renderOverview() {
   }).join('') : `<div class="empty"><h4>No models here</h4><p>Put a <code>.gguf</code> file in the laptop's model folder.</p></div>`;
   document.querySelectorAll('#ov-models [data-pick]').forEach(b => b.onclick = () => { chosen = b.dataset.pick; go('run'); });
   const st = $('ov-stop'); if (st) st.onclick = () => act(post('/api/stop'), 'stopping');
+
+  const jobs = S.jobs || [];
+  const jobRows = jobs.length ? `
+    <table><thead><tr><th>ID</th><th>Prompt</th><th>Mode</th><th>Status</th><th>Progress</th><th>Result</th></tr></thead><tbody>${
+      jobs.map(j => {
+        const cls = j.status === 'completed' ? 'ok' : j.status === 'running' ? 'helper' : j.status === 'failed' ? 'bad' : 'warn';
+        return `<tr><td class="mono" style="font-size:11px">${esc(j.id)}</td>
+          <td>${esc(String(j.prompt || '').slice(0, 40))}</td>
+          <td><span class="tag ${j.mode === 'near' ? 'ok' : 'warn'}">${esc(j.mode)}</span></td>
+          <td><span class="tag ${cls}">${esc(j.status)}</span></td>
+          <td class="num">${j.tokens_done ? num(j.tokens_done) + ' tok' : '–'}${j.tps ? ' · ' + num(j.tps).toFixed(1) + ' t/s' : ''}</td>
+          <td class="mono quiet" style="font-size:11.5px">${esc(String(j.result || j.error || '–').slice(0, 60))}</td></tr>`;
+      }).join('')
+    }</tbody></table>` : `<div class="quiet mono" style="font-size:12px; padding:6px 0">No background jobs queued. Submit a prompt below to run in background.</div>`;
+
+  if ($('ov-jobs')) {
+    $('ov-jobs').innerHTML = `
+      ${jobRows}
+      <div class="row" style="margin-top:12px; gap:8px">
+        <input type="text" id="job-input" placeholder="Submit background prompt (e.g. summarize codebase or analyze trace)..." style="flex:1">
+        <button class="primary sm" id="job-submit">${ic('play')}Queue Job</button>
+      </div>`;
+    const btn = $('job-submit');
+    const inp = $('job-input');
+    if (btn && inp) {
+      btn.onclick = () => {
+        if (inp.value && inp.value.trim()) {
+          post('/api/jobs', { prompt: inp.value.trim() }).then(poll);
+          inp.value = '';
+        }
+      };
+      inp.onkeydown = e => {
+        if (e.key === 'Enter' && inp.value && inp.value.trim()) {
+          post('/api/jobs', { prompt: inp.value.trim() }).then(poll);
+          inp.value = '';
+        }
+      };
+    }
+  }
   wireGo();
 }
 function runSummary() {

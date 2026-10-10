@@ -64,6 +64,7 @@ pub struct Hub {
     agent_token: String,    // the agent service (desktop/service.py) only answers calls that carry this
     in_flight: Mutex<Option<(String, Vec<String>, Vec<u8>)>>, // held request for supervisor replay
     meter: Mutex<MeterLedger>,
+    jobs: Mutex<VecDeque<Job>>,
 }
 
 pub const PHONE_RAM_USD_PER_GB_MONTH: f64 = 0.168;
@@ -226,6 +227,193 @@ fn meter_summary(hub: &Hub) -> Value {
             "tokens_per_million": 0.10
         }
     })
+}
+
+#[derive(Clone, Default)]
+pub struct Job {
+    pub id: String,
+    pub prompt: String,
+    pub model: String,
+    pub created_at: String,
+    pub status: String, // "queued" | "running" | "completed" | "failed"
+    pub tokens_done: u64,
+    pub tps: f64,
+    pub result: String,
+    pub error: Option<String>,
+    pub mode: String, // "near" or "far"
+}
+
+impl Job {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "prompt": self.prompt,
+            "model": self.model,
+            "created_at": self.created_at,
+            "status": self.status,
+            "tokens_done": self.tokens_done,
+            "tps": self.tps,
+            "result": self.result,
+            "error": self.error,
+            "mode": self.mode,
+        })
+    }
+
+    pub fn from_json(v: &Value) -> Option<Job> {
+        Some(Job {
+            id: v["id"].as_str()?.to_string(),
+            prompt: v["prompt"].as_str().unwrap_or("").to_string(),
+            model: v["model"].as_str().unwrap_or("").to_string(),
+            created_at: v["created_at"].as_str().unwrap_or("").to_string(),
+            status: v["status"].as_str().unwrap_or("queued").to_string(),
+            tokens_done: v["tokens_done"].as_u64().unwrap_or(0),
+            tps: v["tps"].as_f64().unwrap_or(0.0),
+            result: v["result"].as_str().unwrap_or("").to_string(),
+            error: v["error"].as_str().map(String::from),
+            mode: v["mode"].as_str().unwrap_or("near").to_string(),
+        })
+    }
+}
+
+fn load_jobs() -> VecDeque<Job> {
+    let p = config().join("jobs.jsonl");
+    let mut jobs = VecDeque::new();
+    if let Ok(content) = fs::read_to_string(p) {
+        for line in content.lines() {
+            if let Ok(v) = serde_json::from_str::<Value>(line) {
+                if let Some(j) = Job::from_json(&v) {
+                    jobs.push_back(j);
+                }
+            }
+        }
+    }
+    while jobs.len() > 50 { jobs.pop_front(); }
+    jobs
+}
+
+fn save_jobs(jobs: &VecDeque<Job>) {
+    if let Ok(mut f) = fs::File::create(config().join("jobs.jsonl")) {
+        for j in jobs {
+            let _ = writeln!(f, "{}", j.to_json());
+        }
+    }
+}
+
+/// Dual-mode scheduling decision:
+/// "near": Low-latency link (USB cable or RTT <= 12ms) -> layer-split pipeline is optimal.
+/// "far": High-latency link (WAN / relay or RTT > 12ms) -> whole-job offload avoids per-token round-trip latency.
+pub fn link_execution_mode(rtt_ms: f64, link_type: &str) -> &'static str {
+    if link_type.contains("cable") || link_type.contains("USB") || (rtt_ms >= 0.0 && rtt_ms <= 12.0) {
+        "near"
+    } else {
+        "far"
+    }
+}
+
+fn job_worker_loop(hub: Arc<Hub>) {
+    loop {
+        thread::sleep(Duration::from_millis(500));
+        let job_opt = {
+            let mut queue = hub.jobs.lock().unwrap();
+            if let Some(j) = queue.iter_mut().find(|j| j.status == "queued") {
+                let ready = hub.run.lock().unwrap().status == "ready";
+                if !ready {
+                    continue;
+                }
+                j.status = "running".into();
+                let job_clone = j.clone();
+                save_jobs(&queue);
+                Some(job_clone)
+            } else {
+                None
+            }
+        };
+
+        let Some(job) = job_opt else { continue };
+
+        hub.say(format!("⚙ Job {}: starting background task '{}'", job.id, job.prompt.chars().take(40).collect::<String>()));
+
+        let target = format!("127.0.0.1:{ENGINE_PORT}");
+        let req_body = json!({
+            "model": job.model,
+            "messages": [{"role": "user", "content": job.prompt}],
+            "stream": true
+        }).to_string();
+
+        let t0 = Instant::now();
+        let mut tokens = 0u64;
+        let mut answer = String::new();
+        let mut err_msg = None;
+
+        match TcpStream::connect(&target) {
+            Ok(mut up) => {
+                let _ = up.set_read_timeout(Some(Duration::from_secs(300)));
+                let head = format!("POST /v1/chat/completions HTTP/1.1\r\nHost: {target}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", req_body.len());
+                if up.write_all(head.as_bytes()).is_ok() && up.write_all(req_body.as_bytes()).is_ok() {
+                    let mut ur = BufReader::new(up);
+                    let mut line = String::new();
+                    loop {
+                        line.clear();
+                        match ur.read_line(&mut line) {
+                            Ok(0) => break,
+                            Ok(_) => {
+                                if let Some(d) = line.trim().strip_prefix("data: ") {
+                                    if let Ok(j) = serde_json::from_str::<Value>(d) {
+                                        if let Some(t) = j["choices"][0]["delta"]["content"].as_str() {
+                                            answer.push_str(t);
+                                            tokens += 1;
+                                            let elapsed = t0.elapsed().as_secs_f64();
+                                            let cur_tps = if elapsed > 0.0 { tokens as f64 / elapsed } else { 0.0 };
+
+                                            if tokens % 5 == 0 {
+                                                let mut queue = hub.jobs.lock().unwrap();
+                                                if let Some(j) = queue.iter_mut().find(|j| j.id == job.id) {
+                                                    j.tokens_done = tokens;
+                                                    j.tps = cur_tps;
+                                                    j.result = answer.clone();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                err_msg = Some(format!("read error: {e}"));
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    err_msg = Some("failed to send request to engine".into());
+                }
+            }
+            Err(e) => {
+                err_msg = Some(format!("cannot connect to engine: {e}"));
+            }
+        }
+
+        let elapsed = t0.elapsed().as_secs_f64();
+        let final_tps = if elapsed > 0.0 { tokens as f64 / elapsed } else { 0.0 };
+
+        {
+            let mut queue = hub.jobs.lock().unwrap();
+            if let Some(j) = queue.iter_mut().find(|j| j.id == job.id) {
+                if let Some(e) = err_msg {
+                    j.status = "failed".into();
+                    j.error = Some(e.clone());
+                    hub.say(format!("✗ Job {}: failed ({e})", job.id));
+                } else {
+                    j.status = "completed".into();
+                    j.tokens_done = tokens;
+                    j.tps = final_tps;
+                    j.result = answer;
+                    hub.say(format!("✓ Job {}: completed ({} tokens in {:.1}s, {:.1} tok/s)", job.id, tokens, elapsed, final_tps));
+                    record_tokens(&hub, tokens);
+                }
+            }
+            save_jobs(&queue);
+        }
+    }
 }
 
 fn config() -> std::path::PathBuf {
@@ -1384,12 +1572,14 @@ pub fn host(port: u16) -> Result<(), String> {
         chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
         api_port: port, agent_token: random_hex(16), in_flight: Default::default(),
         meter: Mutex::new(load_meter()),
+        jobs: Mutex::new(load_jobs()),
     });
     { let h = hub.clone(); thread::spawn(move || agent_service(&h)); }
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
     { let h = hub.clone(); thread::spawn(move || loop { tell_phones(&h); thread::sleep(Duration::from_secs(2)); }); }
     { let h = hub.clone(); thread::spawn(move || loop { thread::sleep(Duration::from_secs(2)); tick_meter(&h, 2); }); }
+    { let h = hub.clone(); thread::spawn(move || job_worker_loop(h)); }
     { let h = hub.clone(); thread::spawn(move || { let mut complete = false; loop { autostart_pinned(&h, &mut complete); thread::sleep(Duration::from_secs(3)); } }); }
     { let h = hub.clone(); thread::spawn(move || { let mut said = std::collections::HashSet::new(); loop { keep_wifi_default(&h, &mut said); thread::sleep(Duration::from_secs(5)); } }); }
     // all addresses: the page and API for this laptop; other machines on the link may use /v1 with the key
@@ -1407,9 +1597,11 @@ fn state(hub: &Hub) -> Value {
     let peers: Vec<Value> = hub.peers.lock().unwrap().iter().map(|(id, p)| {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mid_rtt = r.get(r.len() / 2).copied().unwrap_or(0.0);
+        let mode = link_execution_mode(mid_rtt, p.link);
         json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine, "store": p.store,
                "quiet_s": p.seen.elapsed().as_secs(),
-               "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last(), "link": p.link})
+               "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last(), "link": p.link, "mode": mode})
     }).collect();
     let devs = devices(hub);
     let models: Vec<Value> = scan_models(hub).iter().map(|m| {
@@ -1449,6 +1641,7 @@ fn state(hub: &Hub) -> Value {
         "caps": caps,
         "api": {"key": hub.api_key, "urls": laptop_ips().iter().map(|(ip, _)| format!("http://{ip}:{}/v1", hub.api_port)).collect::<Vec<_>>()},
         "meter": meter_summary(hub),
+        "jobs": hub.jobs.lock().unwrap().iter().rev().take(10).map(|j| j.to_json()).collect::<Vec<_>>(),
         // can the running model read a photo? Only with a projector (mmproj) next to it; the chat hides the photo button otherwise
         "run": {"status": run.status, "step": run.step, "model": run.model, "plan": run.plan,
                 "vision": scan_models(hub).iter().any(|m| m.name == run.model && m.proj.is_some()),
@@ -1530,6 +1723,64 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
         "/" | "/index.html" => crate::reply(&mut s, "text/html; charset=utf-8", HOST_PAGE.as_bytes()),
         "/api/state" => ok(&mut s, state(&hub)),
         "/api/meter" => ok(&mut s, meter_summary(&hub)),
+        "/api/jobs" => {
+            if req.is_object() && req.get("prompt").is_some() {
+                let prompt = req["prompt"].as_str().unwrap_or("").to_string();
+                let running_model = hub.run.lock().unwrap().model.clone();
+                let model = req["model"].as_str().unwrap_or(&running_model).to_string();
+                let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+                let id = format!("job-{:x}-{}", now & 0xffffff, random_hex(4));
+
+                let mode = {
+                    let peers = hub.peers.lock().unwrap();
+                    if peers.values().any(|p| p.link == "relay" || p.rtts.back().copied().unwrap_or(0.0) > 12.0) {
+                        "far"
+                    } else {
+                        "near"
+                    }
+                };
+
+                let job = Job {
+                    id: id.clone(),
+                    prompt,
+                    model,
+                    created_at: chrono_like(),
+                    status: "queued".into(),
+                    tokens_done: 0,
+                    tps: 0.0,
+                    result: String::new(),
+                    error: None,
+                    mode: mode.to_string(),
+                };
+
+                {
+                    let mut q = hub.jobs.lock().unwrap();
+                    q.push_back(job.clone());
+                    while q.len() > 50 { q.pop_front(); }
+                    save_jobs(&q);
+                }
+                hub.say(format!("+ Job {id}: enqueued in {mode} mode"));
+                ok(&mut s, json!({"ok": true, "job": job.to_json()}))
+            } else {
+                let list: Vec<Value> = hub.jobs.lock().unwrap().iter().map(|j| j.to_json()).collect();
+                ok(&mut s, json!({"ok": true, "jobs": list}))
+            }
+        }
+        "/api/jobs/cancel" => {
+            let id = req["id"].as_str().unwrap_or("");
+            let mut q = hub.jobs.lock().unwrap();
+            let mut cancelled = false;
+            for j in q.iter_mut() {
+                if j.id == id && (j.status == "queued" || j.status == "running") {
+                    j.status = "failed".into();
+                    j.error = Some("cancelled by user".into());
+                    cancelled = true;
+                    break;
+                }
+            }
+            if cancelled { save_jobs(&q); }
+            ok(&mut s, json!({"ok": cancelled}))
+        }
         "/api/run" => { start(hub.clone(), req["model"].as_str().unwrap_or("").into()); ok(&mut s, json!({"ok": true})) }
         "/api/stop" => { stop(&hub, "stopped"); ok(&mut s, json!({"ok": true})) }
         // pin: the split running now (or, if that model is not running, the plan it would get now), kept for good
