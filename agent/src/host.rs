@@ -100,8 +100,13 @@ impl Hub {
         let cable = |i: &str| i.starts_with("enx") || i.starts_with("usb") || i.starts_with("rndis");
         let mut hosts: Vec<&String> = ips.iter().filter(|(_, i)| cable(i)).map(|(ip, _)| ip).collect();
         hosts.extend(ips.iter().filter(|(_, i)| !cable(i)).map(|(ip, _)| ip));
-        json!({"mesh": self.mesh, "hosts": hosts,
-               "port": CONTROL_PORT, "token": *self.token.lock().unwrap()})
+        let relay = std::env::var("MESH_RELAY").ok().filter(|s| !s.trim().is_empty());
+        let mut inv = json!({"mesh": self.mesh, "hosts": hosts,
+               "port": CONTROL_PORT, "token": *self.token.lock().unwrap()});
+        if let Some(r) = relay {
+            inv["relay"] = json!(r.trim());
+        }
+        inv
     }
 }
 
@@ -383,8 +388,9 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let host = &devs[0];
     let biggest = m.layers.iter().copied().max().unwrap_or(0) as f64 + kv_layer;
     let mut skipped = serde_json::Map::new();
+    let max_rtt = std::env::var("MESH_MAX_RTT").ok().and_then(|v| v.parse().ok()).unwrap_or(120.0);
     let mut helpers: Vec<&Dev> = devs[1..].iter().filter(|d| {
-        let why = if d.rtt > 60.0 { Some(format!("link too slow ({:.0} ms)", d.rtt)) }
+        let why = if d.rtt > max_rtt { Some(format!("link too slow ({:.0} ms > {:.0} ms ceiling)", d.rtt, max_rtt)) }
             else if !d.charging && d.battery >= 0 && d.battery < 20 { Some(format!("battery {}%", d.battery)) }
             else if d.usable - HELPER_RESERVE < biggest { Some("too little memory".into()) }
             else { None };
@@ -509,7 +515,60 @@ fn devices(hub: &Hub) -> Vec<Dev> {
 
 // ---------------------------------------------------------------- control link: phones join here
 
+fn listen_relay(hub: Arc<Hub>, relay_addr: String) {
+    thread::spawn(move || {
+        loop {
+            let token = hub.token.lock().unwrap().clone();
+            let sock = match TcpStream::connect(&relay_addr) {
+                Ok(s) => s,
+                Err(_) => {
+                    thread::sleep(Duration::from_secs(5));
+                    continue;
+                }
+            };
+            let reg = json!({
+                "t": "register",
+                "role": "host",
+                "mesh": hub.mesh,
+                "token": token,
+                "channel": "control"
+            });
+            let mut writer = match sock.try_clone() {
+                Ok(w) => w,
+                Err(_) => continue,
+            };
+            if writeln!(writer, "{reg}").is_err() || writer.flush().is_err() {
+                continue;
+            }
+            let mut reader = BufReader::new(match sock.try_clone() {
+                Ok(r) => r,
+                Err(_) => continue,
+            });
+            let mut line = String::new();
+            if reader.read_line(&mut line).is_err() {
+                continue;
+            }
+            let resp: Value = serde_json::from_str(&line).unwrap_or(Value::Null);
+            if resp["t"] == "spliced" {
+                hub.say(format!("✓ Remote peer spliced via relay {relay_addr}"));
+                let hub_clone = hub.clone();
+                thread::spawn(move || {
+                    let _ = serve_phone(sock, hub_clone);
+                });
+            }
+            thread::sleep(Duration::from_millis(500));
+        }
+    });
+}
+
 fn serve_control(hub: Arc<Hub>) {
+    if let Ok(relay) = std::env::var("MESH_RELAY") {
+        let r = relay.trim();
+        if !r.is_empty() {
+            hub.say(format!("registering with remote relay at {r}"));
+            listen_relay(hub.clone(), r.to_string());
+        }
+    }
     let l = match TcpListener::bind(("0.0.0.0", CONTROL_PORT)) { Ok(l) => l, Err(e) => { hub.say(format!("cannot listen on {CONTROL_PORT}: {e}")); return; } };
     for s in l.incoming().flatten() {
         let hub = hub.clone();

@@ -160,15 +160,45 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     /**
      * The first address is the preferred link (the Host lists its USB cable first). Try it for a few seconds
      * before falling back, so a Host that is just restarting does not push us onto slow Wi-Fi.
+     * If direct connections fail and a relay is specified, connects through the transparent relay.
      */
     private fun connectAny(invite: Invite): Socket? {
-        val first = invite.hosts.firstOrNull() ?: return null
-        repeat(5) {
-            runCatching { Socket().apply { connect(InetSocketAddress(first, invite.port), 2_000) } }.getOrNull()?.let { return it }
-            Thread.sleep(1_000)
+        val first = invite.hosts.firstOrNull()
+        if (first != null) {
+            repeat(3) {
+                runCatching { Socket().apply { connect(InetSocketAddress(first, invite.port), 2_000) } }.getOrNull()?.let { return it }
+                Thread.sleep(500)
+            }
         }
-        return invite.hosts.drop(1).firstNotNullOfOrNull { ip ->
-            runCatching { Socket().apply { connect(InetSocketAddress(ip, invite.port), 4_000) } }.getOrNull()
+        val direct = invite.hosts.drop(1).firstNotNullOfOrNull { ip ->
+            runCatching { Socket().apply { connect(InetSocketAddress(ip, invite.port), 3_000) } }.getOrNull()
         }
+        if (direct != null) return direct
+
+        // Fallback: connect via transparent relay
+        val relay = invite.relay
+        if (!relay.isNullOrBlank()) {
+            val rHost = relay.substringBeforeLast(':')
+            val rPort = relay.substringAfterLast(':').toIntOrNull() ?: 7071
+            val s = runCatching { Socket().apply { connect(InetSocketAddress(rHost, rPort), 5_000) } }.getOrNull()
+            if (s != null) {
+                val ok = runCatching {
+                    val reg = org.json.JSONObject().apply {
+                        put("t", "register")
+                        put("role", "helper")
+                        put("mesh", invite.mesh)
+                        put("token", invite.token)
+                        put("channel", "control")
+                    }
+                    s.getOutputStream().write((reg.toString() + "\n").toByteArray())
+                    s.getOutputStream().flush()
+                    val line = s.getInputStream().bufferedReader().readLine()
+                    val resp = org.json.JSONObject(line ?: "{}")
+                    resp.optString("t") == "spliced"
+                }.getOrDefault(false)
+                if (ok) return s else runCatching { s.close() }
+            }
+        }
+        return null
     }
 }

@@ -53,16 +53,18 @@ object Secrets {
 }
 
 /** What the QR code carries: where the Host is, and a one-time token to join. */
-data class Invite(val mesh: String, val hosts: List<String>, val port: Int, val token: String) {
+data class Invite(val mesh: String, val hosts: List<String>, val port: Int, val token: String, val relay: String? = null) {
     fun toJson(): String = JSONObject()
         .put("mesh", mesh).put("hosts", org.json.JSONArray(hosts)).put("port", port).put("token", token)
+        .apply { if (!relay.isNullOrBlank()) put("relay", relay) }
         .toString()
 
     companion object {
         fun parse(text: String): Invite? = runCatching {
             val j = JSONObject(text.trim())
             val hosts = j.getJSONArray("hosts").let { a -> List(a.length()) { a.getString(it) } }
-            Invite(j.getString("mesh"), hosts, j.optInt("port", CONTROL_PORT), j.getString("token"))
+            val relay = j.optString("relay").takeIf { it.isNotBlank() }
+            Invite(j.getString("mesh"), hosts, j.optInt("port", CONTROL_PORT), j.getString("token"), relay)
         }.getOrNull()
     }
 }

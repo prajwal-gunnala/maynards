@@ -61,3 +61,27 @@ Ensure the APK builds cleanly with the updated `Capsule.kt`, `Engine.kt`, and `M
    - Capsule ID and Task badge appear.
    - Active Backend (`opencl` or `cpu`) and Thread count match the capsule.
    - Evidence chip displays `✓ Gate: 14/15 · Runs: [412,418,431]`.
+
+---
+
+## 3. Remote Relay Testing & Deployment (Part 2)
+
+### Automated Relay Wire Test (Local)
+To verify relay matching, handshake slicing, and bidirectional piping:
+```bash
+python3 scripts/test_relay_wire.py
+```
+
+### Running the Public / VPS Relay
+To enable remote devices over mobile data (behind NAT) to join:
+1. Start the relay on a public VPS or test machine:
+   ```bash
+   python3 scripts/relay.py --port 7071 --bind 0.0.0.0
+   ```
+2. Launch `mesh host` with `MESH_RELAY`:
+   ```bash
+   MESH_RELAY="your-vps.com:7071" cargo run --bin mesh -- host
+   ```
+   The generated QR code and invite payload will include `"relay": "your-vps.com:7071"`.
+3. If the phone is not on the same LAN / cable, `MeshClient.kt` automatically dials the relay, negotiates the matching token, and splices the connection transparently.
+
