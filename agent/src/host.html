@@ -137,6 +137,15 @@
   .empty p { margin:0 auto; max-width:48ch; font-size:13px; }
 
   .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:12.5px; }
+  /* a device drawn as itself: the specs live inside the outline */
+  .frame { position:relative; margin:0 auto 18px; background:var(--card); border:2px solid var(--fg-3); }
+  .frame.phone { width:min(100%, 320px); border-radius:34px; padding:38px 18px 34px; }
+  .frame.phone:before { content:""; position:absolute; top:12px; left:50%; transform:translateX(-50%); width:72px; height:8px; border-radius:4px; background:var(--fg-3); }
+  .frame.phone:after { content:""; position:absolute; bottom:11px; left:50%; transform:translateX(-50%); width:96px; height:4px; border-radius:2px; background:var(--fg-3); }
+  .frame.laptop { width:min(100%, 440px); border-radius:14px 14px 3px 3px; padding:22px 20px 18px; }
+  .frame.laptop:before { content:""; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:7px; height:7px; border-radius:50%; background:var(--fg-3); }
+  .frame.laptop:after { content:""; position:absolute; left:-7%; right:-7%; bottom:-14px; height:11px; border-radius:0 0 10px 10px; background:var(--fg-3); }
+  .frame .ch { padding:0 0 10px; border:0; } .frame .cb { padding:0; }
   .kv .k { color:var(--fg-3); } .kv .v { font-family:var(--mono); }
 
   pre { background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:11px 13px; overflow-x:auto;
@@ -281,21 +290,21 @@
     <!-- ============================================================ OVERVIEW -->
     <section class="page" data-p="overview">
       <div class="head">
-        <div><h1>Overview</h1><p id="ov-sub">The health of the mesh, and what it is doing right now.</p></div>
+        <div><h1>MeshAI</h1><p id="ov-sub">Connect your devices, pick a model.</p></div>
         <div class="act" id="ov-act"></div>
       </div>
       <div id="ov-advice"></div>
-      <div class="grid g3" id="ov-stats"></div>
-      <div class="sec">Running</div>
       <div class="card"><div class="cb" id="ov-run"></div></div>
       <div class="grid g2" style="margin-top:14px">
         <div class="card">
-          <div class="ch"><svg class="i"><use href="#i-hub"/></svg><h3>The mesh</h3><span class="d">who holds what</span></div>
-          <div class="cb" id="ov-web"></div>
+          <div class="ch"><svg class="i"><use href="#i-hub"/></svg><h3>Devices</h3><span class="d">scan to join</span>
+            <span class="sp"></span><button class="sm ghost" data-go2="devices">details</button></div>
+          <div class="cb" id="ov-devices"></div>
         </div>
         <div class="card">
-          <div class="ch"><svg class="i"><use href="#i-clock"/></svg><h3>Recent answers</h3><span class="d">asked for by other tools</span></div>
-          <div class="cb" id="ov-live"></div>
+          <div class="ch"><svg class="i"><use href="#i-box"/></svg><h3>Models</h3><span class="d">pick one to run</span>
+            <span class="sp"></span><button class="sm ghost" data-go2="models">details</button></div>
+          <div class="cb" id="ov-models"></div>
         </div>
       </div>
     </section>
@@ -600,32 +609,45 @@ const statTile = (icon, k, v, sub) =>
   `<div class="stat"><div class="k">${ic(icon)}${esc(k)}</div><div class="v">${esc(v)}${sub ? ` <small>${esc(sub)}</small>` : ''}</div></div>`;
 
 function renderOverview() {
-  const r = S.run, n = 1 + S.peers.length, slices = r.plan.slices || [];
+  const r = S.run, n = 1 + S.peers.length;
   $('ov-sub').textContent = r.status === 'ready'
-    ? `${r.model} is answering across ${slices.length || 1} device${slices.length === 1 ? '' : 's'}.`
+    ? `${r.model} is answering across ${(r.plan.slices || []).length || 1} device${(r.plan.slices || []).length === 1 ? '' : 's'}.`
     : n > 1 ? 'The devices are joined. Pick a model to run across them.'
-            : 'No other device has joined yet. Add one from Devices.';
+            : 'Scan the code with a phone to join it.';
   $('ov-act').innerHTML = r.status === 'ready'
-    ? `<button data-go2="chat">${ic('chat')}Ask it something</button>`
-    : `<button class="primary" data-go2="${n > 1 ? 'models' : 'devices'}">${n > 1 ? 'Pick a model' : 'Add a device'}</button>`;
-  $('ov-stats').innerHTML =
-    statTile('hub', 'Devices', n, n > 1 ? 'in the mesh' : 'just this laptop') +
-    statTile('chip', 'Pooled memory', gb(S.pool_gb), 'GB for models') +
-    statTile('gauge', 'Speed', S.stats.answers ? num(S.stats.avg_tps).toFixed(1) : '–',
-             S.stats.answers ? `avg · ${num(S.stats.best_tps).toFixed(1)} best` : 'no answers yet') +
-    statTile('chat', 'Answers', S.stats.answers, `${num(S.stats.tokens)} tokens`) +
-    statTile('link', 'Internet', S.online === false ? 'OFFLINE' : 'on', S.online === false ? 'nothing leaves your devices' : '') +
-    statTile('box', 'Models here', S.models.length, 'on this laptop');
+    ? `<button data-go2="chat">${ic('chat')}Chat</button><button class="ghost" data-go2="agent">${ic('hash')}Agent</button>`
+    : '';
   $('ov-advice').innerHTML = S.advice.map(a =>
     `<div class="card" style="border-color:#3a3320; margin-bottom:10px"><div class="cb tight row" style="color:var(--warn)">${ic('warn')}<span>${esc(a)}</span></div></div>`).join('');
   $('ov-run').innerHTML = runSummary();
-  $('ov-web').innerHTML = web();
-  const live = S.chats.filter(c => c.from === 'api').slice(-4).reverse();
-  $('ov-live').innerHTML = live.length ? live.map(c => `
-    <div style="padding:9px 0; border-bottom:1px solid var(--line-soft)">
-      <div class="mono" style="font-size:12px; color:var(--fg-2)">${esc(String(c.q || '').slice(0, 90))}</div>
-      <div class="chips">${c.done ? chipRow(c) : '<span>answering…</span>'}</div></div>`).join('')
-    : `<div class="empty"><h4>Nothing yet</h4><p>Answers asked for by other tools on <code>/v1</code> show up here.</p></div>`;
+  // devices: the code to scan, then who has joined
+  const peers = S.peers.map(p => {
+    const quiet = num(p.quiet_s, 0) >= 10;
+    return `<div class="row between" style="padding:7px 0; border-top:1px solid var(--line-soft)">
+      <span class="row" style="gap:8px">${ic('phone')}<b style="font-weight:500">${esc(p.name || p.id)}</b></span>
+      <span class="mono quiet" style="font-size:11.5px">${quiet ? `quiet ${num(p.quiet_s)} s` :
+        (p.rtt_ms != null ? num(p.rtt_ms).toFixed(1) + ' ms' : 'joining…')}${layersOf(p.id) ? ' · ' + layersOf(p.id) : ''} · ${gb(p.usable_gb)} GB</span></div>`;
+  }).join('');
+  $('ov-devices').innerHTML = `<div class="row wrap" style="align-items:flex-start; gap:16px">
+      <div class="qr" id="ov-qr">${S.qr || ''}</div>
+      <div style="flex:1; min-width:160px; font-size:13px">
+        <div class="muted">Plug the phone in, turn on <b>USB tethering</b>, open <b>MeshAI → Helper</b>, scan.</div>
+        <div class="quiet mono" style="margin-top:8px; font-size:11.5px">${S.invite.hosts.length ? 'reachable at ' + S.invite.hosts.join(' · ') : 'no address yet'}</div>
+      </div></div>
+    <div style="margin-top:12px">
+      <div class="row between" style="padding:7px 0"><span class="row" style="gap:8px">${ic('laptop')}<b style="font-weight:500">${esc(S.laptop.specs.name || 'This laptop')}</b></span>
+        <span class="mono quiet" style="font-size:11.5px">host${layersOf('laptop') ? ' · ' + layersOf('laptop') : ''} · ${gb(S.laptop.usable_gb)} GB</span></div>${peers}</div>`;
+  // models: one row each, with its verdict and a button
+  $('ov-models').innerHTML = S.models.length ? S.models.map(m => {
+    const p = m.plan || {}, [lab, cls, icon] = look(p.verdict), can = p.verdict !== 'not_possible', on = r.status !== 'idle' && r.model === m.name;
+    return `<div class="row between wrap" style="padding:9px 0; border-top:1px solid var(--line-soft); gap:8px">
+      <div style="min-width:0"><div style="font-weight:500">${esc(m.name)}</div>
+        <div class="d mono" style="font-size:11.5px">${gb(m.gb)} GB · ${m.layers} layers · ${esc(p.reason || '')}</div></div>
+      <span class="row" style="gap:8px"><span class="tag ${cls}">${ic(icon)}${lab}</span>
+        ${on ? `<button class="sm ghost danger" id="ov-stop">Stop</button>` : can ? `<button class="primary sm" data-pick="${esc(m.file)}">${ic('play')}Run</button>` : ''}</span></div>`;
+  }).join('') : `<div class="empty"><h4>No models here</h4><p>Put a <code>.gguf</code> file in the laptop's model folder.</p></div>`;
+  document.querySelectorAll('#ov-models [data-pick]').forEach(b => b.onclick = () => { chosen = b.dataset.pick; go('run'); });
+  const st = $('ov-stop'); if (st) st.onclick = () => act(post('/api/stop'), 'stopping');
   wireGo();
 }
 function runSummary() {
@@ -697,8 +719,8 @@ function card(o) {
   const st = o.store && o.store.total ? o.store : null;
   // a phone reports every two seconds; past ten it has gone quiet and these numbers are history
   const quiet = !o.laptop && num(o.quiet_s, 0) >= 10;
-  return `<div class="card" ${quiet ? 'style="border-color:#3a2222"' : ''}>
-    <div class="ch">${ic(o.laptop ? 'laptop' : 'phone', 'lg')}
+  return `<div class="frame ${o.laptop ? 'laptop' : 'phone'}" ${quiet ? 'style="border-color:#7a3a3a"' : ''}>
+    <div class="ch">
       <div style="min-width:0"><h3>${esc(o.name)}</h3>
         <div class="d mono" style="overflow:hidden; text-overflow:ellipsis">${esc(s.chip || '')}${s.cores ? ' · ' + s.cores + ' cores' : ''}</div></div>
       <span class="sp"></span><span class="tag ${quiet ? 'bad' : o.laptop ? 'ok' : 'helper'}">${
