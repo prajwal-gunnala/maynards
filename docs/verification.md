@@ -85,3 +85,34 @@ To enable remote devices over mobile data (behind NAT) to join:
    The generated QR code and invite payload will include `"relay": "your-vps.com:7071"`.
 3. If the phone is not on the same LAN / cable, `MeshClient.kt` automatically dials the relay, negotiates the matching token, and splices the connection transparently.
 
+---
+
+## 4. Supervisor Fault Tolerance & Automatic Re-Plan Recovery (Part 3)
+
+### Automated Supervisor Wire Test (Local)
+To verify survivor detection, automatic layer re-planning upon node departure, capsule re-emission, and in-flight request buffer recovery:
+```bash
+python3 scripts/test_supervisor_wire.py
+```
+
+### On-Device Hardware Verification: Mid-Run Node Departure
+Follow these steps with multiple phones or simulated workers:
+1. **Initial Cluster Setup:**
+   - Launch Host orchestrator with a model partitioned across 2+ helpers (e.g. Host + Phone A + Phone B).
+   - Initiate a continuous stream or prompt evaluation via `scripts/bench.py` or the `/v1/chat/completions` endpoint.
+2. **Simulate Helper Dropout:**
+   - On Phone A: Toggle Airplane Mode, terminate the app via `adb shell am force-stop ai.maynards.mesh`, or pull the USB cable.
+3. **Observe Host Dashboard & Activity Feed:**
+   - Host detects control loss / engine exit.
+   - Host supervisor inspects surviving devices (`Phone B` + Host).
+   - If survivors have enough capacity:
+     - `⚡ Supervisor: engine stopped. Surviving devices can host <model>. Auto-recovering...`
+     - Automatic re-distribution of layers (e.g. from 3-way split to 2-way split).
+     - New Ned Capsules emitted to survivors with updated layer bounds.
+     - New `llama-server` engine spawned and health-checked.
+     - Replay of any mid-flight user request: `✓ Supervisor: in-flight request recovered and replayed successfully`.
+   - If survivors cannot fit the model:
+     - Graceful failure report with capacity shortage diagnostics instead of an uncaught crash.
+4. **On-Device Android Host Recovery:**
+   - If running an Android phone as Host (`Runner.kt`), a helper `"gone"` event triggers `Planner.plan(model, survivorDevices)` and automatically transitions `Runner` into `STARTING` $\rightarrow$ `READY` across survivors without UI lockup.
+

@@ -35,6 +35,8 @@ class Engine(private val ctx: Context) {
     private val _state = MutableStateFlow(EngineState())
     val state: StateFlow<EngineState> = _state
 
+    fun specs(): Specs = Specs.read(ctx)
+
     // One start or stop at a time. Two overlapping starts used to leave the first child running,
     // holding its port and several GB, and the second could not bind.
     private val gate = Mutex()

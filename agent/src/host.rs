@@ -62,6 +62,7 @@ pub struct Hub {
     last_run: Mutex<Option<String>>,  // model file of the last run that got ready, kept across restarts
     api_port: u16,          // the port this panel serves on, which is what the benchmark asks
     agent_token: String,    // the agent service (desktop/service.py) only answers calls that carry this
+    in_flight: Mutex<Option<(String, Vec<String>, Vec<u8>)>>, // held request for supervisor replay
 }
 
 fn config() -> std::path::PathBuf {
@@ -329,7 +330,7 @@ fn next_capsule_id() -> String {
     format!("cap-{:x}-{:x}", (now & 0xffffff) as u32, count)
 }
 
-fn capsule_for(d_id: &str, d_name: &str, is_host: bool, from: usize, to: usize, m: &Model, task: &str) -> Value {
+fn capsule_for(_d_id: &str, d_name: &str, is_host: bool, from: usize, to: usize, m: &Model, task: &str) -> Value {
     let cid = next_capsule_id();
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let count = to.saturating_sub(from);
@@ -662,7 +663,11 @@ fn lost_layers(hub: &Hub, id: &str, name: &str, m: &Value) {
     let run = hub.run.lock().unwrap().clone();
     let in_plan = run.plan["slices"].as_array().map(|s| s.iter().any(|x| x["id"] == id)).unwrap_or(false);
     if run.status == "ready" && in_plan && engine.is_empty() {
-        stop(hub, &format!("failed: {name} lost its layers (its app restarted) - press Start again"));
+        hub.say(format!("⚡ Supervisor: {name} lost its layers; terminating engine to initiate recovery across survivors"));
+        if let Some(mut c) = hub.engine.lock().unwrap().take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
     }
 }
 
@@ -909,12 +914,46 @@ fn start(hub: Arc<Hub>, file: String) {
         hub.say(format!("✓ {} ready in {secs} s", m.name));
         *hub.last_run.lock().unwrap() = Some(m.file.clone());
         let _ = fs::write(config().join("last-run.json"), json!({"file": m.file, "name": m.name, "at": chrono_like()}).to_string());
+        if let Some((first, headers, body)) = hub.in_flight.lock().unwrap().take() {
+            hub.say("⚡ Supervisor: replaying in-flight request onto reconfigured mesh".into());
+            let h = hub.clone();
+            thread::spawn(move || {
+                let target = format!("127.0.0.1:{ENGINE_PORT}");
+                if let Ok(mut up) = TcpStream::connect(&target) {
+                    let _ = write!(up, "{first}Host: {target}\r\nConnection: close\r\n");
+                    for header in &headers { let _ = up.write_all(header.as_bytes()); }
+                    let _ = up.write_all(b"\r\n");
+                    let _ = up.write_all(&body);
+                    let mut ur = BufReader::new(up);
+                    let mut whole = String::new();
+                    let _ = ur.read_to_string(&mut whole);
+                    h.say("✓ Supervisor: in-flight request recovered and replayed successfully".into());
+                }
+            });
+        }
         // watchdog: report if the engine itself stops (e.g. a phone's layers disappeared)
         loop {
             thread::sleep(Duration::from_secs(2));
             if cancelled() { return; }
             let exited = hub.engine.lock().unwrap().as_mut().map(|c| c.try_wait().ok().flatten().is_some()).unwrap_or(true);
-            if exited { bail("failed: the engine stopped (log: /tmp/mesh-host-engine.log)"); return; }
+            if exited {
+                if cancelled() { return; }
+                let survivors = devices(&hub);
+                let new_plan = plan_for(&m, &survivors, ctx_tokens());
+                if new_plan["verdict"] != "not_possible" {
+                    hub.say(format!("⚡ Supervisor: engine stopped. Surviving devices can host {}. Auto-recovering...", m.name));
+                    let h_clone = hub.clone();
+                    let file_clone = m.file.clone();
+                    thread::spawn(move || {
+                        thread::sleep(Duration::from_millis(500));
+                        start(h_clone, file_clone);
+                    });
+                    return;
+                } else {
+                    bail(&format!("failed: the engine stopped and survivors cannot fit {}: {}", m.name, new_plan["reason"].as_str().unwrap_or("insufficient capacity")));
+                    return;
+                }
+            }
         }
     });
 }
@@ -935,6 +974,7 @@ fn forward_logged(mut s: TcpStream, hub: &Arc<Hub>, first: &str, headers: &[Stri
         while c.len() > 20 { c.pop_front(); }
         c.len() - 1
     };
+    *hub.in_flight.lock().unwrap() = Some((first.to_string(), headers.to_vec(), body.to_vec()));
     let t0 = Instant::now();
     let mut first_ms: Option<u128> = None;
     let mut up = TcpStream::connect(&target)?;
@@ -992,6 +1032,9 @@ fn forward_logged(mut s: TcpStream, hub: &Arc<Hub>, first: &str, headers: &[Stri
         if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(config().join("history.jsonl")) {
             let _ = writeln!(f, "{}", e);
         }
+    }
+    if !answer.is_empty() || !timings.is_null() {
+        *hub.in_flight.lock().unwrap() = None;
     }
     Ok(())
 }
@@ -1172,7 +1215,7 @@ pub fn host(port: u16) -> Result<(), String> {
         engine: Default::default(), usb_ports: Default::default(), models: Default::default(), run_gen: Default::default(),
         benching: Default::default(),
         chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
-        api_port: port, agent_token: random_hex(16),
+        api_port: port, agent_token: random_hex(16), in_flight: Default::default(),
     });
     { let h = hub.clone(); thread::spawn(move || agent_service(&h)); }
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }

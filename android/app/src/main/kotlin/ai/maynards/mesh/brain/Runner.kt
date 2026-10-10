@@ -100,10 +100,28 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             }
             _state.value = RunState(RunState.Status.READY, plan, "Ready", ((System.currentTimeMillis() - t0) / 1000).toInt())
 
-            // 4. a helper leaving mid-run ends the run
+            // 4. a helper leaving mid-run triggers supervisor auto-recovery across surviving peers
             val ids = plan.helpers.map { it.deviceId }.toSet()
-            host.events.filter { (id, m) -> id in ids && m.optString("t") == "gone" }.first()
-            fail("A helper left")
+            val goneEvent = host.events.filter { (id, m) -> id in ids && m.optString("t") == "gone" }.first()
+            val leavingId = goneEvent.first
+            val leavingName = plan.helpers.find { it.deviceId == leavingId }?.name ?: "helper"
+
+            val mySpecs = engine.specs()
+            val survivors = host.peers.value.values.filter { it.id != leavingId }
+            val survivorDevices = listOf(
+                Device(mySpecs.id, "This phone", mySpecs.usableBytes, isHost = true, heat = mySpecs.heat, battery = mySpecs.battery, charging = mySpecs.charging)
+            ) + survivors.map {
+                Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging)
+            }
+            val newPlan = Planner.plan(plan.model, survivorDevices, ctx)
+            if (newPlan.verdict != Verdict.NOT_POSSIBLE) {
+                step("⚡ Supervisor: $leavingName left. Auto-recovering across ${survivorDevices.size} survivors...", RunState.Status.STARTING)
+                stopAll()
+                delay(1000)
+                run(newPlan, ctx)
+            } else {
+                fail("A helper left ($leavingName) and survivors cannot fit ${plan.model.name}")
+            }
         }
     }
 
