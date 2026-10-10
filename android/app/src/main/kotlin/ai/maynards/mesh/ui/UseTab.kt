@@ -72,6 +72,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.style.TextOverflow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 
 /** One line of the conversation as shown on screen. */
 data class Bubble(val mine: Boolean, val text: String, val stats: Answer? = null, val photo: android.graphics.Bitmap? = null)
@@ -87,6 +95,10 @@ private const val REVIEW_PROMPT =
 
 object ChatState {
     val bubbles = mutableStateListOf<Bubble>()
+    // An answer runs here, not in the screen's scope: leaving the Use tab while the 30B was still
+    // reading the question cancelled it ("rememberCoroutineScope left the composition").
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    var busy by mutableStateOf(false)
     private var client: Chat? = null
     private var endpoint: String = ""
     fun chat(url: String): Chat {
@@ -111,35 +123,22 @@ fun UseTab(runner: Runner, host: MeshHost?, canSee: Boolean, onPickModel: () -> 
 
 @Composable
 private fun Empty(onPickModel: () -> Unit) {
-    Column(Modifier.fillMaxSize()) {
-        PageHeader("Use", "Ask the mesh anything, by typing or by speaking. Photos go to a device running a vision model.")
-        NBox {
-            EmptyState(
-                "Nothing is running",
-                "Choose a model first. The planner works out which device holds which layers, and this is where you talk to it.",
-            ) { NButton("Choose a model", fill = Term, onClick = onPickModel) }
-        }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+        Title("Nothing running", 18)
+        Spacer(Modifier.height(14.dp))
+        NButton("Choose a model", fill = Term, onClick = onPickModel)
     }
 }
 
 @Composable
 private fun Loading(run: RunState, runner: Runner) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PageHeader(
-            "Starting",
-            "Each device is being given its layers. A device that has held these layers before keeps them, " +
-                "so the second time is far quicker than the first.",
-        )
-        NBox {
-            Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.size(18.dp), color = Term, strokeWidth = 2.dp)
-                    Spacer(Modifier.width(10.dp))
-                    Title(run.plan?.model?.name ?: "", 16)
-                }
-                Mono("${run.step} · ${run.loadSeconds} s", 12, Muted)
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            CircularProgressIndicator(Modifier.size(18.dp), color = Term, strokeWidth = 2.dp)
+            Spacer(Modifier.width(10.dp))
+            Title(run.plan?.model?.name ?: "Starting", 17)
         }
+        Mono("${run.step} · ${run.loadSeconds} s", 12, Muted)
         run.plan?.let { NBox(pad = 12.dp) { LayerBar(it) } }
         NButton("Cancel", fill = Paper) { runner.stop() }
     }
@@ -148,17 +147,12 @@ private fun Loading(run: RunState, runner: Runner) {
 @Composable
 private fun Failed(run: RunState, onPickModel: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        PageHeader("Stopped", "The run ended. The reason below is the real one, not a guess.")
-        NBox(fill = Danger) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Warning, null, Modifier.size(16.dp), tint = Bad)
-                    Spacer(Modifier.width(8.dp))
-                    Title("It stopped", 16)
-                }
-                Text(run.step, fontSize = 13.sp, color = Ink)
-            }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.Warning, null, Modifier.size(18.dp), tint = Bad)
+            Spacer(Modifier.width(8.dp))
+            Title("Stopped", 17)
         }
+        Text(run.step, fontSize = 13.sp, color = Ink)
         NButton("Back to models", fill = Term, onClick = onPickModel)
     }
 }
@@ -168,15 +162,10 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
     val chat = ChatState.chat(runner.endpoint)
     val bubbles = ChatState.bubbles
     var input by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    val busy = ChatState.busy
+    val scope = ChatState.scope
     val list = rememberLazyListState()
-    val ctx = LocalContext.current
-    var online by remember { mutableStateOf(true) }
-    var lastRoute by remember { mutableStateOf<String?>(null) }
-    var words by remember { mutableIntStateOf(0) }       // words in the answer being streamed now
-    var rate by remember { mutableDoubleStateOf(0.0) }   // words per second, from the last finished answer
-    LaunchedEffect(Unit) { while (true) { online = Net.online(ctx); delay(4_000) } }
+    var extras by remember { mutableStateOf(false) }     // review and photo, behind the plus
     var photo by remember { mutableStateOf<Pair<android.graphics.Bitmap, String>?>(null) }
     val voice = rememberVoice { input = it }
     val camera = rememberCamera { bmp, url -> photo = bmp to url; if (input.isBlank()) input = "What is in this photo?" }
@@ -187,8 +176,8 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
 
     fun ask(question: String, shown: String = question, image: Pair<android.graphics.Bitmap, String>? = null,
             fresh: Boolean = false) {
-        if (busy) return
-        busy = true
+        if (ChatState.busy) return
+        ChatState.busy = true
         val shot = image
         photo = null
         bubbles += Bubble(true, shown, photo = shot?.first)
@@ -203,22 +192,16 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
             val a = runCatching {
                 withContext(Dispatchers.IO) {
                     chat.ask(history, onText = { t ->
-                        scope.launch {
-                            words = t.length / 4      // about four characters to the word: enough to animate
-                            bubbles[bubbles.lastIndex] = Bubble(false, t)
-                        }
+                        scope.launch { bubbles[bubbles.lastIndex] = Bubble(false, t) }
                     }, image = shot?.second, system = system())
                 }
             }
             a.onSuccess {
                 bubbles[bubbles.lastIndex] = Bubble(false, it.text, it)
-                lastRoute = it.route ?: lastRoute
-                words = it.tokens
-                rate = it.tokPerSec
                 onAnswer(it)
             }
                 .onFailure { bubbles[bubbles.lastIndex] = Bubble(false, "Error: ${it.message}") }
-            busy = false
+            ChatState.busy = false
         }
     }
 
@@ -235,13 +218,13 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
      * to see the files.
      */
     fun reviewChanges() {
-        if (busy) return
+        if (ChatState.busy) return
         val laptop = host?.peers?.value?.values?.firstOrNull { it.specs.kind == "laptop" }
         if (host == null || laptop == null) {
             bubbles += Bubble(false, "No laptop in the mesh to ask. Join one with `mesh join`.")
             return
         }
-        busy = true
+        ChatState.busy = true
         bubbles += Bubble(false, "Asking ${laptop.specs.name} what you have changed…")
         scope.launch {
             // the laptop forks three git commands and may be mid-probe on its own helper port,
@@ -250,7 +233,7 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                 val wanted = host.events.onSubscription { host.send(laptop.id, msg("diff")) }
                 wanted.first { (id, m) -> id == laptop.id && m.optString("t") == "diff" }.second
             }
-            busy = false
+            ChatState.busy = false
             bubbles.removeAt(bubbles.lastIndex)      // drop the "asking…" line
             val text = reply?.optString("text").orEmpty()
             // git cannot see a file it is not tracking, so a brand new file looks like no change at all
@@ -278,53 +261,73 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
     }
 
     Column(Modifier.fillMaxSize().imePadding()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Title(run.plan?.model?.name ?: "", 18)
-                Mono(statusLine(run, lastRoute, online), 11, Muted)
-            }
-            Icon(Icons.Outlined.StopCircle, "Stop", Modifier.size(36.dp).padding(4.dp).let { m ->
-                m.then(Modifier.background(Paper, RoundedCornerShape(8.dp)).border(2.dp, Ink, RoundedCornerShape(8.dp)))
-            }.clickableNoRipple { runner.stop() }, tint = Ink)
+        // the name, and a way to stop it: nothing else up here
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(8.dp).clip(CircleShape).background(Term))
+            Spacer(Modifier.width(9.dp))
+            Text(run.plan?.model?.name ?: "", Modifier.weight(1f), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val pill = RoundedCornerShape(999.dp)
+            Text("Stop", Modifier.clip(pill).border(Border, Line, pill).clickable { runner.stop() }
+                .padding(horizontal = 14.dp, vertical = 6.dp), fontSize = 13.sp, color = Muted)
         }
-        run.plan?.takeIf { it.split }?.let { plan -> Traffic(plan, busy, words, rate) }
-        Spacer(Modifier.height(10.dp))
-        LazyColumn(Modifier.weight(1f), state = list, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(bubbles) { b -> BubbleView(b) }
+        Rule()
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                items(bubbles) { b -> BubbleView(b) }
+            }
+            if (bubbles.isEmpty()) Text("Ask anything", Modifier.align(Alignment.Center), fontSize = 15.sp, color = Faint)
         }
         photo?.let { (bmp, _) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                androidx.compose.foundation.Image(bmp.asImageBitmap(), null, Modifier.size(56.dp).border(2.dp, Ink, RoundedCornerShape(6.dp)))
+            Row(Modifier.padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.foundation.Image(bmp.asImageBitmap(), null, Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
                 Spacer(Modifier.width(8.dp))
-                Mono("photo attached · tap to remove", 11, Muted)
+                Mono("photo attached", 11, Muted)
                 Spacer(Modifier.weight(1f))
-                Icon(Icons.Outlined.Close, "Remove", Modifier.clickableNoRipple { photo = null }, tint = Ink)
+                Icon(Icons.Outlined.Close, "Remove", Modifier.clickable { photo = null }, tint = Muted)
             }
         }
-        Row(Modifier.padding(top = 10.dp, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Action(if (voice.listening) Icons.Outlined.MicOff else Icons.Outlined.Mic,
-                if (voice.listening) "Listening…" else "Speak", voice.listening) {
-                if (voice.listening) voice.stop() else voice.start()
-            }
-            Action(Icons.Outlined.RateReview, "Review my changes", false, enabled = !busy) { reviewChanges() }
-            if (canSee) {
-                Action(Icons.Outlined.PhotoCamera, "Photo", photo != null) { camera() }
-                Action(Icons.Outlined.Image, "", photo != null) { gallery() }
+        if (extras) {
+            Row(Modifier.padding(bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Action(Icons.Outlined.RateReview, "Review my changes", false, enabled = !busy) { extras = false; reviewChanges() }
+                if (canSee) {
+                    Action(Icons.Outlined.PhotoCamera, "Photo", photo != null) { extras = false; camera() }
+                    Action(Icons.Outlined.Image, "Gallery", photo != null) { extras = false; gallery() }
+                }
             }
         }
-        Row(Modifier.padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            val shape = RoundedCornerShape(10.dp)
-            Box(Modifier.weight(1f).background(Paper, shape).border(Border, Ink, shape).padding(12.dp)) {
-                if (input.isEmpty()) Text("Ask anything", color = Muted)
-                BasicTextField(input, { input = it }, Modifier.fillMaxWidth(), textStyle = TextStyle(fontSize = 16.sp, color = Ink))
+        Row(Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            val bar = RoundedCornerShape(26.dp)
+            Row(Modifier.weight(1f).heightIn(min = 52.dp).background(Paper, bar).border(Border, Line, bar).padding(horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                RoundIcon(Icons.Outlined.Add, "More", extras) { extras = !extras }
+                Box(Modifier.weight(1f).padding(horizontal = 4.dp, vertical = 14.dp)) {
+                    if (input.isEmpty()) Text(if (voice.listening) "Listening…" else "Message", fontSize = 16.sp, color = Faint)
+                    BasicTextField(input, { input = it }, Modifier.fillMaxWidth(), maxLines = 6,
+                        textStyle = TextStyle(fontSize = 16.sp, color = Ink), cursorBrush = SolidColor(Ink))
+                }
+                RoundIcon(if (voice.listening) Icons.Outlined.MicOff else Icons.Outlined.Mic, "Speak", voice.listening) {
+                    if (voice.listening) voice.stop() else voice.start()
+                }
             }
             Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(52.dp).background(if (busy) Cream else Yellow, shape).border(Border, Ink, shape).clickableNoRipple { send() },
+            val ready = input.isNotBlank() && !busy
+            Box(Modifier.size(52.dp).clip(CircleShape).background(if (ready) Ink else Raised).clickable { send() },
                 contentAlignment = Alignment.Center) {
-                if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Ink, strokeWidth = 3.dp)
-                else Icon(Icons.AutoMirrored.Outlined.Send, "Send", tint = Ink)
+                if (busy) CircularProgressIndicator(Modifier.size(20.dp), color = Muted, strokeWidth = 2.dp)
+                else Icon(Icons.AutoMirrored.Outlined.Send, "Send", Modifier.size(20.dp), tint = if (ready) Paper else Faint)
             }
         }
+    }
+}
+
+/** A round icon button inside the input bar. */
+@Composable
+private fun RoundIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, on: Boolean, onClick: () -> Unit) {
+    Box(Modifier.size(40.dp).clip(CircleShape).background(if (on) HostGreen else Paper).clickable(onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Icon(icon, label, Modifier.size(21.dp), tint = if (on) Term else Muted)
     }
 }
 
@@ -386,24 +389,22 @@ private fun statusLine(run: RunState, route: String?, online: Boolean): String {
 
 @Composable
 private fun BubbleView(b: Bubble) {
-    val shape = RoundedCornerShape(12.dp)
-    Box(Modifier.fillMaxWidth(), contentAlignment = if (b.mine) Alignment.CenterEnd else Alignment.CenterStart) {
-        Column(
-            Modifier.widthIn(max = 340.dp).background(if (b.mine) Yellow else Paper, shape).border(2.dp, Ink, shape).padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            b.photo?.let { androidx.compose.foundation.Image(it.asImageBitmap(), null, Modifier.size(160.dp).border(2.dp, Ink, RoundedCornerShape(8.dp))) }
-            if (b.mine || b.text.isEmpty()) Text(b.text.ifEmpty { "…" }, fontSize = 15.sp, color = Ink) else Markdown(b.text)
-            b.stats?.let { s ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Speed, null, Modifier.size(14.dp), tint = Muted)
-                    Spacer(Modifier.width(4.dp))
-                    Mono("%.1f tok/s · first word %.1fs · %d tokens%s".format(
-                        s.tokPerSec, s.firstTokenMs / 1000.0, s.tokens,
-                        // only a request routed by the agent carries this; a local engine does not
-                        s.route?.substringAfter(':')?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""), 10, Muted)
-                }
+    if (b.mine) {
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+            Column(Modifier.padding(start = 48.dp).background(Raised, RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
+                .padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                b.photo?.let { androidx.compose.foundation.Image(it.asImageBitmap(), null, Modifier.size(140.dp).clip(RoundedCornerShape(10.dp))) }
+                Text(b.text, fontSize = 15.sp, lineHeight = 21.sp, color = Ink)
             }
+        }
+    } else {
+        Column(Modifier.fillMaxWidth().padding(end = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            when {
+                b.text.isEmpty() -> CircularProgressIndicator(Modifier.size(16.dp), color = Muted, strokeWidth = 2.dp)
+                b.text.startsWith("Error:") -> Text(b.text, fontSize = 14.sp, color = Bad)
+                else -> Markdown(b.text)
+            }
+            b.stats?.let { s -> Mono("%.1f tok/s · %d tokens".format(s.tokPerSec, s.tokens), 10, Faint) }
         }
     }
 }

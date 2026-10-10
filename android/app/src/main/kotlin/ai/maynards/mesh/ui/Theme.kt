@@ -20,16 +20,17 @@ import androidx.compose.ui.unit.dp
 // Light keeps every text colour at 4.5:1 or better on its surface, and the accents are one shade darker
 // so green, amber and red stay readable on white.
 object Themes {
-    var light by mutableStateOf(false)
+    var light by mutableStateOf(true)
         private set
 
+    // white is the default; "light2" so a dark choice saved before the default changed does not stick
     fun load(ctx: Context) {
-        light = ctx.getSharedPreferences("mesh", Context.MODE_PRIVATE).getBoolean("light", false)
+        light = ctx.getSharedPreferences("mesh", Context.MODE_PRIVATE).getBoolean("light2", true)
     }
 
     fun set(ctx: Context, on: Boolean) {
         light = on
-        ctx.getSharedPreferences("mesh", Context.MODE_PRIVATE).edit().putBoolean("light", on).apply()
+        ctx.getSharedPreferences("mesh", Context.MODE_PRIVATE).edit().putBoolean("light2", on).apply()
     }
 }
 
