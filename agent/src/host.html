@@ -6,23 +6,27 @@
 <title>MeshAI</title>
 <style>
   /* ---------------------------------------------------------------- tokens
-     Near-black surfaces, hairline borders, no shadows. Prose in the system sans,
-     every number in mono. No web fonts: the demo runs with the internet off. */
+     White surfaces (the phone app's light palette), hairline borders, no shadows. Prose in the system sans,
+     every number in mono. No web fonts: the demo runs with the internet off.
+     Every text colour is 4.5:1 or better on the surface it sits on. */
   :root {
-    --bg:#09090b; --card:#111113; --raised:#18181b; --line:#26262a; --line-soft:#1c1c20;
-    --fg:#ededed; --fg-2:#8b8b93; --fg-3:#63636b;
-    --ok:#4ade80; --warn:#fbbf24; --bad:#f87171; --helper:#a78bfa; --info:#60a5fa;
+    --bg:#F7F7F8; --card:#FFFFFF; --raised:#F1F1F3; --line:#E2E2E6; --line-soft:#ECECEF;
+    --line-strong:#D4D4D8; --hover:#E8E8EB; --focus:#A1A1AA; --fg-hover:#3F3F46; --bezel:#52525B;
+    --fg:#18181B; --fg-2:#52525B; --fg-3:#6B6B73;
+    --ok:#15803D; --warn:#B45309; --bad:#B91C1C; --helper:#6D28D9; --info:#1D4ED8;
+    --ok-soft:#DCFCE7; --warn-soft:#FEF3C7; --helper-soft:#EDE9FE; --bad-soft:#FEE2E2;
+    --ok-line:#BBF7D0; --warn-line:#FDE68A; --helper-line:#DDD6FE; --bad-line:#FECACA;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     --rail: 248px;
-    color-scheme: dark;       /* native controls (selects, scrollbars) draw dark too */
+    color-scheme: light;      /* native controls (selects, scrollbars) draw light too */
   }
   * { box-sizing:border-box; }
   html, body { height:100%; }
   body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.55 var(--sans); -webkit-font-smoothing:antialiased; }
-  ::selection { background:#264b36; }
+  ::selection { background:var(--ok-line); }
   ::-webkit-scrollbar { width:10px; height:10px; }
-  ::-webkit-scrollbar-thumb { background:#232327; border-radius:5px; }
+  ::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:5px; }
   ::-webkit-scrollbar-track { background:transparent; }
   a { color:var(--fg); text-decoration:none; }
   svg.i { width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; flex:none; }
@@ -31,7 +35,7 @@
 
   /* ---------------------------------------------------------------- shell */
   .app { display:grid; grid-template-columns:var(--rail) 1fr; min-height:100vh; }
-  .rail { border-right:1px solid var(--line); background:#0b0b0d; display:flex; flex-direction:column;
+  .rail { border-right:1px solid var(--line); background:var(--card); display:flex; flex-direction:column;
           position:sticky; top:0; height:100vh; }
   .brand { padding:20px 18px 16px; border-bottom:1px solid var(--line-soft); }
   .brand .mark { display:flex; align-items:center; gap:9px; font-weight:600; letter-spacing:-.2px; font-size:15px; }
@@ -51,7 +55,7 @@
 
   main { min-width:0; display:flex; flex-direction:column; }
   .strip { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:18px; padding:0 28px; height:48px;
-           border-bottom:1px solid var(--line); background:rgba(9,9,11,.88); backdrop-filter:blur(8px);
+           border-bottom:1px solid var(--line); background:rgba(247,247,248,.88); backdrop-filter:blur(8px);
            font:12px var(--mono); color:var(--fg-2); }
   .strip .s { display:flex; align-items:center; gap:7px; white-space:nowrap; }
   .strip .s b { color:var(--fg); font-weight:500; }
@@ -91,26 +95,26 @@
 
   button, .btn { font:500 13px var(--sans); border-radius:6px; padding:7px 13px; cursor:pointer; display:inline-flex;
                  align-items:center; gap:7px; border:1px solid var(--line); background:var(--raised); color:var(--fg); }
-  button:hover:not(:disabled), .btn:hover { border-color:#34343a; background:#1f1f23; }
-  button.primary { background:var(--fg); color:#09090b; border-color:var(--fg); font-weight:600; }
-  button.primary:hover:not(:disabled) { background:#fff; border-color:#fff; }
+  button:hover:not(:disabled), .btn:hover { border-color:var(--line-strong); background:var(--hover); }
+  button.primary { background:var(--fg); color:var(--card); border-color:var(--fg); font-weight:600; }
+  button.primary:hover:not(:disabled) { background:var(--fg-hover); border-color:var(--fg-hover); }
   button.ghost { background:transparent; }
   button.danger { color:var(--bad); }
   button:disabled { opacity:.45; cursor:default; }
   button.sm { padding:5px 10px; font-size:12px; }
-  input, select, textarea { font:13px var(--mono); background:#0d0d0f; color:var(--fg); border:1px solid var(--line);
+  input, select, textarea { font:13px var(--mono); background:var(--card); color:var(--fg); border:1px solid var(--line);
                             border-radius:6px; padding:7px 10px; }
-  input:focus, select:focus, textarea:focus { outline:none; border-color:#3a3a42; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--focus); }
   /* WebKitGTK draws a light native menu otherwise, grey text on white */
   select { -webkit-appearance:none; appearance:none; padding-right:30px; cursor:pointer;
-           background:#0d0d0f url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238b8b93' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; }
-  select option { background:#111113; color:var(--fg); }
+           background:var(--card) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2352525B' stroke-width='1.5'/%3E%3C/svg%3E") no-repeat right 11px center; }
+  select option { background:var(--card); color:var(--fg); }
   input.cap { width:74px; }
 
   .tag { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:999px;
          padding:2px 9px; font:11px var(--mono); color:var(--fg-2); background:var(--raised); }
-  .tag.ok { color:var(--ok); border-color:#1e3a2a; } .tag.warn { color:var(--warn); border-color:#3a3320; }
-  .tag.bad { color:var(--bad); border-color:#3a2222; } .tag.helper { color:var(--helper); border-color:#2e2a45; }
+  .tag.ok { color:var(--ok); border-color:var(--ok-line); background:var(--ok-soft); } .tag.warn { color:var(--warn); border-color:var(--warn-line); background:var(--warn-soft); }
+  .tag.bad { color:var(--bad); border-color:var(--bad-line); background:var(--bad-soft); } .tag.helper { color:var(--helper); border-color:var(--helper-line); background:var(--helper-soft); }
 
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th { text-align:left; padding:9px 12px; font:10.5px var(--mono); letter-spacing:.08em; text-transform:uppercase;
@@ -121,10 +125,11 @@
 
   .meter .k { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--fg-2); margin-bottom:6px; }
   .meter .k b { font:500 12px var(--mono); color:var(--fg); }
-  .bar { height:6px; border-radius:3px; background:#1d1d21; overflow:hidden; margin-bottom:13px; }
+  .bar { height:6px; border-radius:3px; background:var(--line); overflow:hidden; margin-bottom:13px; }
   .bar i { display:block; height:100%; border-radius:3px; }
-  .layers { display:flex; height:26px; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:#0d0d0f; }
-  .layers div { display:grid; place-items:center; font:11px var(--mono); color:#0b0b0d; min-width:0; overflow:hidden; white-space:nowrap; }
+  .layers { display:flex; height:26px; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--raised); }
+  .layers div { display:grid; place-items:center; font:11px var(--mono); color:var(--fg); min-width:0; overflow:hidden; white-space:nowrap; }
+  .layers div + div { box-shadow:inset 1px 0 0 var(--card); }   /* two helpers side by side stay two */
 
   .feed { font:12px/1.65 var(--mono); max-height:360px; overflow:auto; }
   .feed div { padding:3px 0; color:var(--fg-2); border-bottom:1px solid var(--line-soft); }
@@ -138,30 +143,30 @@
 
   .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:12.5px; }
   /* a device drawn as itself: the specs live inside the outline */
-  .frame { position:relative; margin:0 auto 18px; background:var(--card); border:2px solid var(--fg-3); }
+  .frame { position:relative; margin:0 auto 18px; background:var(--card); border:2px solid var(--bezel); }
   .frame.phone { width:min(100%, 320px); border-radius:34px; padding:38px 18px 34px; }
-  .frame.phone:before { content:""; position:absolute; top:12px; left:50%; transform:translateX(-50%); width:72px; height:8px; border-radius:4px; background:var(--fg-3); }
-  .frame.phone:after { content:""; position:absolute; bottom:11px; left:50%; transform:translateX(-50%); width:96px; height:4px; border-radius:2px; background:var(--fg-3); }
+  .frame.phone:before { content:""; position:absolute; top:12px; left:50%; transform:translateX(-50%); width:72px; height:8px; border-radius:4px; background:var(--bezel); }
+  .frame.phone:after { content:""; position:absolute; bottom:11px; left:50%; transform:translateX(-50%); width:96px; height:4px; border-radius:2px; background:var(--bezel); }
   .frame.laptop { width:min(100%, 440px); border-radius:14px 14px 3px 3px; padding:22px 20px 18px; }
-  .frame.laptop:before { content:""; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:7px; height:7px; border-radius:50%; background:var(--fg-3); }
-  .frame.laptop:after { content:""; position:absolute; left:-7%; right:-7%; bottom:-14px; height:11px; border-radius:0 0 10px 10px; background:var(--fg-3); }
+  .frame.laptop:before { content:""; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:7px; height:7px; border-radius:50%; background:var(--bezel); }
+  .frame.laptop:after { content:""; position:absolute; left:-7%; right:-7%; bottom:-14px; height:11px; border-radius:0 0 10px 10px; background:var(--bezel); }
   .frame .ch { padding:0 0 10px; border:0; } .frame .cb { padding:0; }
   .kv .k { color:var(--fg-3); } .kv .v { font-family:var(--mono); }
 
-  pre { background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:11px 13px; overflow-x:auto;
-        font:12.5px/1.6 var(--mono); color:#d7e0dd; margin:9px 0; }
-  code { background:#1a1a1e; border-radius:4px; padding:1px 5px; font:12.5px var(--mono); }
-  .cmd { display:flex; align-items:center; gap:8px; background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:11px 13px; overflow-x:auto;
+        font:12.5px/1.6 var(--mono); color:var(--fg); margin:9px 0; }
+  code { background:var(--raised); border-radius:4px; padding:1px 5px; font:12.5px var(--mono); }
+  .cmd { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
   .cmd code { background:transparent; padding:0; flex:1; overflow:auto; white-space:nowrap; color:var(--fg-2); }
 
   .msg { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0; max-width:82%; background:var(--card);
          white-space:pre-wrap; font-size:13.5px; }
-  .msg.me { margin-left:auto; background:var(--raised); border-color:#2e2e34; }
+  .msg.me { margin-left:auto; background:var(--raised); border-color:var(--line-strong); }
   .msg img { max-width:240px; border-radius:6px; display:block; margin-bottom:8px; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:9px; }
   .chips span { font:11px var(--mono); color:var(--fg-3); border:1px solid var(--line-soft); border-radius:999px; padding:1px 8px; }
-  .chips span.who { color:var(--ok); border-color:#1e3a2a; }
-  .chips span.who.vision { color:var(--helper); border-color:#2e2a45; }
+  .chips span.who { color:var(--ok); border-color:var(--ok-line); }
+  .chips span.who.vision { color:var(--helper); border-color:var(--helper-line); }
   /* agent */
   .agent { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; align-items:start; }
   .agent-main { display:flex; flex-direction:column; gap:14px; min-width:0; }
@@ -176,21 +181,21 @@
   .prompt { background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:11px 14px; white-space:pre-wrap; font-size:13.5px; }
   .sw { width:34px; height:20px; border-radius:999px; background:var(--line); position:relative; cursor:pointer; border:0; padding:0; flex:none; }
   .sw::after { content:""; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:var(--fg-2); transition:left .15s; }
-  .sw.on { background:#1e3a2a; } .sw.on::after { left:17px; background:var(--ok); }
-  .sw.danger.on { background:#3a2222; } .sw.danger.on::after { background:var(--bad); }
+  .sw.on { background:var(--ok-line); } .sw.on::after { left:17px; background:var(--ok); }
+  .sw.danger.on { background:var(--bad-line); } .sw.danger.on::after { background:var(--bad); }
   .perm { display:flex; gap:12px; align-items:center; padding:8px 0; border-top:1px solid var(--line-soft); }
   .perm:first-child { border-top:0; } .perm .t { flex:1; font-size:13px; } .perm small { display:block; color:var(--fg-3); font-size:12px; }
   .hist { display:flex; gap:9px; align-items:center; width:100%; padding:7px 0; background:none; border:0; border-top:1px solid var(--line-soft);
           border-radius:0; text-align:left; color:var(--fg-2); font-size:12.5px; cursor:pointer; }
   .hist:first-child { border-top:0; } .hist:hover { color:var(--fg); } .hist.on { color:var(--fg); }
   .hist .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .diffv { max-height:460px; overflow:auto; font:12px/1.5 var(--mono); background:#0d0d0f; border:1px solid var(--line); border-radius:6px; padding:8px 0; }
+  .diffv { max-height:460px; overflow:auto; font:12px/1.5 var(--mono); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 0; }
   .diffv div { padding:0 12px; white-space:pre-wrap; word-break:break-all; }
-  .diffv .a { background:#4ade8014; color:#86efac; } .diffv .d { background:#f8717114; color:#fca5a5; } .diffv .x { color:var(--info); }
+  .diffv .a { background:var(--ok-soft); color:var(--ok); } .diffv .d { background:var(--bad-soft); color:var(--bad); } .diffv .x { color:var(--info); }
   @media (max-width: 1100px) { .agent { grid-template-columns:1fr; } }
   .latest { position:fixed; right:36px; bottom:96px; z-index:6; border-radius:999px; padding:6px 14px; font:12px var(--mono); }
   .latest.hide { display:none; }
-  .composer { position:sticky; bottom:0; background:linear-gradient(180deg, rgba(9,9,11,0), var(--bg) 22%); padding:18px 0 4px; }
+  .composer { position:sticky; bottom:0; background:linear-gradient(180deg, rgba(247,247,248,0), var(--bg) 22%); padding:18px 0 4px; }
   .composer .box { display:flex; gap:8px; align-items:flex-end; background:var(--card); border:1px solid var(--line);
                    border-radius:10px; padding:8px; }
   .composer textarea { flex:1; border:0; background:transparent; resize:none; height:38px; padding:8px; font:13.5px var(--sans); }
@@ -203,11 +208,11 @@
 
   /* the agent going away is a visible state, not a page that quietly stops moving */
   .lost { position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:50; display:none;
-          background:#2a1416; border:1px solid #5a2326; color:#fca5a5; border-radius:8px; padding:9px 15px;
+          background:var(--bad-soft); border:1px solid var(--bad-line); color:var(--bad); border-radius:8px; padding:9px 15px;
           font:12.5px var(--mono); }
   .lost.on { display:block; }
   .toast { position:fixed; right:18px; bottom:18px; z-index:50; display:flex; flex-direction:column; gap:8px; }
-  .toast div { background:#2a1416; border:1px solid #5a2326; color:#fca5a5; border-radius:8px; padding:9px 14px;
+  .toast div { background:var(--bad-soft); border:1px solid var(--bad-line); color:var(--bad); border-radius:8px; padding:9px 14px;
                font:12.5px var(--mono); max-width:420px; }
 
   @media (max-width: 900px) {
@@ -618,7 +623,7 @@ function renderOverview() {
     ? `<button data-go2="chat">${ic('chat')}Chat</button><button class="ghost" data-go2="agent">${ic('hash')}Agent</button>`
     : '';
   $('ov-advice').innerHTML = S.advice.map(a =>
-    `<div class="card" style="border-color:#3a3320; margin-bottom:10px"><div class="cb tight row" style="color:var(--warn)">${ic('warn')}<span>${esc(a)}</span></div></div>`).join('');
+    `<div class="card" style="border-color:var(--warn-line); background:var(--warn-soft); margin-bottom:10px"><div class="cb tight row" style="color:var(--warn)">${ic('warn')}<span>${esc(a)}</span></div></div>`).join('');
   $('ov-run').innerHTML = runSummary();
   // devices: the code to scan, then who has joined
   const peers = S.peers.map(p => {
@@ -672,7 +677,7 @@ function web() {
   let g = '';
   for (let i = 0; i < 12; i++) {
     const a = i * Math.PI / 6;
-    g += `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(a) * R).toFixed(1)}" y2="${(cy + Math.sin(a) * R).toFixed(1)}" stroke="#1f1f24"/>`;
+    g += `<line x1="${cx}" y1="${cy}" x2="${(cx + Math.cos(a) * R).toFixed(1)}" y2="${(cy + Math.sin(a) * R).toFixed(1)}" stroke="#E2E2E6"/>`;
   }
   for (let ring = 1; ring <= 5; ring++) {
     const rr = R * ring / 5; let d = '';
@@ -682,27 +687,27 @@ function web() {
       const m = (k - .5) * Math.PI / 6, s = rr * .9;
       d += ` Q${(cx + Math.cos(m) * s).toFixed(1)},${(cy + Math.sin(m) * s).toFixed(1)} ${px.toFixed(1)},${py.toFixed(1)}`;
     }
-    g += `<path d="${d}" fill="none" stroke="#1f1f24"/>`;
+    g += `<path d="${d}" fill="none" stroke="#E2E2E6"/>`;
   }
   const label = (x, y, t) => {
     const w = t.length * 6.2 + 14;
-    return `<rect x="${(x - w / 2).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="18" rx="5" fill="#18181b" stroke="#26262a"/>
-      <text x="${x.toFixed(1)}" y="${y + 12.5}" font-size="10.5" text-anchor="middle" fill="#8b8b93" font-family="ui-monospace,monospace">${esc(t)}</text>`;
+    return `<rect x="${(x - w / 2).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="18" rx="5" fill="#F1F1F3" stroke="#E2E2E6"/>
+      <text x="${x.toFixed(1)}" y="${y + 12.5}" font-size="10.5" text-anchor="middle" fill="#52525B" font-family="ui-monospace,monospace">${esc(t)}</text>`;
   };
   S.peers.forEach((p, i) => {
     const a = -Math.PI / 2 + i * 2 * Math.PI / Math.max(S.peers.length, 1) + (S.peers.length === 2 ? Math.PI / 2 : 0);
     const x = cx + Math.cos(a) * R * .72, y = cy + Math.sin(a) * R * .72;
     const slow = num(p.rtt_ms, 0) > 60;
-    g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${slow ? '#f87171' : '#2f6b4a'}" stroke-width="1.5" ${slow ? 'stroke-dasharray="5 4"' : ''}/>`;
-    if (S.run.status === 'ready') g += `<circle r="3.5" fill="#4ade80"><animateMotion dur="1.4s" repeatCount="indefinite" path="M${cx},${cy} L${x.toFixed(1)},${y.toFixed(1)} L${cx},${cy}"/></circle>`;
-    g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="17" fill="#1a1730" stroke="#a78bfa" stroke-width="1.2"/>`;
+    g += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${slow ? '#B91C1C' : '#16A34A'}" stroke-width="1.5" ${slow ? 'stroke-dasharray="5 4"' : ''}/>`;
+    if (S.run.status === 'ready') g += `<circle r="3.5" fill="#15803D"><animateMotion dur="1.4s" repeatCount="indefinite" path="M${cx},${cy} L${x.toFixed(1)},${y.toFixed(1)} L${cx},${cy}"/></circle>`;
+    g += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="17" fill="#EDE9FE" stroke="#6D28D9" stroke-width="1.2"/>`;
     const short = String(p.name || '').split(' ·')[1] || String(p.name || '?');
-    g += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#a78bfa" font-family="ui-monospace,monospace">${esc(short.slice(0, 4))}</text>`;
+    g += `<text x="${x.toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10.5" text-anchor="middle" fill="#6D28D9" font-family="ui-monospace,monospace">${esc(short.slice(0, 4))}</text>`;
     const l = [p.rtt_ms != null ? Math.round(p.rtt_ms) + ' ms' : '', layersOf(p.id)].filter(Boolean).join(' · ');
     if (l) g += label(x, y + 22, l);
   });
-  g += `<circle cx="${cx}" cy="${cy}" r="22" fill="#10231a" stroke="#4ade80" stroke-width="1.4"/>
-        <text x="${cx}" y="${cy + 4.5}" font-size="12" text-anchor="middle" fill="#4ade80" font-family="ui-monospace,monospace">host</text>`;
+  g += `<circle cx="${cx}" cy="${cy}" r="22" fill="#DCFCE7" stroke="#15803D" stroke-width="1.4"/>
+        <text x="${cx}" y="${cy + 4.5}" font-size="12" text-anchor="middle" fill="#15803D" font-family="ui-monospace,monospace">host</text>`;
   g += label(cx, cy + 28, ['this laptop', layersOf('laptop')].filter(Boolean).join(' · '));
   return `<svg class="web" viewBox="0 0 ${W} ${H}">${g}</svg>`;
 }
@@ -719,7 +724,7 @@ function card(o) {
   const st = o.store && o.store.total ? o.store : null;
   // a phone reports every two seconds; past ten it has gone quiet and these numbers are history
   const quiet = !o.laptop && num(o.quiet_s, 0) >= 10;
-  return `<div class="frame ${o.laptop ? 'laptop' : 'phone'}" ${quiet ? 'style="border-color:#7a3a3a"' : ''}>
+  return `<div class="frame ${o.laptop ? 'laptop' : 'phone'}" ${quiet ? 'style="border-color:var(--bad)"' : ''}>
     <div class="ch">
       <div style="min-width:0"><h3>${esc(o.name)}</h3>
         <div class="d mono" style="overflow:hidden; text-overflow:ellipsis">${esc(s.chip || '')}${s.cores ? ' · ' + s.cores + ' cores' : ''}</div></div>
@@ -773,9 +778,9 @@ function layerBar(p) {
   if (!sl.length) return '';
   const total = sl.reduce((a, s) => a + (s.to - s.from), 0) || 1;
   return `<div class="layers">${sl.map(s =>
-      `<div style="flex:${Math.max(s.to - s.from, 1)}; background:${s.host ? '#4ade80' : '#a78bfa'}" title="${esc(s.name)}: layers ${s.from}-${s.to - 1}">${s.to - s.from}</div>`).join('')}</div>
+      `<div style="flex:${Math.max(s.to - s.from, 1)}; background:${s.host ? 'var(--ok-soft); color:var(--ok)' : 'var(--helper-soft); color:var(--helper)'}" title="${esc(s.name)}: layers ${s.from}-${s.to - 1}">${s.to - s.from}</div>`).join('')}</div>
     <div class="row wrap quiet mono" style="gap:14px; margin-top:8px; font-size:11.5px">
-      ${sl.map(s => `<span><b style="color:${s.host ? '#4ade80' : '#a78bfa'}">■</b> ${esc(s.name)} · ${s.from}-${s.to - 1} · ${gb(s.gb)} GB</span>`).join('')}
+      ${sl.map(s => `<span><b style="color:${s.host ? 'var(--ok)' : 'var(--helper)'}">■</b> ${esc(s.name)} · ${s.from}-${s.to - 1} · ${gb(s.gb)} GB</span>`).join('')}
       <span>${total} layers in all</span></div>`;
 }
 function renderModels() {
@@ -1279,12 +1284,12 @@ function renderStats() {
   let g = '';
   c.forEach((x, i) => {
     const h = (H - 34) * num(x.tps) / top, fx = i * w + w * .2, bw = w * .6;
-    g += `<rect x="${fx.toFixed(1)}" y="${(H - 22 - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 1).toFixed(1)}" fill="${num(x.devices, 1) > 1 ? '#a78bfa' : '#4ade80'}" rx="3" opacity=".85"/>`;
-    g += `<text x="${(fx + bw / 2).toFixed(1)}" y="${(H - 27 - h).toFixed(1)}" font-size="11" text-anchor="middle" fill="#8b8b93" font-family="ui-monospace,monospace">${num(x.tps).toFixed(1)}</text>`;
+    g += `<rect x="${fx.toFixed(1)}" y="${(H - 22 - h).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(h, 1).toFixed(1)}" fill="${num(x.devices, 1) > 1 ? '#6D28D9' : '#15803D'}" rx="3" opacity=".85"/>`;
+    g += `<text x="${(fx + bw / 2).toFixed(1)}" y="${(H - 27 - h).toFixed(1)}" font-size="11" text-anchor="middle" fill="#52525B" font-family="ui-monospace,monospace">${num(x.tps).toFixed(1)}</text>`;
   });
   $('chartbox').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>
     <div class="row wrap quiet mono" style="gap:16px; font-size:11.5px; margin-top:6px">
-      <span><b style="color:#4ade80">■</b> one device</span><span><b style="color:#a78bfa">■</b> split across the mesh</span></div>`;
+      <span><b style="color:var(--ok)">■</b> one device</span><span><b style="color:var(--helper)">■</b> split across the mesh</span></div>`;
   $('histbox').innerHTML = `<table><thead><tr><th>Time</th><th>Question</th><th>tok/s</th><th>First word</th><th>Tokens</th><th>Devices</th></tr></thead><tbody>${
     c.slice().reverse().map(x => `<tr><td class="num quiet">${esc(x.t)}</td><td>${esc(String(x.q || '').slice(0, 80))}</td>
       <td class="num">${num(x.tps).toFixed(1)}</td><td class="num">${sec(x.first_ms)}</td>
