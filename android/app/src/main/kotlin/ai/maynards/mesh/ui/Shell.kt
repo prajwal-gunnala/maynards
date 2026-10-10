@@ -47,16 +47,11 @@ fun StatusStrip(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Box(Modifier.size(7.dp).clip(RoundedCornerShape(4.dp)).background(stateColor))
-        Mono(state, 11, Ink)
-        if (model != null) {
-            Dot()
-            Mono(model.take(18), 11, Muted)
-        }
-        Dot()
-        Mono(if (devices == 1) "1 device" else "$devices devices", 11, Muted)
-        if (layers != null) { Dot(); Mono(layers, 11, Muted) }
-        if (tps != null) { Dot(); Mono("%.1f tok/s".format(tps), 11, Muted) }
-        Spacer(Modifier.weight(1f))
+        // one line, cut with … when it is too long: a long model name used to stack the rest letter by letter
+        val line = listOfNotNull(state, model?.take(18), if (devices == 1) "1 device" else "$devices devices", layers,
+            tps?.let { "%.1f tok/s".format(it) }).joinToString(" · ")
+        Text(line, Modifier.weight(1f), fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Muted, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         if (offline) Mono("OFFLINE", 11, Term)
     }
     Rule()

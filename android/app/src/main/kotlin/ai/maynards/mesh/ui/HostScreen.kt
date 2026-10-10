@@ -94,8 +94,8 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
     var online by remember { mutableStateOf(true) }
     LaunchedEffect(Unit) { while (true) { online = ai.maynards.mesh.engine.Net.online(ctxNow); kotlinx.coroutines.delay(4_000) } }
     Column(Modifier.fillMaxSize()) {
-        // the one line that says, from across a room, what this phone is doing
-        StatusStrip(
+        // the one line that says, from across a room, what this phone is doing (the chat page has its own header)
+        if (tab != 2) StatusStrip(
             state = when (runNow.status) {
                 ai.maynards.mesh.brain.RunState.Status.READY -> "ready"
                 ai.maynards.mesh.brain.RunState.Status.LOADING -> "loading"
@@ -150,7 +150,10 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        val pool = me.usableBytes + peers.values.sumOf { it.specs.usableBytes }
+        // while a model runs, free memory shrinks by what the layers took: count what the devices hold, plus what is still free
+        val live = run.plan?.takeIf { run.status != ai.maynards.mesh.brain.RunState.Status.IDLE && run.status != ai.maynards.mesh.brain.RunState.Status.FAILED }
+        val holding = live?.slices?.sumOf { it.bytes } ?: 0L
+        val pool = holding + me.usableBytes + peers.values.sumOf { it.specs.usableBytes }
         NextStep(run, peers.size, onGo) { showQr = true }
         PageHeader(
             "Mesh",
@@ -184,8 +187,9 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
         NButton(if (showQr) "Hide the code" else "Add a device", fill = if (showQr) Paper else Term) { showQr = !showQr }
 
         Section("Devices")
-        DeviceRow(me.name, "this phone · host", me.usableBytes, me.heat, me.battery, me.charging, -1.0, HostGreen, false)
-        peers.values.sortedBy { it.specs.name }.forEach { p -> PeerRow(p) }
+        DeviceRow(me.name, "this phone · host", me.usableBytes, me.heat, me.battery, me.charging, -1.0, HostGreen, false,
+            holding = live?.slices?.firstOrNull()?.bytes)
+        peers.values.sortedBy { it.specs.name }.forEach { p -> PeerRow(p, live?.slices?.firstOrNull { it.deviceId == p.id }?.bytes) }
         if (peers.isEmpty()) NBox {
             EmptyState(
                 "No other device yet",
@@ -221,9 +225,9 @@ private fun layersOf(plan: ai.maynards.mesh.brain.Plan?, id: String): String =
     plan?.slices?.firstOrNull { it.deviceId == id }?.let { "${it.count} layers" } ?: ""
 
 @Composable
-private fun PeerRow(p: Peer) = DeviceRow(
+private fun PeerRow(p: Peer, holding: Long? = null) = DeviceRow(
     p.specs.name, "${p.addr} · helper", p.specs.usableBytes, p.specs.heat, p.specs.battery, p.specs.charging,
-    p.rttMs, HelperPurple, p.specs.kind == "laptop",
+    p.rttMs, HelperPurple, p.specs.kind == "laptop", holding,
 )
 
 /**
@@ -276,7 +280,7 @@ private data class Q5(
 @Composable
 private fun DeviceRow(
     name: String, sub: String, usable: Long, heat: Float, battery: Int, charging: Boolean, rtt: Double,
-    fill: Color, laptop: Boolean,
+    fill: Color, laptop: Boolean, holding: Long? = null,
 ) {
     NBox(fill = fill, shadow = 4.dp, pad = 12.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -288,8 +292,8 @@ private fun DeviceRow(
                     Mono(sub, 10, Muted)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("${gb(usable)} GB", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Ink)
-                    Mono("for models", 10, Muted)
+                    Text("${gb(holding ?: usable)} GB", fontWeight = FontWeight.Black, fontSize = 20.sp, color = Ink)
+                    Mono(if (holding != null) "holding · ${gb(usable)} free" else "for models", 10, Muted)
                 }
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
