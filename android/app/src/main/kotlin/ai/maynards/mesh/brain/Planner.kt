@@ -10,6 +10,7 @@ data class Device(
     val heat: Float = 0f,      // thermal headroom: 1.0 means throttling
     val battery: Int = 100,
     val charging: Boolean = true,
+    val speedScore: Double = 1.0, // compute capability tier
 )
 
 enum class Verdict { DOABLE, TIGHT, NOT_POSSIBLE }
@@ -50,6 +51,17 @@ object Planner {
     /** KV cache stored at 8 bits (q8_0 is 34 bytes per 32 values). */
     fun kvBytes(m: ModelInfo, ctx: Int): Long = m.kvBytesPerToken * ctx * 17 / 32
 
+    fun chipSpeedScore(chip: String, name: String, isHost: Boolean): Double {
+        if (isHost) return 1.8
+        val combined = "$chip $name".lowercase()
+        return when {
+            combined.contains("8 elite") || combined.contains("sm8750") || combined.contains("iqoo 15") || combined.contains("adreno 840") -> 3.0
+            combined.contains("8 gen 3") || combined.contains("dimensity 9400") || combined.contains("dimensity 9300") -> 2.2
+            combined.contains("8 gen 2") || combined.contains("adreno 7") -> 1.6
+            else -> 1.0
+        }
+    }
+
     fun plan(m: ModelInfo, devices: List<Device>, ctx: Int = 4096, hostExtra: Long = 0): Plan {
         val host = devices.firstOrNull { it.isHost } ?: error("no host")
         val kv = kvBytes(m, ctx)
@@ -67,7 +79,7 @@ object Planner {
             }
             if (why != null) skipped[d.id] = why
             why == null
-        }.sortedByDescending { it.usableBytes }                // fewest devices: biggest first
+        }.sortedByDescending { it.usableBytes.toDouble() * it.speedScore }                // throughput-optimal: compute-memory product first
 
         // 1. Fits on the Host alone: never split.
         if (host.usableBytes >= need) {

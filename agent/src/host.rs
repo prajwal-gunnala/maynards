@@ -657,7 +657,25 @@ fn scan_models(hub: &Hub) -> Vec<Model> {
 
 // ---------------------------------------------------------------- the planner (same rules as the phone app)
 
-struct Dev { id: String, name: String, usable: f64, rtt: f64, battery: i64, charging: bool, host: bool }
+struct Dev { id: String, name: String, usable: f64, rtt: f64, battery: i64, charging: bool, host: bool, speed_score: f64 }
+
+fn chip_speed_score(specs: &Value, is_host: bool) -> f64 {
+    if is_host {
+        return 1.8;
+    }
+    let chip = specs["chip"].as_str().unwrap_or("").to_lowercase();
+    let name = specs["name"].as_str().unwrap_or("").to_lowercase();
+    let combined = format!("{chip} {name}");
+    if combined.contains("8 elite") || combined.contains("sm8750") || combined.contains("iqoo 15") || combined.contains("adreno 840") {
+        3.0
+    } else if combined.contains("8 gen 3") || combined.contains("dimensity 9400") || combined.contains("dimensity 9300") {
+        2.2
+    } else if combined.contains("8 gen 2") || combined.contains("adreno 7") {
+        1.6
+    } else {
+        1.0
+    }
+}
 
 /// How many tokens a conversation can hold. 4096 fits a chat; a coding agent such as Aider sends its own
 /// instructions plus the files it edits, so it needs 16384 or more (MESH_CTX=16384). The planner counts the KV
@@ -749,7 +767,8 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
         if let Some(w) = &why { skipped.insert(d.name.clone(), json!(w)); }
         why.is_none()
     }).collect();
-    helpers.sort_by(|a, b| b.usable.partial_cmp(&a.usable).unwrap().then(a.id.cmp(&b.id)));
+    // Throughput-optimal sort: prioritize devices by compute-memory product (usable * speed_score)
+    helpers.sort_by(|a, b| (b.usable * b.speed_score).partial_cmp(&(a.usable * a.speed_score)).unwrap().then(a.id.cmp(&b.id)));
     let verdict = |have: f64, need: f64| if have - need >= need * 0.15 { "doable" } else { "tight" };
     let task = active_task();
     let slice = |d: &Dev, from: usize, to: usize, bytes: f64| {
@@ -758,7 +777,8 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     };
     if host.usable >= need {
         return json!({"verdict": verdict(host.usable, need), "reason": "Runs on this laptop alone", "need_gb": need / GB,
-            "slices": [slice(host, 0, m.layers.len(), m.bytes as f64)], "skipped": skipped});
+            "slices": [slice(host, 0, m.layers.len(), m.bytes as f64)], "skipped": skipped,
+            "pipeline": {"primary_compute": host.name, "bottleneck_device": host.name, "pipeline_speed_score": host.speed_score}});
     }
     // split: phones take their full share first, from the last layer back (the biggest phone gets the tail);
     // this laptop keeps embeddings, output head and whatever is left at the front
@@ -783,8 +803,12 @@ fn plan(m: &Model, devs: &[Dev], ctx: u64) -> Value {
     let mut slices = vec![slice(host, 0, end, front + m.other as f64)];
     slices.extend(tail.into_iter().rev());
     let n = slices.len();
-    json!({"verdict": verdict(capacity, need + HELPER_RESERVE * (n as f64 - 1.0)), "reason": format!("Needs {n} devices"),
-           "need_gb": need / GB, "slices": slices, "skipped": skipped})
+    let primary = helpers.first().map(|d| d.name.clone()).unwrap_or_else(|| host.name.clone());
+    let bottleneck = helpers.last().map(|d| d.name.clone()).unwrap_or_else(|| host.name.clone());
+    let speed_mult = helpers.iter().map(|d| d.speed_score).fold(host.speed_score, f64::min);
+    json!({"verdict": verdict(capacity, need + HELPER_RESERVE * (n as f64 - 1.0)), "reason": format!("Needs {n} devices (speed-optimized)"),
+           "need_gb": need / GB, "slices": slices, "skipped": skipped,
+           "pipeline": {"primary_compute": primary, "bottleneck_device": bottleneck, "pipeline_speed_score": speed_mult}})
 }
 
 // ---------------------------------------------------------------- pinned split: the same layers on the same phones
@@ -854,13 +878,13 @@ fn devices(hub: &Hub) -> Vec<Dev> {
     let caps = hub.caps.lock().unwrap().clone();
     let cap = caps.get("laptop").copied().unwrap_or(f64::MAX);
     let mut v = vec![Dev { id: "laptop".into(), name: me["name"].as_str().unwrap_or("This laptop").into(), usable: usable(&me).min(cap),
-        rtt: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true }];
+        rtt: 0.0, battery: me["battery"].as_i64().unwrap_or(100), charging: true, host: true, speed_score: chip_speed_score(&me, true) }];
     for (id, p) in hub.peers.lock().unwrap().iter() {
         let mut r: Vec<f64> = p.rtts.iter().copied().collect();
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v.push(Dev { id: id.clone(), name: p.name.clone(), usable: usable(&p.specs).min(caps.get(id).copied().unwrap_or(f64::MAX)), rtt: r.get(r.len() / 2).copied().unwrap_or(0.0),
             battery: p.specs["battery"].as_i64().unwrap_or(100),
-            charging: p.specs["charging"].as_bool().unwrap_or(true), host: false });
+            charging: p.specs["charging"].as_bool().unwrap_or(true), host: false, speed_score: chip_speed_score(&p.specs, false) });
     }
     v
 }

@@ -52,8 +52,8 @@ import kotlinx.coroutines.withContext
 
 /** The devices as the planner sees them: this phone as Host, plus every joined Helper. */
 fun meshDevices(me: Specs, peers: Collection<Peer>, hostCap: Long = 0): List<Device> =
-    listOf(Device(me.id, "This phone", if (hostCap > 0) minOf(me.usableBytes, hostCap) else me.usableBytes, isHost = true, heat = me.heat, battery = me.battery, charging = me.charging)) +
-        peers.map { Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging) }
+    listOf(Device(me.id, "This phone", if (hostCap > 0) minOf(me.usableBytes, hostCap) else me.usableBytes, isHost = true, heat = me.heat, battery = me.battery, charging = me.charging, speedScore = ai.maynards.mesh.brain.Planner.chipSpeedScore(me.chip, me.name, true))) +
+        peers.map { Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging, speedScore = ai.maynards.mesh.brain.Planner.chipSpeedScore(it.specs.chip, it.specs.name, false)) }
 
 @Composable
 fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit,

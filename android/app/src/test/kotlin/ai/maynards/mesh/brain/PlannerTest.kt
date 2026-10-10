@@ -119,4 +119,12 @@ class PlannerTest {
         assertTrue(s, s.endsWith("-ngl 0"))
         assertFalse(s.contains("--rpc"))
     }
+
+    @Test fun fastHelperPrioritizedOverSluggishHelper() {
+        val fastIqoo = Device("fast_iqoo", "iQOO 15 Adreno 840", (7.0 * GB).toLong(), speedScore = 3.0)
+        val slowBig = Device("slow_big", "Mid-tier CPU Phone", (8.0 * GB).toLong(), speedScore = 1.0)
+        val p = Planner.plan(coder30b, listOf(host(7.0), slowBig, fastIqoo))
+        assertEquals(3, p.slices.size)
+        assertEquals("fast_iqoo", p.slices[1].deviceId)
+    }
 }

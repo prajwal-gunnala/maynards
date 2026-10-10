@@ -109,9 +109,9 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             val mySpecs = engine.specs()
             val survivors = host.peers.value.values.filter { it.id != leavingId }
             val survivorDevices = listOf(
-                Device(mySpecs.id, "This phone", mySpecs.usableBytes, isHost = true, heat = mySpecs.heat, battery = mySpecs.battery, charging = mySpecs.charging)
+                Device(mySpecs.id, "This phone", mySpecs.usableBytes, isHost = true, heat = mySpecs.heat, battery = mySpecs.battery, charging = mySpecs.charging, speedScore = Planner.chipSpeedScore(mySpecs.chip, mySpecs.name, true))
             ) + survivors.map {
-                Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging)
+                Device(it.id, it.specs.name, it.specs.usableBytes, rttMs = it.rttMs, heat = it.specs.heat, battery = it.specs.battery, charging = it.specs.charging, speedScore = Planner.chipSpeedScore(it.specs.chip, it.specs.name, false))
             }
             val newPlan = Planner.plan(plan.model, survivorDevices, ctx)
             if (newPlan.verdict != Verdict.NOT_POSSIBLE) {
