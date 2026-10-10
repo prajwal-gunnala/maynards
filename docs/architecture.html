@@ -1,0 +1,729 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MeshAI — Finale Architecture</title>
+<style>
+  :root{
+    --paper:#fbfaf8; --ink:#17171a; --ink2:#44464b; --ink3:#73767d;
+    --rule:#dcd8d2; --card:#ffffff; --code:#f4f2ee;
+    --accent:#8b2f2f; --mesh:#1d5c8f; --new:#1f6f4a; --warn:#9a6508; --bad:#a32c2c;
+    --spider:#5b3a8e;
+    --serif:ui-serif,Charter,"Bitstream Charter",Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,"Inter",-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+    --paper:#111113; --ink:#ececee; --ink2:#b4b6bb; --ink3:#83868d;
+    --rule:#2b2c30; --card:#17181b; --code:#1c1d21;
+    --accent:#e08585; --mesh:#6fb3e8; --new:#64c79a; --warn:#e0ad52; --bad:#e58a8a;
+    --spider:#b093e0;
+  }}
+  :root[data-theme=dark]{
+    --paper:#111113; --ink:#ececee; --ink2:#b4b6bb; --ink3:#83868d;
+    --rule:#2b2c30; --card:#17181b; --code:#1c1d21;
+    --accent:#e08585; --mesh:#6fb3e8; --new:#64c79a; --warn:#e0ad52; --bad:#e58a8a;
+    --spider:#b093e0;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+       font-size:17px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:860px;margin:0 auto;padding:0 24px 120px}
+
+  /* ---------- masthead ---------- */
+  header{padding:56px 0 28px;border-bottom:2px solid var(--ink);margin-bottom:36px}
+  .kicker{font-family:var(--sans);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+          color:var(--accent);font-weight:650;margin-bottom:14px}
+  h1{font-size:40px;line-height:1.12;margin:0 0 10px;letter-spacing:-.018em;font-weight:600}
+  .sub{font-size:19px;color:var(--ink2);margin:0 0 22px;font-style:italic;line-height:1.45}
+  .meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-family:var(--sans);font-size:12.5px;color:var(--ink3)}
+  .meta b{color:var(--ink);font-weight:600}
+
+  /* ---------- clock ---------- */
+  .clock{margin:26px 0 0;background:var(--card);border:1px solid var(--rule);border-radius:10px;
+         padding:16px 18px;display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+  .clock .big{font-family:var(--mono);font-size:30px;font-weight:600;color:var(--accent);
+              font-variant-numeric:tabular-nums;line-height:1}
+  .clock .lbl{font-family:var(--sans);font-size:12px;color:var(--ink3);line-height:1.45}
+  .bar{flex:1 1 220px;min-width:180px;height:8px;background:var(--code);border-radius:99px;overflow:hidden}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--warn))}
+
+  /* ---------- structure ---------- */
+  h2{font-family:var(--sans);font-size:13px;letter-spacing:.1em;text-transform:uppercase;
+     color:var(--accent);font-weight:650;margin:58px 0 6px;padding-bottom:7px;border-bottom:1px solid var(--rule)}
+  h3{font-size:25px;margin:34px 0 8px;letter-spacing:-.012em;font-weight:600;line-height:1.25}
+  h4{font-family:var(--sans);font-size:15px;margin:26px 0 6px;font-weight:650;letter-spacing:-.005em}
+  p{margin:0 0 15px}
+  a{color:var(--mesh)}
+  .lede{font-size:19px;color:var(--ink2);line-height:1.55}
+  ul,ol{margin:0 0 15px;padding-left:22px}
+  li{margin-bottom:7px}
+  code{font-family:var(--mono);font-size:.855em;background:var(--code);padding:.13em .38em;
+       border-radius:4px;border:1px solid var(--rule)}
+  pre{font-family:var(--mono);font-size:12.5px;line-height:1.62;background:var(--code);
+      border:1px solid var(--rule);border-left:3px solid var(--mesh);border-radius:7px;
+      padding:15px 17px;overflow-x:auto;margin:0 0 18px}
+  pre code{background:none;border:none;padding:0;font-size:inherit}
+  .cm{color:var(--ink3);font-style:italic}
+  .k{color:var(--accent)}
+
+  /* ---------- figures ---------- */
+  figure{margin:30px 0 32px}
+  .fbox{background:var(--card);border:1px solid var(--rule);border-radius:10px;padding:22px 18px 10px}
+  figure svg{display:block;width:100%;height:auto;overflow:visible}
+  figcaption{font-size:14px;color:var(--ink3);margin-top:13px;line-height:1.5;padding:0 2px}
+  figcaption b{font-family:var(--sans);font-size:12px;letter-spacing:.07em;text-transform:uppercase;
+               color:var(--accent);font-weight:650;display:block;margin-bottom:4px}
+
+  /* ---------- tables ---------- */
+  table{width:100%;border-collapse:collapse;margin:20px 0 24px;font-family:var(--sans);font-size:13.5px}
+  th{text-align:left;font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);
+     font-weight:650;padding:0 10px 8px 0;border-bottom:1.5px solid var(--ink2)}
+  td{padding:10px 10px 10px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink2)}
+  td b,td strong{color:var(--ink);font-weight:650}
+  tr:last-child td{border-bottom:none}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  /* ---------- callouts ---------- */
+  .note{background:var(--card);border:1px solid var(--rule);border-left:3px solid var(--mesh);
+        border-radius:7px;padding:15px 18px;margin:20px 0;font-size:15.5px;color:var(--ink2)}
+  .note.warn{border-left-color:var(--warn)}
+  .note.bad{border-left-color:var(--bad)}
+  .note.good{border-left-color:var(--new)}
+  .note .t{font-family:var(--sans);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+           font-weight:650;display:block;margin-bottom:6px}
+  .note.warn .t{color:var(--warn)} .note.bad .t{color:var(--bad)}
+  .note.good .t{color:var(--new)} .note .t{color:var(--mesh)}
+
+  .pill{display:inline-block;font-family:var(--sans);font-size:10.5px;letter-spacing:.06em;
+        text-transform:uppercase;font-weight:650;padding:2.5px 8px;border-radius:99px;
+        border:1px solid currentColor;vertical-align:1px}
+  .p-new{color:var(--new)} .p-old{color:var(--ink3)} .p-risk{color:var(--warn)} .p-bad{color:var(--bad)}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:22px 0}
+  @media(max-width:700px){.cols{grid-template-columns:1fr}}
+  .cardlet{background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:15px 16px}
+  .cardlet h5{font-family:var(--sans);font-size:13px;margin:0 0 7px;font-weight:650;color:var(--ink)}
+  .cardlet p{font-size:14.5px;margin:0;color:var(--ink2)}
+
+  .toggle{position:fixed;top:16px;right:16px;z-index:9;font-family:var(--sans);font-size:11px;
+          letter-spacing:.06em;text-transform:uppercase;background:var(--card);color:var(--ink2);
+          border:1px solid var(--rule);border-radius:99px;padding:7px 13px;cursor:pointer}
+  .toggle:hover{color:var(--ink)}
+  footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--rule);
+         font-family:var(--sans);font-size:12.5px;color:var(--ink3);line-height:1.6}
+
+  /* svg type */
+  .svg-t{font-family:var(--sans);font-size:12px;font-weight:600}
+  .svg-s{font-family:var(--sans);font-size:10.5px}
+  .svg-m{font-family:var(--mono);font-size:10.5px}
+</style>
+
+<button class="toggle" onclick="var r=document.documentElement,d=r.getAttribute('data-theme')==='dark';r.setAttribute('data-theme',d?'light':'dark')">◐ theme</button>
+
+<div class="wrap">
+<header>
+  <div class="kicker">Team Maynards · iQOO Hackathon 2026 · Finale</div>
+  <h1>Building a market out of a mesh</h1>
+  <p class="sub">Architecture for everything to be built between Friday 17:00 and Sunday 17:00 — the Ned&nbsp;Capsule, remote joining, the supervisor, and metering.</p>
+  <div class="meta">
+    <span><b>Written</b> Sat 10 Oct 2026, 07:25 IST</span>
+    <span><b>Base</b> <code>f0cfd99</code></span>
+    <span><b>Hardware</b> 1 laptop · 2 × iQOO 15</span>
+    <span><b>Model</b> Qwen3-Coder-30B-A3B, Q4_K_M, 18.56 GB</span>
+  </div>
+  <div class="clock">
+    <div><div class="big" id="left">—</div><div class="lbl">hours remaining</div></div>
+    <div class="bar"><i id="fill" style="width:0"></i></div>
+    <div class="lbl" id="note">window: Fri 09 Oct 17:00 → Sun 11 Oct 17:00</div>
+  </div>
+</header>
+
+<p class="lede">Only work built inside the window can be pitched. Everything below is new. The system it
+attaches to — a 30-billion-parameter model split across a laptop and two phones — already exists, and is
+the <em>stage</em> rather than the pitch.</p>
+
+<div class="note"><span class="t">The before and after, in one line</span>
+Today a phone is handed <b>three fields</b>. By Sunday it is handed <b>a contract</b>, over a link it
+dialled from anywhere, and it keeps working when someone unplugs it.</div>
+
+<!-- =================== 1 =================== -->
+<h2>1 · What exists today</h2>
+<h3>The stage, not the pitch</h3>
+
+<p>A transformer is a stack of layers a token passes through in order, so the layers can live on different
+machines. Our 48-layer model is cut three ways. Only the token's hidden state crosses each boundary —
+<code>hidden_size × 2 bytes</code> = <b>4&nbsp;KB</b> — because every device already holds its own weights
+locally.</p>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 310" role="img" aria-label="Current mesh architecture">
+  <defs>
+    <marker id="a1" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="var(--mesh)"/></marker>
+    <marker id="a2" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="var(--ink3)"/></marker>
+  </defs>
+
+  <!-- user -->
+  <circle cx="44" cy="96" r="17" fill="none" stroke="var(--ink2)" stroke-width="1.5"/>
+  <circle cx="44" cy="90" r="5.5" fill="var(--ink2)"/>
+  <path d="M34,105 a10,8 0 0,1 20,0" fill="var(--ink2)"/>
+  <text class="svg-s" x="44" y="130" fill="var(--ink3)" text-anchor="middle">user / agent</text>
+  <line x1="64" y1="96" x2="112" y2="96" stroke="var(--mesh)" stroke-width="1.6" marker-end="url(#a1)"/>
+
+  <!-- laptop / host -->
+  <rect x="120" y="36" width="180" height="150" rx="9" fill="var(--card)" stroke="var(--mesh)" stroke-width="1.8"/>
+  <rect x="139" y="52" width="60" height="38" rx="3" fill="none" stroke="var(--mesh)" stroke-width="1.4"/>
+  <path d="M133,94 h72 l-6,-4 h-60 Z" fill="var(--mesh)" opacity=".75"/>
+  <text class="svg-t" x="212" y="68" fill="var(--ink)">LAPTOP</text>
+  <text class="svg-s" x="212" y="83" fill="var(--ink3)">host</text>
+  <text class="svg-m" x="139" y="117" fill="var(--ink2)">layers 0–8</text>
+  <text class="svg-m" x="139" y="134" fill="var(--ink2)">+ embeddings</text>
+  <text class="svg-m" x="139" y="151" fill="var(--ink2)">+ output head</text>
+  <text class="svg-m" x="139" y="172" fill="var(--accent)">4.09 GB</text>
+
+  <!-- phone A -->
+  <rect x="368" y="36" width="118" height="150" rx="9" fill="var(--card)" stroke="var(--spider)" stroke-width="1.8"/>
+  <rect x="396" y="50" width="62" height="42" rx="6" fill="none" stroke="var(--spider)" stroke-width="1.4"/>
+  <line x1="414" y1="56" x2="440" y2="56" stroke="var(--spider)" stroke-width="1.4"/>
+  <text class="svg-t" x="427" y="112" fill="var(--ink)" text-anchor="middle">PHONE A</text>
+  <text class="svg-m" x="427" y="132" fill="var(--ink2)" text-anchor="middle">layers 9–27</text>
+  <text class="svg-m" x="427" y="152" fill="var(--accent)" text-anchor="middle">6.41 GB</text>
+  <text class="svg-s" x="427" y="172" fill="var(--ink3)" text-anchor="middle">·8a75</text>
+
+  <!-- phone B -->
+  <rect x="554" y="36" width="118" height="150" rx="9" fill="var(--card)" stroke="var(--spider)" stroke-width="1.8"/>
+  <rect x="582" y="50" width="62" height="42" rx="6" fill="none" stroke="var(--spider)" stroke-width="1.4"/>
+  <line x1="600" y1="56" x2="626" y2="56" stroke="var(--spider)" stroke-width="1.4"/>
+  <text class="svg-t" x="613" y="112" fill="var(--ink)" text-anchor="middle">PHONE B</text>
+  <text class="svg-m" x="613" y="132" fill="var(--ink2)" text-anchor="middle">layers 28–47</text>
+  <text class="svg-m" x="613" y="152" fill="var(--accent)" text-anchor="middle">7.33 GB</text>
+  <text class="svg-s" x="613" y="172" fill="var(--ink3)" text-anchor="middle">·8373</text>
+
+  <!-- 4KB hops -->
+  <line x1="300" y1="100" x2="360" y2="100" stroke="var(--mesh)" stroke-width="1.6" marker-end="url(#a1)"/>
+  <text class="svg-m" x="330" y="92" fill="var(--mesh)" text-anchor="middle">4 KB</text>
+  <line x1="486" y1="100" x2="546" y2="100" stroke="var(--mesh)" stroke-width="1.6" marker-end="url(#a1)"/>
+  <text class="svg-m" x="516" y="92" fill="var(--mesh)" text-anchor="middle">4 KB</text>
+  <!-- return -->
+  <path d="M660,196 L660,214 L210,214 L210,192" fill="none" stroke="var(--mesh)" stroke-width="1.3"
+        stroke-dasharray="4 3" marker-end="url(#a1)"/>
+  <text class="svg-s" x="435" y="228" fill="var(--mesh)" text-anchor="middle">next word</text>
+
+  <!-- control link -->
+  <path d="M210,250 L613,250" stroke="var(--ink3)" stroke-width="1.2" stroke-dasharray="2 4"/>
+  <line x1="210" y1="250" x2="210" y2="238" stroke="var(--ink3)" stroke-width="1.2" marker-end="url(#a2)"/>
+  <text class="svg-s" x="410" y="266" fill="var(--ink3)" text-anchor="middle">
+    control link, port 7070 — memory · heat · battery · latency, every 2 s</text>
+  <text class="svg-s" x="410" y="284" fill="var(--ink3)" text-anchor="middle">
+    USB tethering · 2–3 ms · 24 MB/s</text>
+</svg>
+</div>
+<figcaption><b>Figure 1 — the mesh as it stands</b>
+Pipeline parallelism: two boundaries per token, 4 KB each. The control link is separate from the data
+path, which is why a phone's temperature can be known without disturbing the run. Memory figures are
+measured RSS from the 27 Sep 01:25 run — the phones hold <b>13.74 of 18.56 GB, 74% of the model</b>.</figcaption>
+</figure>
+
+<div class="note good"><span class="t">Why it is usable and not merely clever</span>
+Pooling solves <b>capacity</b>. Mixture-of-Experts solves <b>bandwidth</b>: the model activates 3.3B of its
+30.5B parameters per token, so it reads ~2.0 GB where a dense model would read 18.56 — about <b>9× less
+memory traffic</b>. Adding phones adds capacity and almost no bandwidth, because in a pipeline the devices
+take turns. Both are needed; neither suffices.</div>
+
+<!-- =================== 2 =================== -->
+<h2>2 · Part one — the Ned Capsule</h2>
+<h3>From three fields to a contract <span class="pill p-new">new</span></h3>
+
+<p>The planner currently sends this, and nothing else — <code>host.rs:668</code>:</p>
+<pre><code>json!({<span class="k">"t"</span>: "run", <span class="k">"layers"</span>: "9-27", <span class="k">"model"</span>: "Qwen3-Coder-30B-A3B"})</code></pre>
+
+<p>Every other decision — which backend, how many threads, how much cache, when to stop for heat — is a
+constant compiled into the phone. The capsule makes those decisions <em>the planner's output</em>, chosen
+per device.</p>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 300" role="img" aria-label="Before and after the capsule">
+  <text class="svg-t" x="12" y="18" fill="var(--ink3)">BEFORE</text>
+  <rect x="12" y="30" width="330" height="76" rx="7" fill="var(--code)" stroke="var(--rule)"/>
+  <text class="svg-m" x="28" y="56" fill="var(--ink2)">t: "run"</text>
+  <text class="svg-m" x="28" y="74" fill="var(--ink2)">layers: "9-27"</text>
+  <text class="svg-m" x="28" y="92" fill="var(--ink2)">model: "Qwen3-Coder-30B-A3B"</text>
+  <text class="svg-s" x="12" y="128" fill="var(--ink3)">3 fields · everything else is a constant on the phone</text>
+
+  <text class="svg-t" x="430" y="18" fill="var(--new)">AFTER</text>
+  <rect x="430" y="30" width="358" height="250" rx="7" fill="var(--card)" stroke="var(--new)" stroke-width="1.6"/>
+  <text class="svg-m" x="446" y="52" fill="var(--ink2)">capsule_id: "a3f9…"   <tspan fill="var(--ink3)">← stale ones ignored</tspan></text>
+  <text class="svg-m" x="446" y="72" fill="var(--ink2)">layers: { from: 9, to: 28 }</text>
+  <text class="svg-m" x="446" y="92" fill="var(--ink2)">runtime: { backend, threads, kv_type }</text>
+  <text class="svg-m" x="446" y="112" fill="var(--ink2)">memory: { kv_budget, reserve, offer_cap }</text>
+  <text class="svg-m" x="446" y="132" fill="var(--ink2)">network: { upstream, rtt_ceiling, relay }</text>
+  <text class="svg-m" x="446" y="152" fill="var(--ink2)">limits: { thermal_ceiling, min_battery }</text>
+  <text class="svg-m" x="446" y="172" fill="var(--ink2)">telemetry: [ tok_s, ram, heat, … ]</text>
+  <text class="svg-m" x="446" y="192" fill="var(--spider)">why: "19 layers here because you</text>
+  <text class="svg-m" x="446" y="208" fill="var(--spider)">      have the most free memory"</text>
+  <line x1="446" y1="226" x2="772" y2="226" stroke="var(--rule)"/>
+  <text class="svg-s" x="446" y="246" fill="var(--new)">configuration, not weights —</text>
+  <text class="svg-s" x="446" y="262" fill="var(--ink3)">the phone already holds every layer</text>
+
+  <path d="M352,68 L420,68" stroke="var(--new)" stroke-width="1.8" marker-end="url(#a1)"/>
+</svg>
+</div>
+<figcaption><b>Figure 2 — the capsule carries configuration, not weights</b>
+This is the decision that makes it affordable. The layer store caches <em>every</em> layer on <em>every</em>
+phone, which is why a re-plan costs 70 s rather than 437 s. So the capsule says which already-held layers
+to activate and how to run them — and re-issuing one costs an engine restart, not a transfer. A TensorRT
+engine is compiled configuration too, not weights.</figcaption>
+</figure>
+
+<h4>Where it lives</h4>
+<table>
+<tr><th>Piece</th><th>File</th><th>Change</th></tr>
+<tr><td><b>Emit</b></td><td class="num">agent/src/host.rs</td><td><code>plan()</code> → <code>capsule_for()</code>. Every field is already computed and then thrown away.</td></tr>
+<tr><td><b>Send</b></td><td class="num">host.rs:668</td><td><code>"run"</code> → <code>"capsule"</code>, keeping <code>"run"</code> accepted for one version so an un-updated phone still works.</td></tr>
+<tr><td><b>Enact</b></td><td class="num">brain/Runner.kt<br>brain/EngineArgs.kt</td><td>Backend, threads and KV type stop being constants and come from the capsule.</td></tr>
+<tr><td><b>Show</b></td><td class="num">agent/src/host.html</td><td>A card per device, and a before/after diff after a re-plan. Not optional — it is what makes it pitchable.</td></tr>
+</table>
+
+<div class="note warn"><span class="t">The honest caveat</span>
+The genuinely new capability is <b>per-device backend choice</b> — today both phones run the identical
+generic <code>ggml-rpc-server</code>. Whether Vulkan beats CPU differs by chip, and <b>nobody has measured
+it on these two phones.</b> The benefit may be zero or negative. That measurement is itself a deliverable:
+if the two phones <em>disagree</em> about which backend is faster, that single fact justifies the whole
+idea.</div>
+
+<!-- =================== 3 =================== -->
+<h2>3 · Part two — remote join by relay</h2>
+<h3>A phone that is not on your cable <span class="pill p-new">new</span></h3>
+
+<p><code>ggml-rpc</code> speaks raw TCP. So this needs <b>no WebRTC and no change to llama.cpp</b>: both
+sides dial <em>outward</em> to a relay, which splices the two sockets. llama.cpp still believes it opened
+an ordinary socket to a peer.</p>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 270" role="img" aria-label="Relay architecture">
+  <!-- NAT boxes -->
+  <rect x="14" y="54" width="214" height="150" rx="8" fill="none" stroke="var(--rule)"
+        stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text class="svg-s" x="121" y="46" fill="var(--ink3)" text-anchor="middle">carrier NAT · mobile data</text>
+  <rect x="572" y="54" width="214" height="150" rx="8" fill="none" stroke="var(--rule)"
+        stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text class="svg-s" x="679" y="46" fill="var(--ink3)" text-anchor="middle">home router · NAT</text>
+
+  <!-- phone -->
+  <rect x="80" y="86" width="82" height="92" rx="8" fill="var(--card)" stroke="var(--spider)" stroke-width="1.8"/>
+  <rect x="98" y="98" width="46" height="34" rx="5" fill="none" stroke="var(--spider)" stroke-width="1.3"/>
+  <text class="svg-t" x="121" y="152" fill="var(--ink)" text-anchor="middle">PHONE</text>
+  <text class="svg-s" x="121" y="168" fill="var(--ink3)" text-anchor="middle">a stranger's</text>
+
+  <!-- laptop -->
+  <rect x="638" y="86" width="82" height="92" rx="8" fill="var(--card)" stroke="var(--mesh)" stroke-width="1.8"/>
+  <rect x="654" y="98" width="50" height="32" rx="3" fill="none" stroke="var(--mesh)" stroke-width="1.3"/>
+  <text class="svg-t" x="679" y="152" fill="var(--ink)" text-anchor="middle">HOST</text>
+  <text class="svg-s" x="679" y="168" fill="var(--ink3)" text-anchor="middle">the mesh</text>
+
+  <!-- relay -->
+  <rect x="330" y="78" width="140" height="108" rx="9" fill="var(--card)" stroke="var(--new)" stroke-width="2"/>
+  <circle cx="400" cy="108" r="13" fill="none" stroke="var(--new)" stroke-width="1.6"/>
+  <path d="M393,108 h14 M400,101 v14" stroke="var(--new)" stroke-width="1.6"/>
+  <text class="svg-t" x="400" y="142" fill="var(--ink)" text-anchor="middle">RELAY</text>
+  <text class="svg-s" x="400" y="158" fill="var(--ink3)" text-anchor="middle">public · ~200 lines</text>
+  <text class="svg-s" x="400" y="174" fill="var(--ink3)" text-anchor="middle">a socket pump</text>
+
+  <!-- dial-out arrows, both inward to relay -->
+  <path d="M166,122 L322,112" stroke="var(--new)" stroke-width="2" marker-end="url(#a1)"/>
+  <text class="svg-s" x="238" y="106" fill="var(--new)" text-anchor="middle">dials out</text>
+  <path d="M634,122 L478,112" stroke="var(--new)" stroke-width="2" marker-end="url(#a1)"/>
+  <text class="svg-s" x="556" y="106" fill="var(--new)" text-anchor="middle">dials out</text>
+
+  <!-- spliced -->
+  <path d="M166,152 C250,196 550,196 634,152" fill="none" stroke="var(--mesh)" stroke-width="1.6"
+        stroke-dasharray="5 4"/>
+  <text class="svg-m" x="400" y="206" fill="var(--mesh)" text-anchor="middle">
+    one logical TCP connection · 4 KB per token</text>
+
+  <line x1="40" y1="234" x2="760" y2="234" stroke="var(--rule)"/>
+  <text class="svg-s" x="40" y="254" fill="var(--ink3)">
+    Neither side needs a public address, a forwarded port, or a router change. Pairing reuses the mesh id and one-time token the QR already carries.</text>
+</svg>
+</div>
+<figcaption><b>Figure 3 — the relay</b>
+Two channels need splicing: the control link on 7070 and the engine's RPC socket. Same mechanism, twice.
+<b>TLS is not optional on a public relay</b>, because hidden states can be inverted back to the original
+text — so the relay operator must be either trusted or cryptographically excluded.</figcaption>
+</figure>
+
+<h4>What to expect, from published numbers</h4>
+<table>
+<tr><th>Condition</th><th class="num">Throughput</th><th>Source</th></tr>
+<tr><td>Petals, 10 × RTX 3090, fast link</td><td class="num">1.65 steps/s</td><td>arXiv 2312.08361, Table 3</td></tr>
+<tr><td>Same, at <b>100 ms RTT</b></td><td class="num">0.34 steps/s</td><td>same — a 5× penalty, but it <em>worked</em></td></tr>
+<tr><td>Petals across two continents, 176B</td><td class="num">0.83 tok/s</td><td>same, 14 heterogeneous servers</td></tr>
+<tr><td><b>Us, predicted, one remote device at 50 ms</b></td><td class="num">~5 tok/s</td><td>from 6.8 — one extra boundary per token</td></tr>
+<tr><td><b>Us, predicted, at 100 ms</b></td><td class="num">~4 tok/s</td><td>degraded, not broken</td></tr>
+</table>
+
+<div class="note bad"><span class="t">The real risk is jitter, not latency</span>
+Our 94-second Wi-Fi failure had <b>stalls up to 10.5 seconds</b> — that is not latency, it is a stall.
+Stable 50 ms is fine; a flaky link is not. Which is exactly what part three is for. And an agent task
+running for seven minutes cannot tell 4 tok/s from 6.8.</div>
+
+<!-- =================== 4 =================== -->
+<h2>4 · Part three — the supervisor</h2>
+<h3>Surviving a device that leaves <span class="pill p-new">new</span> <span class="pill p-risk">prerequisite</span></h3>
+
+<p>This is not currently a degraded case. It is a crash, in three places at once:</p>
+
+<table>
+<tr><th>Where</th><th>What happens</th></tr>
+<tr><td class="num">Runner.kt:91-94</td><td><code>// 4. a helper leaving mid-run ends the run</code> → <code>fail("A helper left")</code> — by explicit design</td></tr>
+<tr><td class="num">host.rs:532</td><td><code>lost_layers</code> → <code>stop()</code> with <em>"press Start again"</em></td></tr>
+<tr><td class="num">ggml-rpc.cpp</td><td>every client call wrapped in <code>RPC_STATUS_ASSERT</code> → <b><code>GGML_ABORT</code></b>. The process <em>dies</em>. No retry anywhere.</td></tr>
+</table>
+
+<p>A remote phone on mobile data <em>will</em> drop. So without this, part two is a demo that breaks on
+stage.</p>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 330" role="img" aria-label="Recovery sequence">
+  <rect x="24" y="16" width="200" height="42" rx="7" fill="var(--card)" stroke="var(--rule)"/>
+  <text class="svg-t" x="124" y="42" fill="var(--ink2)" text-anchor="middle">request in flight</text>
+
+  <!-- lightning -->
+  <path d="M300,20 l-16,30 h13 l-10,26 24,-34 h-13 Z" fill="var(--bad)"/>
+  <text class="svg-s" x="330" y="40" fill="var(--bad)">cable pulled · link gone</text>
+  <text class="svg-m" x="330" y="58" fill="var(--bad)">GGML_ABORT — llama-server dies</text>
+
+  <line x1="124" y1="58" x2="124" y2="84" stroke="var(--ink3)" stroke-width="1.4" marker-end="url(#a2)"/>
+
+  <!-- steps -->
+  <g>
+    <rect x="24" y="84" width="268" height="36" rx="6" fill="var(--card)" stroke="var(--mesh)"/>
+    <text class="svg-m" x="38" y="107" fill="var(--mesh)">1</text>
+    <text class="svg-t" x="58" y="107" fill="var(--ink)">detect</text>
+    <text class="svg-s" x="128" y="107" fill="var(--ink3)">watchdog, every 2 s — already exists</text>
+
+    <rect x="24" y="130" width="268" height="36" rx="6" fill="var(--card)" stroke="var(--mesh)"/>
+    <text class="svg-m" x="38" y="153" fill="var(--mesh)">2</text>
+    <text class="svg-t" x="58" y="153" fill="var(--ink)">classify</text>
+    <text class="svg-s" x="128" y="153" fill="var(--ink3)">a blip, or a departure?</text>
+
+    <rect x="24" y="176" width="268" height="36" rx="6" fill="var(--card)" stroke="var(--mesh)"/>
+    <text class="svg-m" x="38" y="199" fill="var(--mesh)">3</text>
+    <text class="svg-t" x="58" y="199" fill="var(--ink)">re-plan</text>
+    <text class="svg-s" x="128" y="199" fill="var(--ink3)">plan() without the lost device</text>
+
+    <rect x="24" y="222" width="268" height="36" rx="6" fill="var(--card)" stroke="var(--new)"/>
+    <text class="svg-m" x="38" y="245" fill="var(--new)">4</text>
+    <text class="svg-t" x="58" y="245" fill="var(--ink)">re-emit</text>
+    <text class="svg-s" x="128" y="245" fill="var(--ink3)">new capsules to the survivors</text>
+
+    <rect x="24" y="268" width="268" height="36" rx="6" fill="var(--card)" stroke="var(--new)"/>
+    <text class="svg-m" x="38" y="291" fill="var(--new)">5</text>
+    <text class="svg-t" x="58" y="291" fill="var(--ink)">restart</text>
+    <text class="svg-s" x="128" y="291" fill="var(--ink3)">~70 s — layers already local</text>
+  </g>
+
+  <!-- step 6 highlighted -->
+  <rect x="330" y="176" width="250" height="82" rx="8" fill="var(--card)" stroke="var(--accent)" stroke-width="2"/>
+  <text class="svg-m" x="346" y="200" fill="var(--accent)">6</text>
+  <text class="svg-t" x="368" y="200" fill="var(--ink)">replay</text>
+  <text class="svg-s" x="346" y="222" fill="var(--ink2)">re-issue the in-flight request,</text>
+  <text class="svg-s" x="346" y="238" fill="var(--ink2)">so the user gets an answer —</text>
+  <text class="svg-s" x="346" y="254" fill="var(--accent)">not an error</text>
+  <path d="M292,240 L322,218" stroke="var(--accent)" stroke-width="1.6" marker-end="url(#a1)"/>
+
+  <!-- branch: doesn't fit -->
+  <rect x="330" y="84" width="250" height="68" rx="8" fill="var(--card)" stroke="var(--warn)"/>
+  <text class="svg-s" x="346" y="106" fill="var(--warn)">if it no longer fits:</text>
+  <text class="svg-m" x="346" y="126" fill="var(--ink2)">"short by 2.4 GB"</text>
+  <text class="svg-s" x="346" y="144" fill="var(--ink3)">plan() already computes this</text>
+  <path d="M292,194 L322,130" stroke="var(--warn)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#a1)"/>
+
+  <!-- outcome -->
+  <rect x="616" y="196" width="168" height="44" rx="8" fill="var(--card)" stroke="var(--new)" stroke-width="2"/>
+  <text class="svg-t" x="700" y="216" fill="var(--new)" text-anchor="middle">answer completes</text>
+  <text class="svg-s" x="700" y="232" fill="var(--ink3)" text-anchor="middle">on two devices</text>
+  <path d="M582,218 L608,218" stroke="var(--new)" stroke-width="1.8" marker-end="url(#a1)"/>
+</svg>
+</div>
+<figcaption><b>Figure 4 — the recovery path</b>
+Step 6 is what turns a recovery into a demo: recovering silently and still returning an error is a failure
+from the user's seat. Step 2 matters because over-reacting is as bad as under-reacting — a two-second blip
+must not trigger a seventy-second rebuild, and the existing reconnect tolerance
+(<code>host.rs:523-526</code>) is the right signal to key off.</figcaption>
+</figure>
+
+<!-- =================== 5 =================== -->
+<h2>5 · Part four — metering and earnings</h2>
+<h3>The business, on a screen <span class="pill p-new">new</span></h3>
+
+<p>Everything here comes from data <code>tell_phones()</code> already broadcasts every two seconds. The
+work is accumulating it, persisting it, and showing it.</p>
+
+<div class="cols">
+<div class="cardlet"><h5>GB-hours held</h5><p>The unit that <em>should</em> be billed. Memory at rest costs
+about <b>$0.168 per GB-month</b> — five cents of electricity plus a salvage phone over two years.</p></div>
+<div class="cardlet"><h5>Tokens served</h5><p>A separate line, because this is the unit that <em>burns
+battery</em>. At full duty a phone consumes 13% of its battery life per month.</p></div>
+<div class="cardlet"><h5>Uptime and quiet periods</h5><p>Reliability is what a renter is actually buying.
+A 94% worst-case node across three devices is a 17% chance of a degraded stream.</p></div>
+<div class="cardlet"><h5>Share of the model carried</h5><p>74% on phones is the claim. This is the running
+evidence for it.</p></div>
+</div>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 180" role="img" aria-label="Price band">
+  <line x1="60" y1="120" x2="760" y2="120" stroke="var(--rule)" stroke-width="2"/>
+  <g text-anchor="middle">
+    <circle cx="90" cy="120" r="6" fill="var(--new)"/>
+    <text class="svg-m" x="90" y="100" fill="var(--new)">$0.168</text>
+    <text class="svg-s" x="90" y="142" fill="var(--ink3)">phone at rest</text>
+    <text class="svg-s" x="90" y="158" fill="var(--ink3)">(our cost)</text>
+
+    <circle cx="330" cy="120" r="6" fill="var(--mesh)"/>
+    <text class="svg-m" x="330" y="100" fill="var(--mesh)">$2.33</text>
+    <text class="svg-s" x="330" y="142" fill="var(--ink3)">owned RTX 3090</text>
+    <text class="svg-s" x="330" y="158" fill="var(--ink3)">14× more</text>
+
+    <circle cx="620" cy="120" r="6" fill="var(--warn)"/>
+    <text class="svg-m" x="620" y="100" fill="var(--warn)">$6.19</text>
+    <text class="svg-s" x="620" y="142" fill="var(--ink3)">cheapest cloud spot</text>
+    <text class="svg-s" x="620" y="158" fill="var(--ink3)">37× more</text>
+  </g>
+  <rect x="96" y="112" width="518" height="16" fill="var(--new)" opacity=".13"/>
+  <text class="svg-s" x="355" y="76" fill="var(--ink2)" text-anchor="middle">the price sits somewhere in here — dollars per GB per month</text>
+</svg>
+</div>
+<figcaption><b>Figure 5 — where a price can sit</b>
+The floor is what it costs us; the ceiling is what the alternative costs. The framing that goes on the
+screen beside the meter: <b>bill for residency, not tokens</b> — memory at rest is nearly free, and
+computing is what consumes the asset.</figcaption>
+</figure>
+
+<!-- =================== 6 =================== -->
+<h2>6 · Part five — two measurements</h2>
+<h3>Hours, not days — and nobody has these numbers <span class="pill p-new">new</span></h3>
+
+<table>
+<tr><th>Experiment</th><th>Command / change</th><th class="num">Expected</th></tr>
+<tr>
+  <td><b>NCM instead of RNDIS</b><br><span style="color:var(--ink3)">Android defaults to RNDIS, which sends one Ethernet frame per USB transfer</span></td>
+  <td><code>adb shell settings put global tether_force_usb_functions 1</code><br>
+      then restart tethering. Check <code>lsusb -t</code> for <code>480M</code> vs <code>5000M</code> first.</td>
+  <td class="num"><b>~1.5×</b><br>24 → ~35 MB/s<br><span style="color:var(--ink3)">5–10× if the port is really USB 3</span></td>
+</tr>
+<tr>
+  <td><b>Our own prefill parallelism</b><br><span style="color:var(--ink3)">We disable it ourselves</span></td>
+  <td>We pass <code>--override-tensor</code>, which trips llama.cpp's
+      <code>!model.has_tensor_overrides()</code> gate. Place the head differently, set
+      <code>-b 4096 -ub 256</code>, grep the log for <code>pipeline parallelism enabled</code>.</td>
+  <td class="num"><b>unknown</b><br><span style="color:var(--ink3)">one published RPC benchmark showed prefill flat: 28.2 → 29.5</span></td>
+</tr>
+</table>
+
+<div class="note"><span class="t">Why the second one is worth two hours anyway</span>
+Prefill is 19–21 tok/s today, and reading the prompt is most of what an autonomous agent does. We have been
+running it strictly sequentially, device by device, because of a flag we added for memory reasons. It may
+turn out to be nothing — but it is a flag, not a rewrite.</div>
+
+<!-- =================== 7 =================== -->
+<h2>7 · Time, and what gets cut</h2>
+<h3>22–29 hours of work against 20–24 available</h3>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 250" role="img" aria-label="Schedule">
+  <!-- axis -->
+  <line x1="150" y1="36" x2="150" y2="214" stroke="var(--rule)"/>
+  <line x1="150" y1="214" x2="770" y2="214" stroke="var(--rule)"/>
+  <g class="svg-s" fill="var(--ink3)" text-anchor="middle">
+    <text x="150" y="232">0 h</text><text x="300" y="232">6</text>
+    <text x="450" y="232">12</text><text x="600" y="232">18</text><text x="750" y="232">24</text>
+  </g>
+  <!-- available line -->
+  <line x1="700" y1="30" x2="700" y2="214" stroke="var(--bad)" stroke-width="1.4" stroke-dasharray="5 4"/>
+  <text class="svg-s" x="696" y="26" fill="var(--bad)" text-anchor="end">~22 h productive</text>
+
+  <g class="svg-s" fill="var(--ink2)" text-anchor="end">
+    <text x="142" y="52">5 · measurements</text>
+    <text x="142" y="84">2 · relay</text>
+    <text x="142" y="116">3 · supervisor</text>
+    <text x="142" y="148">4 · metering</text>
+    <text x="142" y="180">1 · Ned Capsule</text>
+  </g>
+  <!-- bars: 25px per hour -->
+  <rect x="150" y="40" width="75" height="18" rx="4" fill="var(--new)" opacity=".85"/>
+  <text class="svg-m" x="233" y="54" fill="var(--ink3)">3 h</text>
+
+  <rect x="225" y="72" width="150" height="18" rx="4" fill="var(--mesh)" opacity=".85"/>
+  <text class="svg-m" x="383" y="86" fill="var(--ink3)">4–6 h</text>
+
+  <rect x="375" y="104" width="200" height="18" rx="4" fill="var(--mesh)" opacity=".85"/>
+  <text class="svg-m" x="583" y="118" fill="var(--ink3)">6–8 h</text>
+
+  <rect x="575" y="136" width="100" height="18" rx="4" fill="var(--spider)" opacity=".85"/>
+  <text class="svg-m" x="683" y="150" fill="var(--ink3)">3–4 h</text>
+
+  <rect x="675" y="168" width="200" height="18" rx="4" fill="var(--warn)" opacity=".5"/>
+  <text class="svg-m" x="760" y="182" fill="var(--bad)">6–8 h · overflows</text>
+</svg>
+</div>
+<figcaption><b>Figure 6 — the arithmetic does not close, and that should be decided now</b>
+Five parts total 22–29 hours against 20–24 productive. <b>One of them does not ship.</b> Deciding which at
+07:00 Saturday is a choice; discovering it at 03:00 Sunday is not.</figcaption>
+</figure>
+
+<h4>The order, and the reasoning behind it</h4>
+<ol>
+<li><b>Part 5 first.</b> Three hours, and the results change what is worth optimising afterwards.</li>
+<li><b>Part 2, the relay.</b> Lowest risk, nothing depends on it, and it unlocks the headline.</li>
+<li><b>Part 3, the supervisor.</b> Parts 2 and 3 ship together or not at all — a remote device that kills
+the run when it drops is worse than no remote device.</li>
+<li><b>Part 4, metering.</b> Independent, low risk, degradable to a single screen.</li>
+<li><b>Part 1, the capsule.</b> Most valuable intellectually, most invasive, and invisible without its UI.
+Last, because a half-finished capsule still leaves a working mesh — whereas a half-finished supervisor
+leaves a broken one.</li>
+</ol>
+
+<div class="note good"><span class="t">The safety property throughout</span>
+None of this changes how the model runs. The engine invocation, the layer arithmetic and the layer store
+are untouched. At every point the fallback is the mesh that already works.</div>
+
+<h4>Verification</h4>
+<ul>
+<li><code>cargo test --release</code> and <code>./gradlew testDebugUnitTest assembleDebug</code> green at every commit.</li>
+<li>The relay tested <b>laptop-to-laptop first</b>, before a phone is involved.</li>
+<li>The supervisor tested by <b>actually pulling a cable mid-generation, repeatedly</b> — not simulated.
+This is the feature most likely to work once and fail twice.</li>
+<li>Capsule manifests captured before and after a re-plan, so the mechanism is evidenced rather than described.</li>
+<li>A full dry run of the demo with <b>at least three hours left</b> on the clock.</li>
+</ul>
+
+
+<!-- =================== 8 =================== -->
+<h2>8 · The centrepiece — the mesh paints</h2>
+<h3>A 20-billion-parameter image model, split across two phones <span class="pill p-new">new</span></h3>
+
+<p><code>stable-diffusion.cpp</code> <b>officially supports the ggml RPC backend</b> — merged June 2026,
+a dedicated guide, and a fix merged on 9 October 2026. It reuses <b>llama.cpp's own
+<code>rpc-server</code></b>, which is already running on both phones. So the same mesh that answers
+questions can generate pictures, and the architecture stops looking like an LLM trick and starts looking
+general.</p>
+
+<figure>
+<div class="fbox">
+<svg viewBox="0 0 800 290" role="img" aria-label="Image generation split across devices">
+  <!-- prompt -->
+  <rect x="14" y="40" width="120" height="48" rx="7" fill="var(--card)" stroke="var(--rule)"/>
+  <text class="svg-s" x="74" y="60" fill="var(--ink3)" text-anchor="middle">prompt</text>
+  <text class="svg-m" x="74" y="78" fill="var(--ink2)" text-anchor="middle">"a spider…"</text>
+
+  <!-- te -->
+  <rect x="172" y="28" width="148" height="110" rx="9" fill="var(--card)" stroke="var(--spider)" stroke-width="1.8"/>
+  <text class="svg-t" x="246" y="52" fill="var(--ink)" text-anchor="middle">TEXT ENCODER</text>
+  <text class="svg-s" x="246" y="70" fill="var(--ink3)" text-anchor="middle">Qwen2.5-VL-7B</text>
+  <text class="svg-m" x="246" y="92" fill="var(--accent)" text-anchor="middle">~5 GB</text>
+  <text class="svg-m" x="246" y="118" fill="var(--spider)" text-anchor="middle">PHONE B</text>
+
+  <!-- dit -->
+  <rect x="358" y="28" width="196" height="110" rx="9" fill="var(--card)" stroke="var(--mesh)" stroke-width="2"/>
+  <text class="svg-t" x="456" y="52" fill="var(--ink)" text-anchor="middle">DIFFUSION TRANSFORMER</text>
+  <text class="svg-s" x="456" y="70" fill="var(--ink3)" text-anchor="middle">Qwen-Image 20B, Q4_K_M</text>
+  <text class="svg-m" x="456" y="92" fill="var(--accent)" text-anchor="middle">13.1 GB</text>
+  <text class="svg-m" x="456" y="118" fill="var(--mesh)" text-anchor="middle">PHONE A</text>
+
+  <!-- vae -->
+  <rect x="592" y="28" width="134" height="110" rx="9" fill="var(--card)" stroke="var(--new)" stroke-width="1.8"/>
+  <text class="svg-t" x="659" y="52" fill="var(--ink)" text-anchor="middle">VAE</text>
+  <text class="svg-s" x="659" y="70" fill="var(--ink3)" text-anchor="middle">latent → pixels</text>
+  <text class="svg-m" x="659" y="92" fill="var(--accent)" text-anchor="middle">small</text>
+  <text class="svg-m" x="659" y="118" fill="var(--new)" text-anchor="middle">LAPTOP</text>
+
+  <line x1="134" y1="64" x2="164" y2="64" stroke="var(--ink3)" stroke-width="1.5" marker-end="url(#a2)"/>
+  <line x1="320" y1="76" x2="350" y2="76" stroke="var(--mesh)" stroke-width="1.8" marker-end="url(#a1)"/>
+  <line x1="554" y1="76" x2="584" y2="76" stroke="var(--mesh)" stroke-width="1.8" marker-end="url(#a1)"/>
+
+  <!-- denoising loop -->
+  <path d="M400,142 C390,186 522,186 512,142" fill="none" stroke="var(--mesh)" stroke-width="1.5"
+        stroke-dasharray="5 4" marker-end="url(#a1)"/>
+  <text class="svg-s" x="456" y="180" fill="var(--mesh)" text-anchor="middle">× 4–8 denoising steps (distilled model)</text>
+
+  <!-- the correction -->
+  <rect x="150" y="208" width="500" height="62" rx="8" fill="var(--card)" stroke="var(--warn)" stroke-width="1.6"/>
+  <text class="svg-s" x="166" y="230" fill="var(--warn)">The crossing is NOT 4 KB here.</text>
+  <text class="svg-m" x="166" y="250" fill="var(--ink2)">~30 MB per crossing · ≈240 MB total at 4 steps · ~10 s of link time</text>
+  <text class="svg-s" x="166" y="264" fill="var(--ink3)">which disappears inside minutes of CPU compute — 3–12% overhead</text>
+</svg>
+</div>
+<figcaption><b>Figure 7 — component split, the configuration the official guide exemplifies</b>
+<code>--backend "diffusion=RPC0, te=RPC1, vae=RPC2"</code>. Three parts of one system on three devices, and
+the diffusion transformer alone is 13.1 GB — it does not fit on any single phone. A true layer split of the
+DiT itself (<code>diffusion=RPC0&amp;RPC1&amp;RPC2</code>) is documented for local GPUs but
+<b>unconfirmed over RPC</b>; a thirty-minute test decides which demo we build.</figcaption>
+</figure>
+
+<div class="note bad"><span class="t">A claim that must change when this runs</span>
+Our headline has always been "only 4 KB crosses the link." In diffusion the state crossing a boundary is
+the <b>entire spatial latent</b>, every patch token, every step — roughly <b>30 MB</b>, about 7,000× more.
+The honest and still-strong line: <em>"the state between stages is small enough that the link disappears
+into the compute — 3–12% overhead — and the model simply does not fit on any single device."</em>
+Saying "4 KB" while the image demo runs is a falsifiable claim someone will check.</div>
+
+<h4>The four things most likely to cost us the day</h4>
+<table>
+<tr><th>Trap</th><th>What to do</th></tr>
+<tr><td><b><code>GGML_MAX_NAME</code> mismatch</b> — transfers <em>fail</em> without it</td>
+    <td>Rebuild <code>rpc-server</code> on every device with <code>-DCMAKE_C_FLAGS=-DGGML_MAX_NAME=160</code> and the C++ equivalent. The client uses <code>-DSD_RPC=ON</code>, <b>not</b> <code>GGML_RPC</code>.</td></tr>
+<tr><td><b>Version skew</b></td>
+    <td>Check out the llama.cpp commit pinned in <code>ggml/scripts/sync-llama.last</code>. Pin sd.cpp <em>after</em> PR #2115 — issue #2114 broke HEAD on 9 Oct.</td></tr>
+<tr><td><b>A 9-minute cold start on stage</b> — sd.cpp pushes weights from the client; the phones do <em>not</em> read them locally as they do for the LLM</td>
+    <td>Launch <code>rpc-server -c</code> for the on-disk tensor cache, and <b>pre-warm before the room sits down.</b> 13 GB at 24 MB/s is nine minutes.</td></tr>
+<tr><td><b>Minutes per image</b></td>
+    <td>Use a <b>4–8 step distilled</b> variant (Qwen-Image-Distill / Flash). Step count is the single biggest lever on both wall-clock and crossings.</td></tr>
+</table>
+
+<div class="note good"><span class="t">Why this is the novelty as well as the spectacle</span>
+Nobody has run a 20B image model split across phones. It is visual, it needs no explanation, and it proves
+the architecture generalises past language models — which is a stronger claim than any protocol change.
+And it is <b>insurance</b>: a vision-language model on the existing mesh is 2–3 hours and near-zero risk,
+so there is a fallback that still shows a picture driving the demo.</div>
+
+<div class="note warn"><span class="t">What the same research rules out — state these plainly</span>
+<b>Video is not reachable</b> (Wan 2.2 at 480p is ~335 MB per crossing and hours of phone-CPU compute).
+<b>Vector search does not fit</b> — it is random access over the whole dataset, so the link becomes the
+inner loop, not a boundary crossed once. <b>Fine-tuning over RPC is unsupported.</b> <b>General RAM rental
+fails</b>: a page fault to a phone is ~30,000× slower than local DRAM. The honest claim is
+<em>distributed memory capacity for sequential, memory-bound inference</em> — and never "distributed
+compute", because three phones have less usable compute than one mid laptop.</div>
+
+<footer>
+<b>Sources for every number here:</b> <code>docs/UNDERSTANDING.md</code> (the full account),
+<code>docs/research/CLAIMS-LEDGER.md</code> (every figure marked measured / derived / cited / estimate),
+<code>docs/measurements.md</code> (the raw log), <code>results/REPORT.md</code> (accuracy).<br>
+Predicted remote throughput is derived from Petals' published Table 3 and our own measured latency; it is
+an estimate, not a measurement. The $0.168/GB-month figure rests on an <b>estimated 1 W idle draw</b> that
+has not been measured — the most important unverified input in the business case.
+</footer>
+</div>
+
+<script>
+  var END = new Date(2026,9,11,17,0,0), START = new Date(2026,9,9,17,0,0);
+  function tick(){
+    var now=new Date(), left=(END-now)/3.6e6, done=(now-START)/3.6e6, total=48;
+    document.getElementById('left').textContent = left>0 ? left.toFixed(1) : '0.0';
+    document.getElementById('fill').style.width = Math.max(0,Math.min(100,done/total*100))+'%';
+    document.getElementById('note').innerHTML =
+      '<b>'+done.toFixed(1)+' h</b> elapsed of 48 &nbsp;·&nbsp; window Fri 09 Oct 17:00 → Sun 11 Oct 17:00'+
+      '<br>allowing for sleep and hardware test cycles: <b>~'+Math.max(0,(left*0.68)).toFixed(0)+' h</b> productive';
+  }
+  tick(); setInterval(tick, 30000);
+</script>
+</html>
