@@ -63,6 +63,169 @@ pub struct Hub {
     api_port: u16,          // the port this panel serves on, which is what the benchmark asks
     agent_token: String,    // the agent service (desktop/service.py) only answers calls that carry this
     in_flight: Mutex<Option<(String, Vec<String>, Vec<u8>)>>, // held request for supervisor replay
+    meter: Mutex<MeterLedger>,
+}
+
+pub const PHONE_RAM_USD_PER_GB_MONTH: f64 = 0.168;
+pub const CLOUD_GPU_USD_PER_GB_MONTH: f64 = 2.34;
+pub const SECONDS_PER_MONTH: f64 = 720.0 * 3600.0;
+pub const TOKEN_USD_PER_TOKEN: f64 = 0.10 / 1_000_000.0;
+pub const CLOUD_TOKEN_USD_PER_TOKEN: f64 = 2.00 / 1_000_000.0;
+
+#[derive(Default, Clone)]
+pub struct DeviceMeter {
+    pub id: String,
+    pub name: String,
+    pub model: String,
+    pub gb_held: f64,
+    pub residency_seconds: u64,
+    pub tokens_served: u64,
+    pub earnings_usd: f64,
+    pub cloud_equiv_usd: f64,
+}
+
+#[derive(Default, Clone)]
+pub struct MeterLedger {
+    pub devices: HashMap<String, DeviceMeter>,
+    pub total_residency_seconds: u64,
+    pub total_tokens_served: u64,
+    pub total_earnings_usd: f64,
+    pub total_cloud_equiv_usd: f64,
+}
+
+fn load_meter() -> MeterLedger {
+    let p = config().join("meter.jsonl");
+    let mut ledger = MeterLedger::default();
+    if let Ok(content) = fs::read_to_string(p) {
+        for line in content.lines() {
+            if let Ok(v) = serde_json::from_str::<Value>(line) {
+                if let Some(devs) = v["devices"].as_array() {
+                    for d_val in devs {
+                        if let Some(id) = d_val["id"].as_str() {
+                            let d = ledger.devices.entry(id.to_string()).or_insert_with(|| DeviceMeter {
+                                id: id.to_string(),
+                                name: d_val["name"].as_str().unwrap_or(id).to_string(),
+                                ..Default::default()
+                            });
+                            d.tokens_served += d_val["tokens"].as_u64().unwrap_or(0);
+                            d.earnings_usd += d_val["earnings"].as_f64().unwrap_or(0.0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    recalculate_totals(&mut ledger);
+    ledger
+}
+
+fn recalculate_totals(m: &mut MeterLedger) {
+    m.total_residency_seconds = m.devices.values().map(|d| d.residency_seconds).sum();
+    m.total_tokens_served = m.devices.values().map(|d| d.tokens_served).sum();
+    m.total_earnings_usd = m.devices.values().map(|d| d.earnings_usd).sum();
+    m.total_cloud_equiv_usd = m.devices.values().map(|d| d.cloud_equiv_usd).sum();
+}
+
+fn tick_meter(hub: &Hub, elapsed_secs: u64) {
+    let run = hub.run.lock().unwrap().clone();
+    if run.status != "ready" { return; }
+    let Some(slices) = run.plan["slices"].as_array() else { return; };
+    if slices.is_empty() { return; }
+
+    let mut ledger = hub.meter.lock().unwrap();
+    let total_layers: f64 = slices.iter().map(|s| s["to"].as_f64().unwrap_or(0.0) - s["from"].as_f64().unwrap_or(0.0)).sum();
+    let model_gb: f64 = run.plan["needBytes"].as_f64().unwrap_or(0.0) / GB;
+
+    for s in slices {
+        let id = s["id"].as_str().unwrap_or("").to_string();
+        let name = s["name"].as_str().unwrap_or(&id).to_string();
+        let count = s["to"].as_f64().unwrap_or(0.0) - s["from"].as_f64().unwrap_or(0.0);
+        let share = if total_layers > 0.0 { count / total_layers } else { 1.0 / slices.len() as f64 };
+        let slice_gb = if model_gb > 0.0 { model_gb * share } else { count * 0.4 };
+
+        let d = ledger.devices.entry(id.clone()).or_insert_with(|| DeviceMeter {
+            id, name: name.clone(), ..Default::default()
+        });
+        d.name = name;
+        d.model = run.model.clone();
+        d.gb_held = slice_gb;
+        d.residency_seconds += elapsed_secs;
+
+        let res_earn = (d.gb_held * d.residency_seconds as f64) * (PHONE_RAM_USD_PER_GB_MONTH / SECONDS_PER_MONTH);
+        let tok_earn = (d.tokens_served as f64) * TOKEN_USD_PER_TOKEN;
+        d.earnings_usd = res_earn + tok_earn;
+
+        let cloud_cost = (d.gb_held * d.residency_seconds as f64) * (CLOUD_GPU_USD_PER_GB_MONTH / SECONDS_PER_MONTH)
+            + (d.tokens_served as f64) * CLOUD_TOKEN_USD_PER_TOKEN;
+        d.cloud_equiv_usd = cloud_cost;
+    }
+    recalculate_totals(&mut ledger);
+}
+
+fn record_tokens(hub: &Hub, tokens: u64) {
+    let run = hub.run.lock().unwrap().clone();
+    let Some(slices) = run.plan["slices"].as_array() else { return; };
+    if slices.is_empty() { return; }
+
+    let mut ledger = hub.meter.lock().unwrap();
+    for s in slices {
+        let id = s["id"].as_str().unwrap_or("").to_string();
+        if let Some(d) = ledger.devices.get_mut(&id) {
+            d.tokens_served += tokens;
+            let res_earn = (d.gb_held * d.residency_seconds as f64) * (PHONE_RAM_USD_PER_GB_MONTH / SECONDS_PER_MONTH);
+            let tok_earn = (d.tokens_served as f64) * TOKEN_USD_PER_TOKEN;
+            d.earnings_usd = res_earn + tok_earn;
+
+            let cloud_cost = (d.gb_held * d.residency_seconds as f64) * (CLOUD_GPU_USD_PER_GB_MONTH / SECONDS_PER_MONTH)
+                + (d.tokens_served as f64) * CLOUD_TOKEN_USD_PER_TOKEN;
+            d.cloud_equiv_usd = cloud_cost;
+        }
+    }
+    recalculate_totals(&mut ledger);
+
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(config().join("meter.jsonl")) {
+        let snapshot = json!({
+            "t": chrono_like(),
+            "model": run.model,
+            "tokens": tokens,
+            "total_tokens": ledger.total_tokens_served,
+            "total_earnings_usd": ledger.total_earnings_usd,
+            "devices": ledger.devices.values().map(|d| json!({
+                "id": d.id, "name": d.name, "gb": d.gb_held, "tokens": d.tokens_served, "earnings": d.earnings_usd
+            })).collect::<Vec<_>>()
+        });
+        let _ = writeln!(f, "{}", snapshot);
+    }
+}
+
+fn meter_summary(hub: &Hub) -> Value {
+    let m = hub.meter.lock().unwrap();
+    let devs: Vec<Value> = m.devices.values().map(|d| json!({
+        "id": d.id, "name": d.name, "model": d.model,
+        "gb_held": d.gb_held, "residency_seconds": d.residency_seconds,
+        "residency_hours": d.residency_seconds as f64 / 3600.0,
+        "tokens_served": d.tokens_served, "earnings_usd": d.earnings_usd,
+        "cloud_equiv_usd": d.cloud_equiv_usd,
+    })).collect();
+    let savings_usd = (m.total_cloud_equiv_usd - m.total_earnings_usd).max(0.0);
+    let savings_pct = if m.total_cloud_equiv_usd > 0.0 {
+        (savings_usd / m.total_cloud_equiv_usd) * 100.0
+    } else { 92.8 };
+    json!({
+        "devices": devs,
+        "total_residency_seconds": m.total_residency_seconds,
+        "total_residency_hours": (m.total_residency_seconds as f64) / 3600.0,
+        "total_tokens_served": m.total_tokens_served,
+        "total_earnings_usd": m.total_earnings_usd,
+        "total_cloud_equiv_usd": m.total_cloud_equiv_usd,
+        "savings_usd": savings_usd,
+        "savings_pct": savings_pct,
+        "rates": {
+            "phone_ram_per_gb_month": PHONE_RAM_USD_PER_GB_MONTH,
+            "cloud_gpu_per_gb_month": CLOUD_GPU_USD_PER_GB_MONTH,
+            "tokens_per_million": 0.10
+        }
+    })
 }
 
 fn config() -> std::path::PathBuf {
@@ -1032,6 +1195,10 @@ fn forward_logged(mut s: TcpStream, hub: &Arc<Hub>, first: &str, headers: &[Stri
         if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(config().join("history.jsonl")) {
             let _ = writeln!(f, "{}", e);
         }
+        let tok_n = timings["predicted_n"].as_u64().unwrap_or(0) + timings["prompt_n"].as_u64().unwrap_or(0);
+        if tok_n > 0 {
+            record_tokens(hub, tok_n);
+        }
     }
     if !answer.is_empty() || !timings.is_null() {
         *hub.in_flight.lock().unwrap() = None;
@@ -1216,11 +1383,13 @@ pub fn host(port: u16) -> Result<(), String> {
         benching: Default::default(),
         chats: Mutex::new(history), caps: Mutex::new(caps), api_key, last_run: Mutex::new(last_run),
         api_port: port, agent_token: random_hex(16), in_flight: Default::default(),
+        meter: Mutex::new(load_meter()),
     });
     { let h = hub.clone(); thread::spawn(move || agent_service(&h)); }
     { let h = hub.clone(); thread::spawn(move || serve_control(h)); }
     thread::spawn(crate::serve_models);   // phones can also pull model files from here
     { let h = hub.clone(); thread::spawn(move || loop { tell_phones(&h); thread::sleep(Duration::from_secs(2)); }); }
+    { let h = hub.clone(); thread::spawn(move || loop { thread::sleep(Duration::from_secs(2)); tick_meter(&h, 2); }); }
     { let h = hub.clone(); thread::spawn(move || { let mut complete = false; loop { autostart_pinned(&h, &mut complete); thread::sleep(Duration::from_secs(3)); } }); }
     { let h = hub.clone(); thread::spawn(move || { let mut said = std::collections::HashSet::new(); loop { keep_wifi_default(&h, &mut said); thread::sleep(Duration::from_secs(5)); } }); }
     // all addresses: the page and API for this laptop; other machines on the link may use /v1 with the key
@@ -1279,6 +1448,7 @@ fn state(hub: &Hub) -> Value {
         "last_run": last_run,
         "caps": caps,
         "api": {"key": hub.api_key, "urls": laptop_ips().iter().map(|(ip, _)| format!("http://{ip}:{}/v1", hub.api_port)).collect::<Vec<_>>()},
+        "meter": meter_summary(hub),
         // can the running model read a photo? Only with a projector (mmproj) next to it; the chat hides the photo button otherwise
         "run": {"status": run.status, "step": run.step, "model": run.model, "plan": run.plan,
                 "vision": scan_models(hub).iter().any(|m| m.name == run.model && m.proj.is_some()),
@@ -1359,6 +1529,7 @@ fn http(mut s: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     match path.as_str() {
         "/" | "/index.html" => crate::reply(&mut s, "text/html; charset=utf-8", HOST_PAGE.as_bytes()),
         "/api/state" => ok(&mut s, state(&hub)),
+        "/api/meter" => ok(&mut s, meter_summary(&hub)),
         "/api/run" => { start(hub.clone(), req["model"].as_str().unwrap_or("").into()); ok(&mut s, json!({"ok": true})) }
         "/api/stop" => { stop(&hub, "stopped"); ok(&mut s, json!({"ok": true})) }
         // pin: the split running now (or, if that model is not running, the plan it would get now), kept for good

@@ -45,12 +45,31 @@ import java.util.Locale
 @Composable
 fun StatsTab(stats: Stats) {
     val rs by stats.records.collectAsState()
+    val meter by stats.meter.collectAsState()
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        PageHeader("Stats", "Every answer this phone has produced: how fast it came, how long the first word took, " +
-            "and whether one device or several were holding the model.")
+        PageHeader("Stats & Metering", "Every answer this phone has produced: speed, latency, residency earnings, " +
+            "and cost arbitrage vs cloud GPUs.")
+
+        Label("Residency & Mesh Earnings")
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Tile(Icons.Outlined.Bolt, "Earnings", "$%.4f".format(meter.earningsUsd), Paper, Modifier.weight(1f))
+            Tile(Icons.Outlined.Speed, "Arbitrage", "%.1f%%".format(meter.savingsPct), Yellow, Modifier.weight(1f))
+        }
+        NBox(pad = 12.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("RAM sitting warm: $0.168/GB-mo vs AWS GPU $2.34/GB-mo (14× savings)", fontSize = 12.sp, color = Ink.copy(alpha = 0.7f))
+                Text("Holding %.1f GB for %dh %dm · %d tokens served".format(
+                    meter.gbHeld,
+                    meter.residencySeconds / 3600,
+                    (meter.residencySeconds % 3600) / 60,
+                    meter.tokensServed
+                ), fontSize = 12.sp, color = Ink.copy(alpha = 0.7f))
+            }
+        }
+
         if (rs.isEmpty()) {
             NBox {
                 EmptyState(

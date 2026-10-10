@@ -439,6 +439,11 @@
       <div class="card"><div class="cb" id="chartbox"></div></div>
       <div class="sec">History</div>
       <div class="card"><div id="histbox"></div></div>
+      <div class="sec">Residency &amp; Mesh Metering</div>
+      <div class="card">
+        <div class="ch"><svg class="i"><use href="#i-gauge"/></svg><h3>Residency Earnings &amp; Cloud Arbitrage</h3><span class="d">per-device warm RAM residency, tokens served, and cost savings vs AWS/RunPod</span></div>
+        <div class="cb" id="meterbox"></div>
+      </div>
     </section>
 
     <!-- ========================================================= DIAGNOSTICS -->
@@ -562,6 +567,7 @@ function normalise(s) {
   s.laptop = s.laptop || { specs: {}, usable_gb: 0 };
   s.laptop.specs = s.laptop.specs || {};
   s.caps = s.caps || {};
+  s.meter = s.meter || { devices: [], total_residency_hours: 0, total_tokens_served: 0, total_earnings_usd: 0, total_cloud_equiv_usd: 0, savings_pct: 92.8 };
   return s;
 }
 async function pollUsb() {
@@ -1313,6 +1319,22 @@ function renderStats() {
     c.slice().reverse().map(x => `<tr><td class="num quiet">${esc(x.t)}</td><td>${esc(String(x.q || '').slice(0, 80))}</td>
       <td class="num">${num(x.tps).toFixed(1)}</td><td class="num">${sec(x.first_ms)}</td>
       <td class="num">${x.tokens || '–'}</td><td class="num">${num(x.devices, 1)}</td></tr>`).join('')}</tbody></table>`;
+  const m = S.meter || { devices: [], total_residency_hours: 0, total_tokens_served: 0, total_earnings_usd: 0, total_cloud_equiv_usd: 0, savings_pct: 92.8 };
+  const mTiles = `
+    <div class="grid g2" style="margin-bottom:14px">
+      ${statTile('clock', 'Warm Residency', (m.total_residency_hours || 0).toFixed(2) + ' hrs', 'active layer residency')}
+      ${statTile('chat', 'Tokens Served', m.total_tokens_served || 0, 'across mesh')}
+      ${statTile('bolt', 'Earnings', '$' + (m.total_earnings_usd || 0).toFixed(4), 'RAM $0.168/GB-mo + tokens')}
+      ${statTile('chart', 'Cloud Arbitrage', (m.savings_pct || 92.8).toFixed(1) + '% savings', 'vs AWS RTX 3090 $2.34/GB-mo')}
+    </div>`;
+  const mTable = m.devices && m.devices.length ? `
+    <table><thead><tr><th>Device</th><th>Model</th><th>RAM Slice</th><th>Residency</th><th>Tokens</th><th>Earnings</th><th>AWS Baseline</th></tr></thead><tbody>${
+      m.devices.map(d => `<tr><td><b>${esc(d.name || d.id)}</b></td><td>${esc(d.model || '–')}</td>
+        <td class="num">${gb(d.gb_held)} GB</td><td class="num">${(d.residency_hours || 0).toFixed(2)} h</td>
+        <td class="num">${d.tokens_served || 0}</td><td class="num" style="color:var(--ok)"><b>$${(d.earnings_usd || 0).toFixed(4)}</b></td>
+        <td class="num quiet">$${(d.cloud_equiv_usd || 0).toFixed(4)}</td></tr>`).join('')
+    }</tbody></table>` : `<div class="quiet mono" style="font-size:12px; padding:8px 0">Run a model to accumulate residency and compute earnings across helper phones.</div>`;
+  if ($('meterbox')) $('meterbox').innerHTML = mTiles + mTable;
 }
 async function scores() {
   let rows = [];
