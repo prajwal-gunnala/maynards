@@ -8,7 +8,24 @@ PAGE = "/home/prajwal/Documents/GitHub/maynards/agent/src/host.html"
 HOST_IP = "10.155.241.73"
 HOST, HELPER = "10BFBJ0SQJ001GG", "10BFAT1SA2000XP"
 MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
-SPLIT = [(HOST, 0, 14, True), ("laptop", 14, 35, False), (HELPER, 35, 48, False)]
+SPLIT = [(HOST, 0, 14, True), ("laptop", 14, 35, False), (HELPER, 35, 48, False)]   # replaced by read_split()
+import re
+
+def rng(text):
+    m = re.search(r"[Hh]olding layers (\d+)-(\d+)", text or "")
+    return (int(m.group(1)), int(m.group(2)) + 1) if m else None
+
+def read_split():
+    """Each helper says what it holds: the laptop in its join log, phone 2 on its own screen. The Host has the front."""
+    try:
+        m = re.findall(r"holding layers (\d+)-(\d+)", open("/tmp/mesh-join.log").read())
+        lap = (int(m[-1][0]), int(m[-1][1]) + 1) if m else None
+    except Exception: lap = None
+    p2 = rng(adb(HELPER, "uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; grep -o 'HOLDING LAYERS [0-9]*-[0-9]*' /sdcard/ui.xml | head -1").replace("HOLDING LAYERS", "holding layers"))
+    if not lap or not p2: return None
+    first = min(lap[0], p2[0])
+    out = [(HOST, 0, first, True)] + sorted([("laptop", *lap, False), (HELPER, *p2, False)], key=lambda x: x[1])
+    return out
 LAYER_GB = 0.382
 GB = 1e9
 cache = {"phones": {}, "t0": time.time()}
@@ -32,6 +49,10 @@ def poll():
         except urllib.error.HTTPError as e: code = e.code
         except Exception: code = 0
         cache["health"] = code
+        if time.time() - cache.get("split_t", 0) > 15:
+            sp = read_split()
+            if sp: cache["split"] = sp
+            cache["split_t"] = time.time()
         time.sleep(3)
 
 def laptop():
@@ -43,12 +64,12 @@ def state():
     ph = cache["phones"]; h, p2 = ph.get(HOST, {}), ph.get(HELPER, {})
     names = {HOST: (h.get("name", "phone") + " (host)"), "laptop": "81WE (this laptop)", HELPER: p2.get("name", "phone") + " ·00XP"}
     slices = [{"id": i, "name": names[i], "from": a, "to": b, "gb": round((b - a) * LAYER_GB + (0.43 if host else 0), 1), "host": host}
-              for i, a, b, host in SPLIT]
+              for i, a, b, host in cache.get("split", SPLIT)]
     plan = {"verdict": "doable", "reason": "Needs 3 devices", "need_gb": 19.1, "slices": slices, "skipped": {}}
     code = cache.get("health", 0)
     status = "ready" if code == 200 else "loading" if code == 503 else "starting"
     peers = [{"id": s, "name": names[s], "addr": a, "usable_gb": u, "engine": "rpc" if s == HELPER else "host",
-              "specs": dict(ph.get(s, {}), name=names[s]), "store": {"done": 13, "total": 13, "bytes": 5.1 * GB},
+              "specs": dict(ph.get(s, {}), name=names[s]), "store": {},
               "quiet_s": 0, "rtt_ms": r, "rtt_worst_ms": r * 3, "link": l}
              for s, a, u, r, l in ((HOST, HOST_IP, 8.0, 3.0, "usb"), (HELPER, "192.168.112.142", 7.2, 17.6, "wifi"))]
     return {"mesh": "1084e7f9", "invite": {"mesh": "1084e7f9", "hosts": [HOST_IP, "192.168.112.146"], "port": 7070, "code": "host is the phone"},
