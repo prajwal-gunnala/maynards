@@ -86,7 +86,32 @@ agent/target/release/mesh hook                    # git hook
 # any OpenAI-compatible client: http://<host>:8080/v1 with the key from ~/.config/meshai/api-key (laptop host)
 ```
 
-## 5. Mesh Compiler (tuning, separate repo ~/Documents/GitHub/mesh-compiler)
+## 5. Operations: Relay, Jobs, Metering & Speed Planning
+
+```bash
+# 5a. Start the transparent WAN TCP relay (for helpers behind NAT / mobile data):
+python3 scripts/relay.py --bind 0.0.0.0 --port 7071
+
+# 5b. Start host with relay advertise:
+MESH_RELAY=public-relay-ip:7071 agent/target/release/mesh host --port 8080
+
+# 5c. Submit and manage background jobs:
+curl -s -X POST localhost:8080/api/jobs -H 'content-type: application/json' \
+  -d '{"prompt": "Explain distributed pipelined inference.", "model": "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"}'
+curl -s localhost:8080/api/jobs                 # list all jobs and progress
+curl -s -X POST localhost:8080/api/jobs/cancel -H 'content-type: application/json' -d '{"id": "<job_id>"}'
+
+# 5d. Query warm RAM residency & cloud arbitrage earnings:
+curl -s localhost:8080/api/meter | jq .
+
+# 5e. Inspect compute-aware speed plan and pipeline bottleneck:
+curl -s localhost:8080/api/plan | jq .pipeline
+
+# 5f. Run the automated integration test harness across all subsystems:
+for f in scripts/test_*_wire.py; do python3 "$f"; done
+```
+
+## 6. Mesh Compiler (tuning, separate repo ~/Documents/GitHub/mesh-compiler)
 
 ```bash
 cd ~/Documents/GitHub/mesh-compiler; S=10BFBJ0SQJ001GG; M=Qwen3-4B-Instruct-2507-Q4_K_M.gguf
@@ -98,14 +123,14 @@ python3 -m tuner reuse --serial $S --model $M --set engine=opencl ngl=99 ctk=f16
 .venv/bin/python -m tuner summary && .venv/bin/python -m tuner report   # docs/03-results.md, reports/index.html
 ```
 
-## 6. Phone as laptop touchpad/keyboard (not part of MeshAI)
+## 7. Phone as laptop touchpad/keyboard (not part of MeshAI)
 
 ```bash
 sudo setfacl -m u:$USER:rw /dev/uinput     # once per boot
 ~/phone-remote/start.sh                    # opens localhost:8765 on the iQOO; Ctrl+C stops it
 ```
 
-## 7. Stopping everything
+## 8. Stopping everything
 
 ```bash
 pkill -x mesh                                                # laptop host or helper
