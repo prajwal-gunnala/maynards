@@ -21,7 +21,8 @@ adb -s $S install -r -g android/app/build/outputs/apk/debug/app-debug.apk
 adb -s $S shell 'pkg=ai.maynards.mesh; dumpsys deviceidle whitelist +$pkg; cmd appops set $pkg RUN_ANY_IN_BACKGROUND allow;
   settings put global settings_enable_monitor_phantom_procs false; settings put global stay_on_while_plugged_in 7'
 # the model file (18.6 GB takes ~15 min over the cable)
-adb -s $S shell mkdir -p /sdcard/Android/data/ai.maynards.mesh/files/models
+adb -s $S shell 'mkdir -p /sdcard/Android/data/ai.maynards.mesh/files/models; chmod 777 /sdcard/Android/data/ai.maynards.mesh/files/models'
+# (a folder made by adb is mode 770 and the app cannot list it: its log says "models in ...: null"; chmod 777 fixes it)
 adb -s $S push ~/meshai-models/Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf /sdcard/Android/data/ai.maynards.mesh/files/models/
 # by hand on a vivo/iQOO phone: Settings → Battery → Monster Mode on (no adb switch); the app's Speed card has an Open button
 ```
