@@ -577,76 +577,129 @@ not the hardware: in the 26 September run a phone hosted and the laptop was the 
 <div class="part">
 <div class="pnum">D.1</div>
 <div class="pbody">
-<h2>The Ned Capsule <em>— lifecycle and wire format</em></h2>
-<p>Today a device receives three fields. The capsule makes every decision the planner already reaches
-explicit, versioned, and safe to replace while the system is live.</p>
+<h2>The Ned Capsule <em>&#8212; the file on the device</em></h2>
+
+<p>A file. Written to the device's own storage. The device reads it and starts its engine from it. No
+weights: the device already holds all 144 layer tensors, so a new capsule costs a restart, not a
+13&nbsp;GB transfer.</p>
+
+<pre>/data/data/ai.maynards.mesh/files/capsule/<b>current.json</b>     <i>what it is running now</i>
+/data/data/ai.maynards.mesh/files/capsule/<b>previous.json</b>    <i>kept, so two can be diffed</i>
+/data/data/ai.maynards.mesh/files/capsule/<b>rejected.json</b>    <i>written when validation fails</i></pre>
+
+<h3>Two halves, and only one of them is the device's</h3>
+<p>The device cannot choose its own layer range. <code>llama-server</code> on the host splits the model
+with <code>--tensor-split</code>, which takes <strong>proportions</strong>. So the host decides, and the
+capsule records what was decided so the device can check it and so it can be audited.</p>
 
 <div class="plate">
-<svg viewBox="0 0 1060 260" role="img" aria-label="Capsule state machine">
- <g>
-  <rect x="24" y="60" width="130" height="54" fill="var(--plate2)" stroke="var(--line)"/>
-  <text class="t" x="89" y="84" text-anchor="middle">issued</text>
-  <text class="s" x="89" y="102" text-anchor="middle">planner emits</text>
+<svg viewBox="0 0 1060 330" role="img" aria-label="Capsule halves and how each is enforced">
+ <defs>
+  <marker id="d1a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 Z" fill="var(--line)"/></marker>
+  <marker id="d1b" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto">
+    <path d="M0,0 L7,3 L0,6 Z" fill="var(--lead)"/></marker>
+ </defs>
 
-  <rect x="206" y="60" width="130" height="54" fill="var(--plate2)" stroke="var(--line)"/>
-  <text class="t" x="271" y="84" text-anchor="middle">validated</text>
-  <text class="s" x="271" y="102" text-anchor="middle">device checks fit</text>
+ <!-- optimizer -->
+ <rect x="30" y="24" width="180" height="56" fill="var(--plate2)" stroke="var(--lead)" stroke-width="1.3"/>
+ <text class="t" x="120" y="48" text-anchor="middle" style="fill:var(--lead)">optimizer</text>
+ <text class="s" x="120" y="66" text-anchor="middle">one layout, scored</text>
 
-  <rect x="388" y="60" width="130" height="54" fill="var(--plate2)" stroke="var(--line)"/>
-  <text class="t" x="453" y="84" text-anchor="middle">enacted</text>
-  <text class="s" x="453" y="102" text-anchor="middle">rpc-server up</text>
+ <!-- capsule file -->
+ <rect x="286" y="18" width="250" height="300" fill="var(--plate2)" stroke="var(--live)" stroke-width="1.6"/>
+ <text class="t" x="302" y="42" style="fill:var(--live)">capsule/current.json</text>
+ <line x1="286" y1="54" x2="536" y2="54" stroke="var(--live)"/>
 
-  <rect x="570" y="60" width="130" height="54" fill="var(--plate2)" stroke="var(--live)" stroke-width="1.4"/>
-  <text class="t" x="635" y="84" text-anchor="middle" style="fill:var(--live)">serving</text>
-  <text class="s" x="635" y="102" text-anchor="middle">in the running plan</text>
+ <text class="s" x="302" y="76" style="fill:var(--line)">device enacts these</text>
+ <text class="v" x="302" y="96">runtime.threads</text>
+ <text class="v" x="302" y="114">runtime.backend</text>
+ <text class="v" x="302" y="132">runtime.cache</text>
+ <text class="v" x="302" y="150">memory.advertise_mb</text>
+ <text class="v" x="302" y="168">net.bind, net.port</text>
 
-  <rect x="788" y="40" width="130" height="48" fill="var(--plate2)" stroke="var(--lead)"/>
-  <text class="t" x="853" y="62" text-anchor="middle" style="fill:var(--lead)">superseded</text>
-  <text class="s" x="853" y="78" text-anchor="middle">new id arrives</text>
+ <line x1="302" y1="184" x2="520" y2="184" stroke="var(--grid)"/>
+ <text class="s" x="302" y="204" style="fill:var(--lead)">device only checks these</text>
+ <text class="v" x="302" y="224" style="fill:var(--lead)">layers.from, layers.to</text>
+ <text class="v" x="302" y="242" style="fill:var(--lead)">layers.hashes[]</text>
+ <text class="v" x="302" y="260" style="fill:var(--lead)">model.sha_head</text>
+ <text class="v" x="302" y="278" style="fill:var(--lead)">limits.*</text>
+ <text class="s" x="302" y="300">host enforces the range &#8212; see below</text>
 
-  <rect x="788" y="110" width="130" height="48" fill="var(--plate2)" stroke="var(--stop)"/>
-  <text class="t" x="853" y="132" text-anchor="middle" style="fill:var(--stop)">rejected</text>
-  <text class="s" x="853" y="148" text-anchor="middle">cannot honour it</text>
- </g>
+ <path d="M210,52 L280,52" stroke="var(--lead)" stroke-width="1.3" marker-end="url(#d1b)"/>
+ <text class="s" x="214" y="42" style="fill:var(--lead)">writes</text>
 
- <path d="M154,87 L200,87" stroke="var(--line)" stroke-width="1.2" marker-end="url(#fl)"/>
- <path d="M336,87 L382,87" stroke="var(--line)" stroke-width="1.2" marker-end="url(#fl)"/>
- <path d="M518,87 L564,87" stroke="var(--line)" stroke-width="1.2" marker-end="url(#fl)"/>
- <path d="M700,78 L782,64" stroke="var(--lead)" stroke-width="1.2" marker-end="url(#flb)"/>
- <path d="M271,118 L271,180 L846,180 L846,156" fill="none" stroke="var(--stop)" stroke-width="1.1"
-       stroke-dasharray="4 3" marker-end="url(#fl)"/>
- <text class="s" x="420" y="196" style="fill:var(--stop)">validation fails &#8212; the device says so rather than failing silently later</text>
- <path d="M853,36 L853,20 L89,20 L89,54" fill="none" stroke="var(--lead)" stroke-width="1.1"
-       stroke-dasharray="5 4" marker-end="url(#flb)"/>
- <text class="s" x="440" y="16" text-anchor="middle" style="fill:var(--lead)">re-issued on: device joins or leaves &#183; heat ceiling &#183; rtt budget &#183; task profile changes</text>
+ <!-- device enact -->
+ <rect x="602" y="56" width="430" height="100" fill="var(--plate2)" stroke="var(--line)"/>
+ <text class="t" x="618" y="80">device starts its engine from the file</text>
+ 
+ <text class="v" x="618" y="104">libmesh_rpc.so -H 0.0.0.0 -p 50052 -t 6 -c</text>
+ <text class="s" x="618" y="124">every value above comes from the capsule</text>
+ <text class="s" x="618" y="142" style="fill:var(--stop)">today all four are hardcoded: cores&#8722;2, cache on, first free port</text>
+ <path d="M536,100 L596,100" stroke="var(--line)" stroke-width="1.3" marker-end="url(#d1a)"/>
 
- <line x1="24" y1="218" x2="1030" y2="218" stroke="var(--grid)"/>
- <text class="s" x="24" y="238" style="fill:var(--line)">capsule_id changes on every emission.</text>
- <text class="s" x="268" y="238">A device holding an unexpected id knows its instructions moved; one arriving late is discarded, not acted on.</text>
+ <!-- host enforce -->
+ <rect x="602" y="188" width="430" height="130" fill="var(--plate2)" stroke="var(--lead)"/>
+ <text class="t" x="618" y="212">host converts every capsule into one argv</text>
+ <text class="v" x="618" y="236">--rpc A:50052,B:50052</text>
+ <text class="v" x="618" y="254">-ngl 40</text>
+ <text class="v" x="618" y="272">--tensor-split 0.475,0.525</text>
+ <text class="s" x="618" y="294" style="fill:var(--lead)">proportions, not ranges &#8212; the layer boundary is</text>
+ <text class="s" x="618" y="310" style="fill:var(--lead)">an outcome of these numbers, so the capsule&#8217;s</text>
+ <text class="s" x="618" y="326" style="fill:var(--lead)">declared range must agree or it is a bug</text>
+ <path d="M536,240 L596,240" stroke="var(--lead)" stroke-width="1.3" marker-end="url(#d1b)"/>
 </svg>
 </div>
-<div class="plate-tb"><span><b>D.1</b> capsule lifecycle</span><span>re-issue costs an engine restart, ~70 s</span></div>
+<div class="plate-tb"><span><b>D.1</b> capsule halves</span><span>device-enacted vs host-enforced</span></div>
 
-<h3>The wire format, and what each field is for</h3>
-<pre><b>{</b>
-  <u>"capsule_id"</u>: "a3f9c1…",        <i>new on every emission; stale ones ignored</i>
-  <u>"issued_at"</u>:  1760000000,
-  "model":   <b>{</b> "file": "…Q4_K_M.gguf", "sha_head": "94a16f7a" <b>}</b>   <i>wrong file → reject</i>
-  "role":    "helper",              <i>or "host" — the role is not the hardware</i>
-  "layers":  <b>{</b> "from": 9, "to": 28 <b>}</b>
-  "runtime": <b>{</b> "backend": "vulkan", "threads": 6, "kv_type": "q8_0" <b>}</b>  <i>← constants today</i>
-  "memory":  <b>{</b> "kv_budget_mb": 700, "reserve_mb": 150, "offer_cap_mb": 8192 <b>}</b>
-  "network": <b>{</b> "upstream": "laptop", "rtt_ceiling_ms": 60, "relay": null <b>}</b>
-  "limits":  <b>{</b> "thermal_ceiling": 0.85, "min_battery_pct": 20 <b>}</b>
-  "telemetry": [ "tok_s", "ram_mb", "heat", "battery", "bytes", "errors" ],
-  <u>"why"</u>: "19 layers here: most free memory, coolest headroom"   <i>for the dashboard</i>
-<b>}</b></pre>
+<h3>Every field, and what it becomes</h3>
+<table>
+<tr><th>Field</th><th>Type</th><th>Becomes</th><th>Today</th></tr>
+<tr><td class="m">runtime.threads</td><td class="m">int</td><td class="m">-t 6</td><td>hardcoded <code>cores-2</code></td></tr>
+<tr><td class="m">runtime.backend</td><td class="m">"cpu"|"vulkan"</td><td>which <code>.so</code> is launched</td><td><b>does not exist</b> &#8212; one binary, one backend</td></tr>
+<tr><td class="m">runtime.cache</td><td class="m">bool</td><td class="m">-c</td><td>always on</td></tr>
+<tr><td class="m">memory.advertise_mb</td><td class="m">int</td><td>how much the device offers</td><td>not sent; host infers from specs</td></tr>
+<tr><td class="m">net.bind, net.port</td><td class="m">str, int</td><td class="m">-H 0.0.0.0 -p 50052</td><td>first port that binds</td></tr>
+<tr><td class="m">layers.from, .to</td><td class="m">int, int</td><td>checked, not enacted</td><td>sent as the string <code>"9-27"</code></td></tr>
+<tr><td class="m">layers.hashes[]</td><td class="m">str[]</td><td>which tensors must be in the store</td><td><b>does not exist</b></td></tr>
+<tr><td class="m">model.sha_head</td><td class="m">str</td><td>reject if the file differs</td><td><b>does not exist</b></td></tr>
+<tr><td class="m">limits.thermal_ceiling</td><td class="m">float 0&#8211;1</td><td>device stops at this headroom</td><td><b>does not exist</b></td></tr>
+<tr><td class="m">limits.min_battery_pct</td><td class="m">int</td><td>device refuses below this</td><td>host-side only</td></tr>
+<tr><td class="m">capsule_id</td><td class="m">str</td><td>reply key; stale ones discarded</td><td><b>does not exist</b></td></tr>
+</table>
 
-<div class="flag live"><h4>the decision that makes re-issuing cheap</h4>
-The capsule carries <b>configuration, not weights.</b> Each phone already holds every layer, so a new
-capsule means "activate a different range and run it this way" — an engine restart, not a 13 GB transfer.
-The cache-everything layer store, which looks like the opposite of a per-device package, is what makes
-per-device packages replaceable.</div>
+<h3>What the device does, in order</h3>
+<pre><b>1</b>  receive capsule over the control link
+<b>2</b>  write it to <u>capsule/incoming.json</u>
+<b>3</b>  <b>validate</b>
+      model.sha_head matches the local file           <i>else reject: wrong model</i>
+      every hash in layers.hashes[] is in the store   <i>else reject: missing N tensors</i>
+      free memory &#8805; memory.advertise_mb + reserve     <i>else reject: short by N MB</i>
+      battery &#8805; limits.min_battery_pct                <i>else reject: battery</i>
+      heat &#8804; limits.thermal_ceiling                   <i>else reject: too hot</i>
+<b>4</b>  on reject &#8594; write <u>capsule/rejected.json</u> with the reason, reply, stop
+<b>5</b>  on pass  &#8594; stop the current engine
+<b>6</b>  mv current.json &#8594; previous.json ; mv incoming.json &#8594; current.json
+<b>7</b>  launch the engine from current.json
+<b>8</b>  reply <b>{ok, capsule_id, address}</b>
+<b>9</b>  report telemetry against the field list in the capsule</pre>
+
+<div class="flag"><h4>why validation lives on the device</h4>
+The host plans from telemetry up to two seconds old. The device knows its own state now. A capsule the
+device cannot honour is rejected with a reason before the engine starts, instead of failing during
+generation.</div>
+
+<div class="flag stop"><h4>two fields cost real work</h4>
+<code>runtime.backend</code> needs <b>two binaries</b> shipped in the APK &#8212; <code>libmesh_rpc_cpu.so</code>
+and <code>libmesh_rpc_vulkan.so</code> &#8212; because the backend is compiled in, not selected at runtime. And
+nobody has measured which is faster on these phones, so the field may turn out to be worthless.
+<code>layers.hashes[]</code> needs the host to read the tensor names for a range out of the GGUF header,
+which <code>read_gguf()</code> already parses.</div>
+
+<div class="flag live"><h4>what makes it an artifact and not a message</h4>
+It is on disk. Pull it with <code>adb pull</code> and read the contract. The device restarts and re-enacts
+itself without asking the host. Two capsules diff. And a phone that belongs to a stranger carries, in
+writing, exactly what it agreed to do.</div>
 </div>
 </div>
 
