@@ -35,6 +35,8 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
     fun ask(
         history: List<Turn>, onText: (String) -> Unit, image: String? = null, system: String? = null,
         onProgress: ((ChatProgress) -> Unit)? = null,
+        maxTokens: Int = 1024,
+        extra: JSONObject? = null,
     ): Answer {
         val msgs = JSONArray()
         if (system != null) msgs.put(JSONObject().put("role", "system").put("content", system))
@@ -46,9 +48,10 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
             else t.text
             msgs.put(JSONObject().put("role", t.role).put("content", content))
         }
-        val body = JSONObject().put("messages", msgs).put("stream", true).put("max_tokens", 1024)
+        val body = JSONObject().put("messages", msgs).put("stream", true).put("max_tokens", maxTokens)
             .put("stream_options", JSONObject().put("include_usage", true))
         if (onProgress != null) body.put("return_progress", true)
+        extra?.keys()?.forEach { k -> body.put(k, extra.get(k)) }
         val request = Request.Builder().url("$endpoint/v1/chat/completions")
             .post(body.toString().toRequestBody("application/json".toMediaType())).build()
         val req = if (apiKey.isBlank()) request else request.newBuilder().header("Authorization", "Bearer $apiKey").build()

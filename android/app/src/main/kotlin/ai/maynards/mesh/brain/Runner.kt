@@ -46,7 +46,8 @@ data class LiveMetrics(
  * Carries out a plan: helpers start their engines, report where they listen, the Host checks it can
  * reach each one, then starts llama-server and waits until /health answers 200.
  */
-class Runner(private val host: MeshHost, private val engine: Engine, private val shelf: Shelf) {
+class Runner(private val host: MeshHost, private val engine: Engine, private val shelf: Shelf,
+             private val profiles: Compiler.Profiles? = null) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var job: Job? = null
 
@@ -68,7 +69,11 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
      * @param devicesNow the devices as they are at launch; when given, [Preflight] re-checks the plan first
      * (Helper gone, slow link, low battery, less memory, model file changed) and re-plans or refuses.
      */
-    fun run(requested: Plan, ctx: Int = 4096, devicesNow: (() -> List<Device>)? = null) {
+    /** Host CPU threads of the current run, and whether they came from a Mesh Compiler profile. */
+    var threadsUsed = 0; private set
+    var threadsFromProfile = false; private set
+
+    fun run(requested: Plan, ctx: Int = 4096, devicesNow: (() -> List<Device>)? = null, threads: Int? = null) {
         // A model still running holds memory that frees once it stops: count it as free for the check.
         val previous = _state.value.takeIf { it.status != RunState.Status.IDLE && it.status != RunState.Status.FAILED }?.plan
         stop()
@@ -155,7 +160,10 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             }
             // 3. start the model on this phone
             step("Loading ${plan.model.name}", RunState.Status.LOADING)
-            val threads = (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
+            // explicit (the Compiler measuring) > a measured profile for this phone, model, ctx and split > default
+            val profiled = profiles?.threads(Compiler.key(android.os.Build.MODEL, plan, ctx))
+            val threads = threads ?: profiled ?: (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
+            threadsUsed = threads; threadsFromProfile = threads == profiled && profiled != null
             engine.startHost(EngineArgs.host(plan, shelf.path(plan.model), ctx, threads, addrs, shelf.projector(plan.model)?.path), "0.0.0.0", API_PORT, apiKey).join()
             while (true) {
                 if (engine.state.value.status == EngineState.Status.FAILED) return@launch fail("Engine stopped: ${engine.state.value.log.lastOrNull() ?: ""}")

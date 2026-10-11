@@ -1,6 +1,7 @@
 package ai.maynards.mesh
 
 import ai.maynards.mesh.brain.Downloads
+import ai.maynards.mesh.brain.Compiler
 import ai.maynards.mesh.brain.Runner
 import ai.maynards.mesh.brain.Shelf
 import ai.maynards.mesh.brain.Stats
@@ -16,7 +17,7 @@ class MeshApp : Application() {
     val host: MeshHost by lazy { MeshHost(this) }
     val client: MeshClient by lazy { MeshClient(this, engine) }
     val shelf: Shelf by lazy { Shelf(this) }
-    val runner: Runner by lazy { Runner(host, engine, shelf) }
+    val runner: Runner by lazy { Runner(host, engine, shelf, Compiler.Profiles(this)) }
     val stats: Stats by lazy { Stats(this) }
     val downloads: Downloads by lazy { Downloads(shelf) }
 
