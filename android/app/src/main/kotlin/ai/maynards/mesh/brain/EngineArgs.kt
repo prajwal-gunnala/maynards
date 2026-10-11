@@ -17,6 +17,9 @@ object EngineArgs {
             "--jinja", "--fit", "off", "--reasoning", "off",
             "-np", "1",   // one conversation slot: every message reuses the cached history
             "-ctk", "q8_0", "-ctv", "q8_0", "-fa", "on",
+            // Logical batch = the default physical batch (512), so compute is chunked as before; the server
+            // then reports prompt progress every 512 tokens instead of once per 2048.
+            "-b", "512",
         )
         if (mmproj != null) a += listOf("--mmproj", mmproj, "--no-mmproj-offload")
         if (!plan.split) {

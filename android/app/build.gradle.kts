@@ -49,6 +49,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Parses selectable text from PDFs on-device; documents never go to a parsing service.
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     // WebRTC is only the cross-network transport. llama.cpp RPC remains the inference protocol.
     implementation("io.github.webrtc-sdk:android:150.7871.01")
 
