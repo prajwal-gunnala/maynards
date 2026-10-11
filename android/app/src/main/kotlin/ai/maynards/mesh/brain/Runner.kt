@@ -64,9 +64,13 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
         job = scope.launch {
             val t0 = System.currentTimeMillis()
             fun step(s: String, st: RunState.Status = RunState.Status.STARTING) {
+                Sense.pulse("Host", s, SenseEvent.Kind.MODEL)
                 _state.value = RunState(st, plan, s, ((System.currentTimeMillis() - t0) / 1000).toInt())
             }
-            fun fail(s: String) { _state.value = RunState(RunState.Status.FAILED, plan, s); stopAll() }
+            fun fail(s: String) {
+                Sense.add("Host", "Stopped · $s", SenseEvent.Kind.FAIL)
+                _state.value = RunState(RunState.Status.FAILED, plan, s); stopAll()
+            }
 
             // 1. every helper starts its engine and tells us where it listens
             val addrs = ArrayList<String>()
@@ -116,6 +120,8 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                 delay(1000)
             }
             _state.value = RunState(RunState.Status.READY, plan, "Ready", ((System.currentTimeMillis() - t0) / 1000).toInt())
+            Sense.add("Host", "Ready · ${plan.model.name} · " + plan.slices.joinToString(" + ") { "${it.name} ${it.from}–${it.to - 1}" } +
+                " · ${(System.currentTimeMillis() - t0) / 1000} s", SenseEvent.Kind.MODEL)
 
             // 4. a helper leaving mid-run ends the run
             val ids = plan.helpers.map { it.deviceId }.toSet()
@@ -125,6 +131,7 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
     }
 
     fun stop() {
+        if (_state.value.status != RunState.Status.IDLE) Sense.add("Host", "Model stopped", SenseEvent.Kind.MODEL)
         // stopAll() waits on a process and writes to peer sockets; called from a tap handler it
         // froze the screen for ~2 s, which Android shows as "isn't responding"
         _state.value = RunState()
@@ -135,6 +142,8 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
 
     fun record(answer: Answer) {
         if (answer.tokens <= 0) return
+        Sense.add("Host", "Answer · ${answer.tokens} tokens · %.1f tok/s · first word %.1f s".format(
+            answer.tokPerSec, answer.firstTokenMs / 1000.0), SenseEvent.Kind.ASK)
         val old = _metrics.value
         _metrics.value = old.copy(
             lastTokPerSec = answer.tokPerSec,

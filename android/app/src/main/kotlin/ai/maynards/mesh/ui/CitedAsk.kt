@@ -87,7 +87,12 @@ fun CitedAsk(
                 val q = question.trim()
                 scope.launch {
                     val t0 = System.currentTimeMillis()
-                    fun at(stage: AskStage) { progress = (progress ?: AskProgress(t0)).enter(stage) }
+                    fun at(stage: AskStage) {
+                        if (progress?.stage != stage && stage != AskStage.DONE)
+                            ai.maynards.mesh.brain.Sense.add("Host", "Ask · ${stage.label}" +
+                                if (stage == AskStage.SENT) " · ${sources.size} sources" else "", ai.maynards.mesh.brain.SenseEvent.Kind.ASK)
+                        progress = (progress ?: AskProgress(t0)).enter(stage)
+                    }
                     try {
                         status = ""
                         at(AskStage.MODEL)
@@ -123,6 +128,7 @@ fun CitedAsk(
                             progress?.durationOf(AskStage.MODEL) ?: 0)
                     } catch (e: Exception) {
                         progress = progress?.copy(failed = true)
+                        ai.maynards.mesh.brain.Sense.add("Host", "Ask failed · ${e.javaClass.simpleName}", ai.maynards.mesh.brain.SenseEvent.Kind.FAIL)
                         status = "Could not answer: ${e.message ?: e.javaClass.simpleName}"
                     } finally {
                         asking = false

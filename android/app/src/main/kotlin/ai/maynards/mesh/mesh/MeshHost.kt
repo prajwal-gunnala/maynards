@@ -381,6 +381,7 @@ class MeshHost(private val ctx: Context) {
         }
         _peers.update { it + (id to Peer(id, specs, peerAddress, rpcProxyAddress = rpcProxyAddress, linkKind = linkKind,
             models = offered, filesPort = hello.optInt("files_port"))) }
+        ai.maynards.mesh.brain.Sense.add(specs.name, "joined · $linkKind · $peerAddress", ai.maynards.mesh.brain.SenseEvent.Kind.LINK)
         // 60 s, matching the Helper: a phone busy loading several GB of layers can be quiet for
         // a while, and treating that as a dead link ended runs mid-load
         sock?.soTimeout = 60_000                               // pongs arrive every 2 s
@@ -413,6 +414,7 @@ class MeshHost(private val ctx: Context) {
                         val sequence = m.optLong("sequence").coerceAtLeast(0)
                         if (event in setOf("graph_compute", "graph_recompute")) {
                             _peers.update { p -> p[id]?.let { peer ->
+                                if (sequence > peer.rpcSequence) ai.maynards.mesh.brain.Sense.pulse(peer.specs.name, "computing its layers", ai.maynards.mesh.brain.SenseEvent.Kind.WORK)
                                 if (sequence > peer.rpcSequence) p + (id to peer.copy(
                                     rpcEvent = event, rpcSequence = sequence, rpcEventAtMs = System.currentTimeMillis())) else p
                             } ?: p }
@@ -428,6 +430,7 @@ class MeshHost(private val ctx: Context) {
             // reconnects replaces the entry above, and the old connection's teardown used to
             // emit "gone" anyway, which Runner treats as "a helper left" and ends the run.
             if (conns.remove(id, wire)) {
+                ai.maynards.mesh.brain.Sense.add(_peers.value[id]?.specs?.name ?: specs.name, "left", ai.maynards.mesh.brain.SenseEvent.Kind.FAIL)
                 _peers.update { it - id }
                 _events.tryEmit(id to msg("gone"))
             }
