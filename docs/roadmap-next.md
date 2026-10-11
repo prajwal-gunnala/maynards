@@ -2,24 +2,28 @@
 
 Updated 2026-10-11. This roadmap brings together the app, phone cluster, model selection, compiler/optimizer, telemetry, privacy, developer workflows, and Origami ideas discussed so far. It is intentionally staged: finish and verify one slice before starting the next. The laptop is a monitor/coordinator when useful; model computation remains on the selected phones unless a task explicitly opts into another destination.
 
-## Status board — 2026-10-11 07:35
+## Status board — 2026-10-11 08:00
 
-| Stage | Status | Verified on the phones | Missing for the gate |
+MVP of every stage except 10 (rented compute, out of scope by decision). "Unit" = unit-tested; "phone" = seen
+working on the two iQOO phones.
+
+| Stage | MVP built | Phone | Still missing |
 |---|---|---|---|
-| 0 Baseline | done | every run in `docs/measurements.md` names model, quant, context, link, layers | repeat per release |
-| 1 Understandable app | mostly | Use cards (Chat, Case Room, Code, Origami); real model names; short labels | a first-time-user walk-through |
-| 2 Setup, pairing, links | mostly | readiness + memory limit, role chooser, QR pairing over Wi-Fi; USB-only pairing via `scripts/phone-usb-relay.py`; `scripts/link-watch.py` showed every mesh connection on USB, none on Wi-Fi | laptop panel vs app agreement; restart and permission-denial cases |
-| 3 Model catalog + preflight | built | — (unit tests) | `Preflight` re-checks file size, Helpers, links, battery and memory at launch and re-plans or refuses; no content hash (too slow for 18 GB on a phone) |
-| 4 Task router | built | — (unit tests) | `TaskDetector` reads any message (vision / code / reasoning / document / general) and `Router` picks the fitting installed model with a reason; Mesh Chat routes every message; rooms pass their task |
-| 4b Multiple models | first chain built | — (unit tests) | Case Room "Find conflicts": timeline (local) → model JSON pairs → checked; each step picks its model via the router. Not yet run with two different models on the phones |
-| 5 Origami | V1 | organizer generator inside Use | more templates; a fabricated reference |
-| 6 Spider Sense + Stats | built | Ask stages and stats card; USB split answer; Case and Code answers in Stats | live feed built, not yet seen on the phone; matched comparisons |
-| 7 Compiler + Ned Capsules | not started | — | everything in section 7 (multi-day) |
-| 8 Privacy, failure | built | per-install API key; Helper consent (re-asked when the Helper set changes) | dead model process and cut-off answers are caught; a Helper leaving mid-answer gives one disclosed restart. Not yet tested by pulling a cable |
-| 9 Case Room + Code | built | Case: import, timeline, cited answers (Wi-Fi single phone; USB 8:24 split). Code: cited file:lines answers | a written data-flow test |
-| 10 Rented compute | future | — | — |
+| 0 Baseline | every run in `docs/measurements.md` names model, quant, context, link, layers | phone | repeat per release |
+| 1 Understandable app | Use cards (Chat, Case Room, Code, Origami), real model names, short labels, Next-step card | phone | a first-time-user walk-through by a person |
+| 2 Setup, pairing, links | readiness + memory limit, role chooser, QR over Wi-Fi, USB-only via laptop relay, `link-watch.py`; invites accepted while open; orphaned Helper engines freed when a Host restarts (`eaa8e05`) | phone (USB + Wi-Fi) | laptop-panel vs app check; permission-denial walk-through |
+| 3 Preflight | `Preflight`: file size, Helpers, links, battery, memory at launch → re-plan or refuse with reason | unit | phone check; content hash (too slow for 18 GB) |
+| 4 Task router | `TaskDetector` reads any message (vision/code/reasoning/document/general); `Router` picks the fitting installed model with a reason; Mesh Chat routes every message | phone ("reasoning → Qwen3.5 9B") | a coder model that fits, to show a switch |
+| 4b Multiple models | chain "Find conflicts": timeline (local) → model JSON → checked; each step picks its model | unit | two different models in one chain on the phones |
+| 5 Origami | organizer + **table** template (top, 2 legs, stretcher), same joints/exports | unit | a fabricated reference |
+| 6 Spider Sense + Stats | live feed, Ask stages + stats card (incl. reused prompt tokens), Case/Code/Chat in Stats | phone | matched comparisons across runs |
+| 7 Compiler + Ned Capsules | signed run capsule per Helper, checked on the Helper, proposed vs applied card; Mesh Compiler results exported as capsule files and applied/refused by the app; on-phone Tune (threads, ≥5 % rule) | unit | capsules on the phones; compiler runs for Qwen3.5-9B; speed-aware split (layer 7) |
+| 8 Privacy, failure | API key, Helper consent per Helper set, backup off, dead engine / cut-off stream caught, one disclosed restart when a Helper leaves | unit (+ consent on phone) | pull-a-cable test on the phones |
+| 9 Case Room + Code | import, timeline, conflicts, cited answers, code folders; `docs/data-flow.md` | phone | external review |
+| 10 Rented compute | — | — | out of scope by decision |
 
-Next: on-device checks of 3, 4, 4b, 6 and 8 (pull a Helper's cable mid-answer); then 2's remaining cases; 7 needs its own plan.
+Numbers measured elsewhere that apply here (CPU, same settings as the app): prompt reuse of a ~1,900-token
+context, reply 63.3 s → 2.4–2.8 s (`docs/mesh-compiler/03-results.md`). To be measured on the split next.
 
 ## Product language
 
