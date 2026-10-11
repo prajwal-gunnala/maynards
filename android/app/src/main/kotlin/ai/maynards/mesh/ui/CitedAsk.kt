@@ -124,7 +124,8 @@ class AskSession {
                 checked = CaseCitations.check(reply.text, sources)
                 at(AskStage.DONE)
                 stats = AskStats(model, plan?.slices?.map { it.name } ?: emptyList(), sources.size, reply,
-                    progress?.durationOf(AskStage.MODEL) ?: 0)
+                    progress?.durationOf(AskStage.MODEL) ?: 0,
+                    reused = progress?.reading?.cache ?: 0, promptTotal = progress?.reading?.total ?: 0)
                 restartedAfter?.let { status = "Restarted after: $it · this answer is from a fresh run" }
                 // Bookkeeping after the answer is on screen: a failure here must not lose the answer.
                 runCatching { runner.record(reply) }
@@ -290,7 +291,9 @@ data class AskProgress(
     }
 }
 
-data class AskStats(val model: String, val devices: List<String>, val sources: Int, val answer: Answer, val modelMs: Long)
+data class AskStats(val model: String, val devices: List<String>, val sources: Int, val answer: Answer, val modelMs: Long,
+                    /** Prompt tokens llama-server took from its cache instead of reading again, of [promptTotal]. */
+                    val reused: Int = 0, val promptTotal: Int = 0)
 
 @Composable
 private fun AskProgressView(p: AskProgress, run: RunState, now: Long) {
@@ -351,6 +354,7 @@ private fun AskStatsView(s: AskStats) {
             StatLine("Sources", "${s.sources}")
             if (s.modelMs >= 1000) StatLine("Model start", secs(s.modelMs))
             StatLine("Read", "${a.promptTokens} tokens · ${secs(a.promptMs.toLong())} · ${"%.1f".format(a.promptPerSec)} tok/s")
+            if (s.reused > 0) StatLine("Reused", "${s.reused} of ${s.promptTotal} tokens · not read again")
             StatLine("First word", if (a.firstTokenMs >= 0) secs(a.firstTokenMs) else "—")
             StatLine("Wrote", "${a.tokens} tokens · ${secs(a.predictedMs.toLong())} · ${"%.1f".format(a.tokPerSec)} tok/s")
             StatLine("Total", secs(a.totalMs))
