@@ -130,7 +130,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
         Box(Modifier.weight(1f)) {
             when (tab) {
                 0 -> MeshTab(host, runner, onChangeRole, onGo = { tab = it })
-                1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap), onRun = { runner.run(it); tab = 2 },
+                1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap), onRun = { runner.run(it, devicesNow = { meshDevices(me, host.peers.value.values, hostCap) }); tab = 2 },
                     peers = peers.values, downloads = downloads)
                 2 -> when (useCase) {
                     null -> UseHome(onChoose = { useCase = it })
@@ -486,7 +486,7 @@ private suspend fun ensureUseCaseModel(
         "No installed vision model with its matching mmproj fits this mesh. Add one in Models."
     else "No installed text model fits this mesh. Add one in Models.")
 
-    runner.run(selected)
+    runner.run(selected, devicesNow = { devices })
     val result = kotlinx.coroutines.withTimeout(10 * 60_000L) {
         runner.state.first { it.status == ai.maynards.mesh.brain.RunState.Status.READY || it.status == ai.maynards.mesh.brain.RunState.Status.FAILED }
     }

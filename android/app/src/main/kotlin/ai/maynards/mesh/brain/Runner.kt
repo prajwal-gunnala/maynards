@@ -58,11 +58,32 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
     val endpoint = "http://127.0.0.1:$API_PORT"
     val apiKey = host.apiKey
 
-    fun run(plan: Plan, ctx: Int = 4096) {
+    /**
+     * @param devicesNow the devices as they are at launch; when given, [Preflight] re-checks the plan first
+     * (Helper gone, slow link, low battery, less memory, model file changed) and re-plans or refuses.
+     */
+    fun run(requested: Plan, ctx: Int = 4096, devicesNow: (() -> List<Device>)? = null) {
+        // A model still running holds memory that frees once it stops: count it as free for the check.
+        val previous = _state.value.takeIf { it.status != RunState.Status.IDLE && it.status != RunState.Status.FAILED }?.plan
         stop()
         _metrics.value = LiveMetrics(startedAtMs = System.currentTimeMillis())
         job = scope.launch {
             val t0 = System.currentTimeMillis()
+            val plan = if (devicesNow == null) requested else {
+                val held = previous?.slices?.associate { it.deviceId to it.bytes }.orEmpty()
+                val devices = devicesNow().map { d -> d.copy(usableBytes = d.usableBytes + (held[d.id] ?: 0L)) }
+                val file = java.io.File(shelf.path(requested.model)).takeIf { it.isFile }?.length()
+                when (val r = Preflight.check(requested, devices, file, shelf.projector(requested.model)?.length() ?: 0L, ctx)) {
+                    is Preflight.Result.Go -> r.plan.also { p ->
+                        r.note?.let { Sense.add("Host", "$it → " + p.slices.joinToString(" + ") { s -> "${s.name} ${s.count}" }, SenseEvent.Kind.MODEL) }
+                    }
+                    is Preflight.Result.Stop -> {
+                        Sense.add("Host", "Not started · ${r.reason}", SenseEvent.Kind.FAIL)
+                        _state.value = RunState(RunState.Status.FAILED, requested, "Not started · ${r.reason}")
+                        return@launch
+                    }
+                }
+            }
             fun step(s: String, st: RunState.Status = RunState.Status.STARTING) {
                 Sense.pulse("Host", s, SenseEvent.Kind.MODEL)
                 _state.value = RunState(st, plan, s, ((System.currentTimeMillis() - t0) / 1000).toInt())
