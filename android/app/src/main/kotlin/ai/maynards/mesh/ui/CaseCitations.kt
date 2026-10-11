@@ -12,6 +12,14 @@ object CaseCitations {
         Keep the answer short. This is a review aid, not legal advice.
     """.trimIndent()
 
+    val codeSystem = """
+        You answer questions about a software project using ONLY the numbered source excerpts the user supplies.
+        Each excerpt is a file path with a line range. Cite every claim with the excerpt IDs it relies on, in square brackets, for example [S01] or [S02, S03].
+        Never cite an ID that was not supplied. Do not guess about code you were not shown.
+        If the excerpts do not contain the answer, reply exactly: $NOT_FOUND
+        Keep the answer short. Quote identifiers exactly as written.
+    """.trimIndent()
+
     fun prompt(question: String, evidence: List<CaseEvidence>): String = buildString {
         append("SOURCES\n")
         evidence.forEach { append("[${it.id}] ${it.fileName}, ${it.location}\n${it.text}\n\n") }

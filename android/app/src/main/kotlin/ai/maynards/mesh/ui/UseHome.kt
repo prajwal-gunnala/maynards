@@ -34,7 +34,7 @@ fun UseHome(onChoose: (String) -> Unit) {
         UseCaseCard("chat", "Mesh Chat", "Chat with the model currently running on this mesh. The Host handles the request and assigned Helpers compute their model layers.", "The chat screen shows the active model and live route.", onChoose)
         UseCaseCard("origami", "Origami Workshop", "Design organizers and furniture from a prompt or photo, preview the parametric result, and export fabrication files.", "Model choice is automatic; geometry remains deterministic.", onChoose)
         UseCaseCard("case", "Legal Case Room", "Work with original case documents and get source-linked timelines, comparisons and answers.", "Local import, timeline, search and cited answers. No OCR yet.", onChoose)
-        UseCaseCard("developer", "Developer Workspace", "Use the local chat model for development questions.", "Repository import, automation, and approved test execution are still planned.", onChoose)
+        UseCaseCard("developer", "Developer Workspace", "Open a private project folder and ask about it. Answers cite file and lines.", "Read-only. No code is run or changed.", onChoose)
     }
 }
 

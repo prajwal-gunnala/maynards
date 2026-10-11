@@ -168,11 +168,18 @@ object CaseDocuments {
         return out.filter { it.isNotBlank() }
     }
 
+    /** Words, lowercased; a camelCase identifier also yields its parts (ensureUseCaseModel → ensure, use, case, model). */
     private fun terms(text: String): List<String> = Regex("[\\p{L}\\p{N}]{2,}")
-        .findAll(text.lowercase())
-        .map { it.value }
+        .findAll(text)
+        .flatMap { m ->
+            val parts = m.value.split(CAMEL).filter { it.length >= 2 }
+            if (parts.size > 1) sequenceOf(m.value) + parts.asSequence() else sequenceOf(m.value)
+        }
+        .map { it.lowercase() }
         .filterNot { it in STOP_WORDS }
         .toList()
+
+    private val CAMEL = Regex("(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
     private data class Passage(val file: String, val location: String, val text: String)
     private data class Ranked(val index: Int, val passage: Passage, val score: Double)

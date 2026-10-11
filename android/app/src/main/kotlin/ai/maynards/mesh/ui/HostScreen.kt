@@ -146,6 +146,12 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                             ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
                         })
                     }
+                    "developer" -> Column(Modifier.fillMaxSize()) {
+                        NButton("← Use cases", fill = Paper) { useCase = null }
+                        DeveloperTab(runner, onEnsureModel = {
+                            ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
+                        })
+                    }
                     else -> {
                         val run by runner.state.collectAsState()
                         Column(Modifier.fillMaxSize()) {
