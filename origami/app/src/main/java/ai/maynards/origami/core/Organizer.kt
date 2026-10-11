@@ -9,7 +9,10 @@ data class Point3(val x: Double, val y: Double, val z: Double)
 data class Cutout(val x: Double, val y: Double, val width: Double, val height: Double)
 
 enum class Edge { TOP, RIGHT, BOTTOM, LEFT }
-enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER }
+enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER, TOP }
+
+/** What is being built. Every template uses the same parts, tab-and-slot joints, layout and exports. */
+enum class Template(val label: String) { ORGANIZER("Organizer"), TABLE("Table") }
 enum class JointType { TAB_SLOT }
 
 data class OrganizerSpec(
@@ -19,8 +22,18 @@ data class OrganizerSpec(
     val materialThicknessMm: Int = 3,
     val compartments: Int = 2,
     val clearanceMm: Double = 0.2,
+    val template: Template = Template.ORGANIZER,
 ) {
     fun validate() {
+        if (template == Template.TABLE) {
+            require(widthMm in 150..800) { "Table width must be 150–800 mm" }
+            require(heightMm in 60..400) { "Table height must be 60–400 mm" }
+            require(depthMm in 100..500) { "Table depth must be 100–500 mm" }
+            require(materialThicknessMm in 3..12) { "A table needs 3–12 mm material" }
+            require(clearanceMm in 0.0..1.5) { "Joint clearance must be 0–1.5 mm" }
+            require(depthMm >= materialThicknessMm * 12) { "The table is too shallow for its leg joints" }
+            return
+        }
         require(widthMm in 100..800) { "Width must be 100–800 mm" }
         require(heightMm in 60..500) { "Height must be 60–500 mm" }
         require(depthMm in 80..600) { "Depth must be 80–600 mm" }
@@ -89,6 +102,7 @@ data class OrganizerDesign(
 object OrganizerGenerator {
     fun generate(spec: OrganizerSpec): OrganizerDesign {
         spec.validate()
+        if (spec.template == Template.TABLE) return table(spec)
         val t = spec.materialThicknessMm.toDouble()
         val fit = spec.clearanceMm
         val tabSpan = minOf(18.0, maxOf(12.0, t * 5))
@@ -206,6 +220,65 @@ object OrganizerGenerator {
         return design
     }
 
+    /**
+     * A small table (desk shelf, monitor riser): a top, two legs and a back stretcher against racking.
+     * Each leg's top edge has two tabs into slots in the top; the stretcher's ends tab into both legs.
+     */
+    private fun table(spec: OrganizerSpec): OrganizerDesign {
+        val t = spec.materialThicknessMm.toDouble()
+        val fit = spec.clearanceMm
+        val tabSpan = minOf(18.0, maxOf(12.0, t * 5))
+        val tabDepth = t
+        val slotW = t + fit
+        val slotL = tabSpan + fit
+        val width = spec.widthMm.toDouble()
+        val height = spec.heightMm.toDouble()
+        val depth = spec.depthMm.toDouble()
+        val innerDepth = depth - t
+        val legHeight = height - t                       // the top's thickness sits above the legs
+        val stretcherHeight = minOf(70.0, legHeight * 0.45)
+        val joints = mutableListOf<Joint>()
+        val tabs = mutableMapOf<String, MutableList<Tab>>()
+        val slots = mutableMapOf<String, MutableList<Cutout>>()
+        fun tabSlot(id: String, tabPart: String, tabEdge: Edge, center: Double, slotPart: String, slotEdge: Edge,
+                    slot: Point2, longAxisX: Boolean, direction: Point3) {
+            tabs.getOrPut(tabPart) { mutableListOf() } += Tab(tabEdge, center, tabSpan, tabDepth)
+            val w = if (longAxisX) slotL else slotW
+            val h = if (longAxisX) slotW else slotL
+            slots.getOrPut(slotPart) { mutableListOf() } += Cutout(slot.x - w / 2, slot.y - h / 2, w, h)
+            joints += Joint(id, tabPart, tabEdge, center, slotPart, slotEdge, slot, tabSpan, tabDepth, slotW, slotL, direction, fit)
+        }
+        for (i in 0..1) {
+            val y = innerDepth * (i + 1) / 3
+            tabSlot("left-top-${i + 1}", "left", Edge.TOP, y, "top", Edge.LEFT, Point2(t * 1.5, t / 2 + y), false, Point3(0.0, 0.0, 1.0))
+            tabSlot("right-top-${i + 1}", "right", Edge.TOP, y, "top", Edge.RIGHT, Point2(width - t * 1.5, t / 2 + y), false, Point3(0.0, 0.0, 1.0))
+        }
+        val lock = stretcherHeight / 2
+        // the stretcher stands 1.5 t behind the back edge: leg x = t (leg planes start at t/2)
+        tabSlot("stretcher-left", "stretcher", Edge.LEFT, lock, "left", Edge.LEFT, Point2(t, lock), false, Point3(-1.0, 0.0, 0.0))
+        tabSlot("stretcher-right", "stretcher", Edge.RIGHT, lock, "right", Edge.LEFT, Point2(t, lock), false, Point3(1.0, 0.0, 0.0))
+
+        val colors = listOf("#E7C99A", "#C9D8C5", "#C8D5E2", "#E6C3B7")
+        fun part(id: String, name: String, w: Double, h: Double, plane: PanelPlane, color: Int): Part {
+            val ts = tabs[id].orEmpty()
+            val cs = slots[id].orEmpty().mapNotNull { c ->
+                val l = max(0.0, c.x); val tp = max(0.0, c.y); val r = min(w, c.x + c.width); val b = min(h, c.y + c.height)
+                if (r <= l || b <= tp) null else Cutout(l, tp, r - l, b - tp)
+            }
+            return Part(id, name, w, h, outlineWithTabs(w, h, ts), cs, ts, plane, 0, colors[color])
+        }
+        val parts = listOf(
+            part("top", "Top", width, depth, PanelPlane.TOP, 0),
+            part("left", "Left leg", innerDepth, legHeight, PanelPlane.LEFT_SIDE, 1),
+            part("right", "Right leg", innerDepth, legHeight, PanelPlane.RIGHT_SIDE, 2),
+            // between the legs' inner faces (legs occupy t..2t and w-2t..w-t); its end tabs pass through the legs
+            part("stretcher", "Back stretcher", width - 4 * t, stretcherHeight, PanelPlane.BACK, 3),
+        )
+        val design = OrganizerDesign(spec, parts, joints)
+        validateGenerated(design)
+        return design
+    }
+
     private fun partsIndex(id: String, compartments: Int): Int = when {
         id == "base" -> 0
         id == "back" -> 1
@@ -280,8 +353,20 @@ fun Part.assembledPoint(point: Point2, spec: OrganizerSpec): Point3 {
     val w = spec.widthMm.toDouble()
     val h = spec.heightMm.toDouble()
     val d = spec.depthMm.toDouble()
+    val t = spec.materialThicknessMm.toDouble()
+    if (spec.template == Template.TABLE) {
+        val legTop = h - t
+        val zt = legTop - point.y
+        return when (plane) {
+            PanelPlane.TOP -> Point3(point.x, point.y, h)
+            PanelPlane.LEFT_SIDE -> Point3(t * 1.5, t / 2 + point.x, zt)
+            PanelPlane.RIGHT_SIDE -> Point3(w - t * 1.5, t / 2 + point.x, zt)
+            else -> Point3(2 * t + point.x, t * 1.5, zt)   // back stretcher, just under the top
+        }
+    }
     val z = h - point.y
     return when (plane) {
+        PanelPlane.TOP -> Point3(point.x, point.y, h)
         PanelPlane.FLOOR -> Point3(point.x, point.y, 0.0)
         PanelPlane.BACK -> Point3(spec.materialThicknessMm / 2.0 + point.x, spec.materialThicknessMm / 2.0, z)
         PanelPlane.FRONT -> Point3(spec.materialThicknessMm / 2.0 + point.x, d - spec.materialThicknessMm / 2.0, z)

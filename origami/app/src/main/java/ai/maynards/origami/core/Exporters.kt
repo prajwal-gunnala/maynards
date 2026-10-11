@@ -32,7 +32,7 @@ object ProjectJsonExporter {
         appendLine("{")
         appendLine("  \"schema\": \"maynards.origami.organizer.v1\",")
         appendLine("  \"units\": \"mm\",")
-        appendLine("  \"spec\": {\"width\": ${design.spec.widthMm}, \"height\": ${design.spec.heightMm}, \"depth\": ${design.spec.depthMm}, \"materialThickness\": ${design.spec.materialThicknessMm}, \"compartments\": ${design.spec.compartments}, \"clearance\": ${fmt(design.spec.clearanceMm)}},")
+        appendLine("  \"spec\": {\"width\": ${design.spec.widthMm}, \"height\": ${design.spec.heightMm}, \"depth\": ${design.spec.depthMm}, \"materialThickness\": ${design.spec.materialThicknessMm}, \"compartments\": ${design.spec.compartments}, \"clearance\": ${fmt(design.spec.clearanceMm)}, \"template\": \"${design.spec.template.name}\"},")
         appendLine("  \"stock\": {\"width\": ${layout.stock.widthMm}, \"height\": ${layout.stock.heightMm}, \"margin\": ${layout.stock.marginMm}, \"gap\": ${layout.stock.gapMm}, \"fits\": ${layout.fits}, \"utilizationPercent\": ${fmt(layout.utilizationPercent)}},")
         appendLine("  \"flatPreview\": {\"kind\": \"${if (layout.fits) "stock-layout" else "animation-preview"}\", \"width\": ${flatPreview.stock.widthMm}, \"height\": ${flatPreview.stock.heightMm}},")
         appendLine("  \"parts\": [")

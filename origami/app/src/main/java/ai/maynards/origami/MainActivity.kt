@@ -319,7 +319,18 @@ private fun CreateScreen(
         item {
             SectionHeader("YOUR OBJECT")
             CardBlock {
-                Text("Screwless desk organizer", color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Template.entries.forEach { tpl ->
+                        FilterChip(selected = spec.template == tpl, onClick = {
+                            onSpec(if (tpl == Template.TABLE && spec.template != tpl)
+                                spec.copy(template = tpl, widthMm = 400, depthMm = 220, heightMm = 120, materialThicknessMm = maxOf(6, spec.materialThicknessMm))
+                            else spec.copy(template = tpl))
+                        }, label = { Text(tpl.label) }, modifier = Modifier.weight(1f))
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Text(if (spec.template == Template.TABLE) "Screwless small table · top, 2 legs, stretcher" else "Screwless desk organizer",
+                    color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(13.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumberField("Width", spec.widthMm.toString(), "mm", { it.toIntOrNull()?.let { value -> onSpec(spec.copy(widthMm = value)) } }, Modifier.weight(1f))
@@ -330,13 +341,18 @@ private fun CreateScreen(
                     NumberField("Height", spec.heightMm.toString(), "mm", { it.toIntOrNull()?.let { value -> onSpec(spec.copy(heightMm = value)) } }, Modifier.weight(1f))
                     NumberField("Material", spec.materialThicknessMm.toString(), "mm thick", { it.toIntOrNull()?.let { value -> onSpec(spec.copy(materialThicknessMm = value)) } }, Modifier.weight(1f))
                 }
-                Spacer(Modifier.height(12.dp))
-                Text("Compartments", fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 7.dp)) {
-                    (1..4).forEach { count ->
-                        FilterChip(selected = spec.compartments == count, onClick = { onSpec(spec.copy(compartments = count)) },
-                            label = { Text("$count") }, modifier = Modifier.weight(1f))
+                if (spec.template == Template.ORGANIZER) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("Compartments", fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 7.dp)) {
+                        (1..4).forEach { count ->
+                            FilterChip(selected = spec.compartments == count, onClick = { onSpec(spec.copy(compartments = count)) },
+                                label = { Text("$count") }, modifier = Modifier.weight(1f))
+                        }
                     }
+                } else {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Not fabrication-tested yet · check fit on a scrap first", fontSize = 11.sp, color = Muted)
                 }
             }
         }
@@ -755,6 +771,7 @@ private fun mapToView(
         PanelPlane.LEFT_SIDE -> Point3(-1.0, 0.0, 0.1)
         PanelPlane.RIGHT_SIDE -> Point3(1.0, 0.0, 0.1)
         PanelPlane.DIVIDER -> Point3(0.0, 0.0, 1.0)
+        PanelPlane.TOP -> Point3(0.0, 0.0, 1.0)
     }
     val p = progress.toDouble()
     val e = explodeAmount.toDouble() * 55.0 * p
