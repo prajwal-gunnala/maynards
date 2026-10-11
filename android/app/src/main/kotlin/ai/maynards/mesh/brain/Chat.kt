@@ -59,6 +59,7 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
         var timings: JSONObject? = null
         var route: String? = null
         var chunks = 0
+        var finished = false
         http.newCall(req).also { call = it }.execute().use { resp ->
             route = resp.header("X-Mesh-Route")   // which device actually answered
             check(resp.isSuccessful) { "HTTP ${resp.code}" }
@@ -67,13 +68,16 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
                 val line = src.readUtf8Line() ?: break
                 if (!line.startsWith("data: ")) continue
                 val data = line.removePrefix("data: ")
-                if (data == "[DONE]") break
+                if (data == "[DONE]") { finished = true; break }
                 val j = JSONObject(data)
+                j.optJSONObject("error")?.let { throw java.io.IOException("model error: ${it.optString("message").take(160)}") }
                 j.optJSONObject("timings")?.let { timings = it }
                 j.optJSONObject("prompt_progress")?.let { p ->
                     onProgress?.invoke(ChatProgress.Reading(p.optInt("processed"), p.optInt("total"), p.optInt("cache"), p.optLong("time_ms")))
                 }
-                val d = j.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")
+                val choice = j.optJSONArray("choices")?.optJSONObject(0)
+                if (choice != null && !choice.isNull("finish_reason")) finished = true
+                val d = choice?.optJSONObject("delta")
                 val delta = if (d == null || d.isNull("content")) "" else d.optString("content")
                 if (delta.isNotEmpty()) {
                     if (first < 0) first = (System.nanoTime() - t0) / 1_000_000
@@ -83,6 +87,9 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
                 }
             }
         }
+        // A stream that stops without finish_reason or [DONE] means the server or a Helper went away:
+        // the text so far is not a whole answer, so do not return it as one.
+        if (!finished) throw java.io.IOException("answer cut off: the model stopped mid-stream")
         val t = timings
         return Answer(
             text = out.toString(),

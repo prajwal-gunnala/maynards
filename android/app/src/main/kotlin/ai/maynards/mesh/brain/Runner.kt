@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.net.HttpURLConnection
@@ -144,10 +145,12 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             Sense.add("Host", "Ready · ${plan.model.name} · " + plan.slices.joinToString(" + ") { "${it.name} ${it.from}–${it.to - 1}" } +
                 " · ${(System.currentTimeMillis() - t0) / 1000} s", SenseEvent.Kind.MODEL)
 
-            // 4. a helper leaving mid-run ends the run
-            val ids = plan.helpers.map { it.deviceId }.toSet()
-            host.events.filter { (id, m) -> id in ids && m.optString("t") == "gone" }.first()
-            fail("A helper left")
+            // 4. a helper leaving, or this phone's model process dying, ends the run
+            val names = plan.helpers.associate { it.deviceId to it.name }
+            val gone = host.events.filter { (id, m) -> id in names && m.optString("t") == "gone" }.map { (id, _) -> "${names[id]} left" }
+            val died = engine.state.filter { it.status == EngineState.Status.FAILED }
+                .map { "model process stopped" + (it.log.lastOrNull()?.take(100)?.let { l -> " · $l" } ?: "") }
+            fail(kotlinx.coroutines.flow.merge(gone, died).first())
         }
     }
 

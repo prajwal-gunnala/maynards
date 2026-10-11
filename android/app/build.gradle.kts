@@ -55,4 +55,6 @@ dependencies {
     implementation("io.github.webrtc-sdk:android:150.7871.01")
 
     testImplementation("junit:junit:4.13.2")
+    // real org.json for unit tests (Android's copy is a stub off-device)
+    testImplementation("org.json:json:20240303")
 }

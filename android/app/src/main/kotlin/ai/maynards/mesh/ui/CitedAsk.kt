@@ -1,5 +1,7 @@
 package ai.maynards.mesh.ui
 
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CoroutineScope
@@ -91,13 +93,14 @@ class AskSession {
             progress = (progress ?: AskProgress(t0)).enter(stage)
         }
         job = APP_SCOPE.launch {
-            try {
-                Sense.add("Host", "Ask · ${AskStage.MODEL.label}", SenseEvent.Kind.ASK)
+            var restartedAfter: String? = null
+            try { while (true) try {
+                if (restartedAfter == null) Sense.add("Host", "Ask · ${AskStage.MODEL.label}", SenseEvent.Kind.ASK)
                 val model = onEnsureModel()
                 val plan = runner.state.value.plan
                 if (plan?.split == true && plan.helpers.map { it.deviceId }.toSet() != trusted) {
                     progress = null
-                    status = "Tick the Helpers to trust, then ask again"
+                    status = (restartedAfter?.let { "$it · " } ?: "") + "Tick the Helpers to trust, then ask again"
                     return@launch
                 }
                 at(AskStage.SENT)
@@ -122,16 +125,40 @@ class AskSession {
                 at(AskStage.DONE)
                 stats = AskStats(model, plan?.slices?.map { it.name } ?: emptyList(), sources.size, reply,
                     progress?.durationOf(AskStage.MODEL) ?: 0)
+                restartedAfter?.let { status = "Restarted after: $it · this answer is from a fresh run" }
                 // Bookkeeping after the answer is on screen: a failure here must not lose the answer.
                 runCatching { runner.record(reply) }
                 runCatching { onAnswer(reply) }.onFailure { status = "Answer kept · stats not saved (${it.javaClass.simpleName})" }
+                break
             } catch (e: Exception) {
-                progress = progress?.copy(failed = true)
                 val stopped = e is kotlinx.coroutines.CancellationException || (e is java.io.IOException && e.message == "Canceled")
+                // A Helper leaving mid-answer loses its part of the model state; the answer cannot resume.
+                // A question has no side effects, so it is asked again once on the devices left, and said so.
+                // The stream can break a moment before the Runner hears that a Helper left: give it 3 s.
+                if (!stopped) withTimeoutOrNull(3_000) {
+                    runner.state.first { it.status == ai.maynards.mesh.brain.RunState.Status.FAILED }
+                }
+                val run = runner.state.value
+                val lost = run.status == ai.maynards.mesh.brain.RunState.Status.FAILED &&
+                    (run.step.endsWith(" left") || run.step.startsWith("model process stopped"))
+                if (!stopped && lost && restartedAfter == null) {
+                    restartedAfter = run.step
+                    Sense.add("Host", "Ask restarting · ${run.step}", SenseEvent.Kind.FAIL)
+                    answer = ""
+                    progress = AskProgress(System.currentTimeMillis())
+                    status = "${run.step} · restarting on the devices left"
+                    continue
+                }
+                progress = progress?.copy(failed = true)
                 Sense.add("Host", if (stopped) "Ask stopped" else "Ask failed · ${e.javaClass.simpleName}",
                     if (stopped) SenseEvent.Kind.ASK else SenseEvent.Kind.FAIL)
-                status = if (stopped) "Stopped" else "Could not answer: ${e.message ?: e.javaClass.simpleName}"
-            } finally {
+                status = when {
+                    stopped -> "Stopped"
+                    lost -> "Could not answer: ${run.step} (already restarted once)"
+                    else -> "Could not answer: ${e.message ?: e.javaClass.simpleName}"
+                }
+                break
+            } } finally {
                 chat = null
                 asking = false
             }
