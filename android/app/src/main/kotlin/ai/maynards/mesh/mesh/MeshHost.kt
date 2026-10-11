@@ -326,6 +326,9 @@ class MeshHost(private val ctx: Context) {
 
     fun remoteRpcReady(id: String): Boolean = peers.value[id]?.rpcProxyAddress != null && remoteRpcStreams.peek()?.isOpen == true
 
+    /** Whether this Host has a run starting or running; set by the app. */
+    var runActive: () -> Boolean = { false }
+
     /** The pairing secret shared with one Helper; signs its Ned Capsules. */
     fun secretFor(id: String): String? = prefs.getString("secret:$id", null)
 
@@ -374,6 +377,9 @@ class MeshHost(private val ctx: Context) {
         val welcome = msg("welcome", "secret" to secret, "host" to android.os.Build.MODEL, "mesh" to meshId)
         if (specs.kind == "laptop") welcome.put("api_key", apiKey)
         wire.send(welcome)
+        // A Helper still holding layers from a run this Host no longer has (the Host app restarted) is told to
+        // free them, so its memory is counted again. A reconnect during a live run keeps its engine.
+        if (!runActive()) runCatching { wire.send(msg("stop")) }
         val offered = hello.optJSONArray("models")?.let { a ->
             (0 until a.length()).associate { a.getJSONObject(it).getString("file") to a.getJSONObject(it).getLong("bytes") }
         } ?: emptyMap()
