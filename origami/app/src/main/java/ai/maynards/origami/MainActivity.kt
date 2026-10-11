@@ -366,12 +366,15 @@ private fun CreateScreen(
                 Spacer(Modifier.height(12.dp))
                 Text("Joint", fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 7.dp)) {
-                    JointStyle.entries.forEach { js ->
+                    JointStyle.entries.filter { it != JointStyle.FINGER || spec.template == Template.ORGANIZER }.forEach { js ->
                         FilterChip(selected = spec.joint == js, onClick = { onSpec(spec.copy(joint = js)) }, label = { Text(js.label) })
                     }
                 }
-                Text(if (spec.joint == JointStyle.WEDGED) "Tabs come through and a wedge locks each one: no glue, no screws, comes apart again."
-                     else "Tabs press into slots; the clearance sets how snug.", fontSize = 11.sp, color = Muted)
+                Text(when (spec.joint) {
+                    JointStyle.WEDGED -> "Tabs come through and a wedge locks each one: no glue, no screws, comes apart again."
+                    JointStyle.FINGER -> "Corners and bottom interlock edge to edge, like a drawer: strong and neat, press-fit."
+                    JointStyle.TAB_SLOT -> "Tabs press into slots; the clearance sets how snug."
+                }, fontSize = 11.sp, color = Muted)
             }
         }
         item {
@@ -926,7 +929,7 @@ private fun JointCloseUp(design: OrganizerDesign, onShow: (Point3) -> Unit = {})
                     drawText(text, xx, yy, paint)
                 }
                 beside("other board · ${"%.0f".format(t)} mm", y(-half) + 34f)
-                beside("slot ${"%.1f".format(t + sec.clearance)} mm (+${sec.clearance})", y(-half) + 70f)
+                beside((if (joint.type == JointType.FINGER) "notch " else "slot ") + "${"%.1f".format(t + sec.clearance)} mm (+${sec.clearance})", y(-half) + 70f)
                 drawText("tab ${"%.1f".format(sec.tabDepth)} mm", x(left) + 6f, y(t / 2) + 36f, paint)
                 if (h != null) drawText("wedge bites ${OrganizerGenerator.WEDGE_BITE} mm into the face", x(left) + 6f, y(half) - 12f, paint)
             }

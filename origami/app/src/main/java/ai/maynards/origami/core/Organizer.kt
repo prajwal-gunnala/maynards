@@ -12,11 +12,15 @@ enum class Edge { TOP, RIGHT, BOTTOM, LEFT }
 enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER, TOP, SHELF, LOOSE }
 
 /** How parts hold together. Both are screwless; the wedged tenon also cannot pull apart until its wedge is knocked out. */
-enum class JointStyle(val label: String) { TAB_SLOT("Tab & slot"), WEDGED("Wedged tenon") }
+enum class JointStyle(val label: String) {
+    TAB_SLOT("Tab & slot"), WEDGED("Wedged tenon"),
+    /** Box corners and bottom interlock edge to edge; storage boxes only. */
+    FINGER("Finger joints"),
+}
 
 /** What is being built. Every template uses the same parts, tab-and-slot joints, layout and exports. */
 enum class Template(val label: String) { ORGANIZER("Organizer"), TABLE("Table"), BOOKSHELF("Bookshelf") }
-enum class JointType { TAB_SLOT }
+enum class JointType { TAB_SLOT, FINGER }
 
 data class OrganizerSpec(
     val widthMm: Int = 300,
@@ -29,6 +33,9 @@ data class OrganizerSpec(
     val joint: JointStyle = JointStyle.TAB_SLOT,
 ) {
     fun validate() {
+        require(joint != JointStyle.FINGER || template == Template.ORGANIZER) { "Finger joints are for boxes (storage items)" }
+        if (joint == JointStyle.FINGER) require(heightMm >= materialThicknessMm * 9 && depthMm >= materialThicknessMm * 12) {
+            "The box is too small for finger joints in this material" }
         if (template == Template.BOOKSHELF) {
             require(widthMm in 300..1000) { "Bookshelf width must be 300–1000 mm" }
             require(heightMm in 300..1200) { "Bookshelf height must be 300–1200 mm" }
@@ -119,7 +126,7 @@ object OrganizerGenerator {
         val base = when (spec.template) {
             Template.TABLE -> table(spec)
             Template.BOOKSHELF -> bookshelf(spec)
-            Template.ORGANIZER -> organizer(spec)
+            Template.ORGANIZER -> if (spec.joint == JointStyle.FINGER) fingerBox(spec) else organizer(spec)
         }
         return if (spec.joint == JointStyle.WEDGED) wedged(base) else base
     }
@@ -177,6 +184,87 @@ object OrganizerGenerator {
     }
 
     const val WEDGE_BITE = 0.5
+
+    /** An odd number of equal segments, about three boards long each, at least 3. */
+    private fun segments(length: Double, t: Double): Int = ((length / (3 * t)).toInt().coerceIn(3, 15)).let { if (it % 2 == 0) it - 1 else it }
+
+    /**
+     * A finger-jointed box: front/back walls (inner width) with fingers on both upright edges, full-depth sides
+     * with matching notches, a base inside the walls with fingers on all four edges into notches along the walls'
+     * bottoms, and dividers tabbed into the front/back walls and the base. Fingers sit on odd segments, so every
+     * corner's top and bottom belong to the side walls.
+     */
+    private fun fingerBox(spec: OrganizerSpec): OrganizerDesign {
+        val t = spec.materialThicknessMm.toDouble(); val fit = spec.clearanceMm
+        val w = spec.widthMm.toDouble(); val h = spec.heightMm.toDouble(); val d = spec.depthMm.toDouble()
+        val wi = w - 2 * t; val di = d - 2 * t
+        val tabs = mutableMapOf<String, MutableList<Tab>>()
+        val slots = mutableMapOf<String, MutableList<Cutout>>()
+        val joints = mutableListOf<Joint>()
+        fun finger(id: String, a: String, edgeA: Edge, c: Double, span: Double, b: String, edgeB: Edge, notchAt: Point2, dir: Point3) {
+            tabs.getOrPut(a) { mutableListOf() } += Tab(edgeA, c, span, t)
+            joints += Joint(id, a, edgeA, c, b, edgeB, notchAt, span, t, t + fit, span + fit, dir, fit, JointType.FINGER)
+        }
+        fun notch(part: String, edge: Edge, c: Double, span: Double) { tabs.getOrPut(part) { mutableListOf() } += Tab(edge, c, span + fit, -(t + fit / 2)) }
+        // corners: fingers on the front/back upright edges, notches in the sides (x along depth, 0 at the back)
+        val kh = segments(h, t); val sh = h / kh
+        for (i in 1 until kh step 2) {
+            val c = (i + 0.5) * sh
+            for ((wall, sideX) in listOf("back" to t / 2, "front" to d - t / 2)) {
+                val (sideEdge, dirY) = if (wall == "back") Edge.LEFT to 0.0 else Edge.RIGHT to 0.0
+                finger("$wall-left-${i}", wall, Edge.LEFT, c, sh, "left", sideEdge, Point2(sideX, c), Point3(-1.0, dirY, 0.0))
+                finger("$wall-right-${i}", wall, Edge.RIGHT, c, sh, "right", sideEdge, Point2(sideX, c), Point3(1.0, dirY, 0.0))
+                notch("left", sideEdge, c, sh); notch("right", sideEdge, c, sh)
+            }
+        }
+        // bottom: base fingers into notches along each wall's bottom edge
+        val kw = segments(wi, t); val sw = wi / kw
+        for (i in 1 until kw step 2) {
+            val c = (i + 0.5) * sw
+            finger("base-back-$i", "base", Edge.TOP, c, sw, "back", Edge.BOTTOM, Point2(c, h - t / 2), Point3(0.0, -1.0, 0.0))
+            finger("base-front-$i", "base", Edge.BOTTOM, c, sw, "front", Edge.BOTTOM, Point2(c, h - t / 2), Point3(0.0, 1.0, 0.0))
+            notch("back", Edge.BOTTOM, c, sw); notch("front", Edge.BOTTOM, c, sw)
+        }
+        val kd = segments(di, t); val sd = di / kd
+        for (i in 1 until kd step 2) {
+            val c = (i + 0.5) * sd
+            finger("base-left-$i", "base", Edge.LEFT, c, sd, "left", Edge.BOTTOM, Point2(t + c, h - t / 2), Point3(-1.0, 0.0, 0.0))
+            finger("base-right-$i", "base", Edge.RIGHT, c, sd, "right", Edge.BOTTOM, Point2(t + c, h - t / 2), Point3(1.0, 0.0, 0.0))
+            notch("left", Edge.BOTTOM, t + c, sd); notch("right", Edge.BOTTOM, t + c, sd)
+        }
+        // dividers: tab-and-slot into the back/front walls and the base
+        val span = minOf(18.0, maxOf(12.0, t * 5))
+        fun slot(part: String, x: Double, y: Double, wdt: Double, hgt: Double) { slots.getOrPut(part) { mutableListOf() } += Cutout(x - wdt / 2, y - hgt / 2, wdt, hgt) }
+        for (k in 1 until spec.compartments) {
+            val id = "divider-$k"; val x = wi * k / spec.compartments
+            val lock = (h - t) * 0.5
+            tabs.getOrPut(id) { mutableListOf() } += Tab(Edge.LEFT, lock, span, t)
+            tabs.getOrPut(id) { mutableListOf() } += Tab(Edge.RIGHT, lock, span, t)
+            slot("back", x, lock, t + fit, span + fit); slot("front", x, lock, t + fit, span + fit)
+            joints += Joint("back-$id", id, Edge.LEFT, lock, "back", Edge.TOP, Point2(x, lock), span, t, t + fit, span + fit, Point3(0.0, -1.0, 0.0), fit)
+            joints += Joint("front-$id", id, Edge.RIGHT, lock, "front", Edge.TOP, Point2(x, lock), span, t, t + fit, span + fit, Point3(0.0, 1.0, 0.0), fit)
+            for ((m, frac) in listOf(0.3, 0.7).withIndex()) {
+                val c = di * frac
+                tabs.getOrPut(id) { mutableListOf() } += Tab(Edge.BOTTOM, c, span, t)
+                slot("base", x, c, t + fit, span + fit)
+                joints += Joint("base-$id-${m + 1}", id, Edge.BOTTOM, c, "base", Edge.TOP, Point2(x, c), span, t, t + fit, span + fit, Point3(0.0, 0.0, -1.0), fit)
+            }
+        }
+        val colors = listOf("#E7C99A", "#C9D8C5", "#C8D5E2", "#E6C3B7", "#D5C9E7")
+        fun part(id: String, name: String, pw: Double, ph: Double, plane: PanelPlane, index: Int, color: Int) =
+            Part(id, name, pw, ph, outlineWithTabs(pw, ph, tabs[id].orEmpty()), slots[id].orEmpty(), tabs[id].orEmpty(), plane, index, colors[color % colors.size])
+        val parts = buildList {
+            add(part("base", "Base", wi, di, PanelPlane.FLOOR, 0, 0))
+            add(part("back", "Back", wi, h, PanelPlane.BACK, 0, 1))
+            add(part("front", "Front", wi, h, PanelPlane.FRONT, 0, 2))
+            add(part("left", "Left side", d, h, PanelPlane.LEFT_SIDE, 0, 3))
+            add(part("right", "Right side", d, h, PanelPlane.RIGHT_SIDE, 0, 3))
+            for (k in 1 until spec.compartments) add(part("divider-$k", "Divider $k", di, h - t, PanelPlane.DIVIDER, k, 4))
+        }
+        val design = OrganizerDesign(spec, parts, joints)
+        validateGenerated(design)
+        return design
+    }
 
     private fun organizer(spec: OrganizerSpec): OrganizerDesign {
         val t = spec.materialThicknessMm.toDouble()
@@ -436,7 +524,9 @@ object OrganizerGenerator {
         require(design.joints.map { it.id }.distinct().size == design.joints.size)
         design.joints.forEach { joint ->
             require(design.part(joint.partA)?.tabs?.any { it.edge == joint.edgeA && abs(it.centerMm - joint.tabCenterMm) < 0.001 } == true)
-            require(design.part(joint.partB)?.cutouts?.any {
+            if (joint.type == JointType.FINGER) require(design.part(joint.partB)?.let { !inOrOn(joint.slotCenter, it.outline) } == true) {
+                "${joint.id}: no notch in ${joint.partB} for this finger" }
+            else require(design.part(joint.partB)?.cutouts?.any {
                 joint.slotCenter.x >= it.x - 0.001 && joint.slotCenter.x <= it.x + it.width + 0.001 &&
                     joint.slotCenter.y >= it.y - 0.001 && joint.slotCenter.y <= it.y + it.height + 0.001
             } == true)
@@ -508,7 +598,9 @@ fun jointMisses(design: OrganizerDesign): List<String> {
         if (s < 0 || s > tab.depthMm + 1e-6) return@mapNotNull "${j.id}: ${b.id}'s mid-plane is ${"%.1f".format(s)} mm along a ${tab.depthMm} mm tab"
         val q = p0 + u * s - o
         val qx = (q dot bx) / (bx dot bx); val qy = (q dot by) / (by dot by)
-        val hit = b.cutouts.any { qx in (it.x - 1e-6)..(it.x + it.width + 1e-6) && qy in (it.y - 1e-6)..(it.y + it.height + 1e-6) }
+        val hit = if (j.type == JointType.FINGER)   // a finger passes through a notch: inside B's box, outside its outline
+            qx in 0.0..b.widthMm && qy in 0.0..b.heightMm && !inOrOn(Point2(qx, qy), b.outline)
+        else b.cutouts.any { qx in (it.x - 1e-6)..(it.x + it.width + 1e-6) && qy in (it.y - 1e-6)..(it.y + it.height + 1e-6) }
         if (hit) null else "${j.id}: tab meets ${b.id} at (${"%.1f".format(qx)}, ${"%.1f".format(qy)}), no slot there"
     }
 }
@@ -568,6 +660,17 @@ fun Part.assembledPoint(point: Point2, spec: OrganizerSpec): Point3 {
     val h = spec.heightMm.toDouble()
     val d = spec.depthMm.toDouble()
     val t = spec.materialThicknessMm.toDouble()
+    if (spec.template == Template.ORGANIZER && spec.joint == JointStyle.FINGER) {
+        return when (plane) {
+            PanelPlane.FLOOR -> Point3(t + point.x, t + point.y, t / 2)
+            PanelPlane.BACK -> Point3(t + point.x, t / 2, h - point.y)
+            PanelPlane.FRONT -> Point3(t + point.x, d - t / 2, h - point.y)
+            PanelPlane.LEFT_SIDE -> Point3(t / 2, point.x, h - point.y)
+            PanelPlane.RIGHT_SIDE -> Point3(w - t / 2, point.x, h - point.y)
+            PanelPlane.DIVIDER -> Point3(t + (w - 2 * t) * dividerIndex / spec.compartments, t + point.x, h - point.y)
+            else -> Point3(point.x, point.y, 0.0)
+        }
+    }
     if (spec.template == Template.BOOKSHELF) {
         return when (plane) {
             PanelPlane.LEFT_SIDE -> Point3(t / 2, point.x, h - point.y)
