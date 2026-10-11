@@ -22,6 +22,7 @@
         android:name=".MeshApp"
         android:extractNativeLibs="true"
         android:usesCleartextTraffic="true"
+        android:allowBackup="false"
         android:label="MeshAI"
         android:icon="@android:drawable/sym_def_app_icon"
         android:theme="@android:style/Theme.Material.NoActionBar">
