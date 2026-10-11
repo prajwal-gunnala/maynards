@@ -33,6 +33,10 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    // Origami's realistic 3D: Filament (Apache-2.0) renderer, glTF loader and viewer utilities, one release
+    implementation("com.google.android.filament:filament-android:1.71.4")
+    implementation("com.google.android.filament:gltfio-android:1.71.4")
+    implementation("com.google.android.filament:filament-utils-android:1.71.4")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.google.code.gson:gson:2.8.9")

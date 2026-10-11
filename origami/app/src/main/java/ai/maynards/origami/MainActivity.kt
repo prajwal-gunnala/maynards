@@ -471,16 +471,22 @@ private fun DesignScreen(
         }
         item {
             CardBlock {
-                Box(Modifier.fillMaxWidth().height(310.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F1EB))) {
-                    AssemblyViewer(design, layout, progress, exploded, selected, onSelect, Modifier.fillMaxSize())
-                    Text("DRAG TO ROTATE", Modifier.align(Alignment.TopStart).padding(12.dp), color = Muted, fontSize = 9.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
+                var realistic by remember { mutableStateOf(true) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+                    FilterChip(selected = realistic, onClick = { realistic = true }, label = { Text("Realistic") })
+                    FilterChip(selected = !realistic, onClick = { realistic = false }, label = { Text("Lines · fold") })
+                }
+                Box(Modifier.fillMaxWidth().height(if (realistic) 360.dp else 310.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F1EB))) {
+                    if (realistic) RealisticViewer(design, exploded, Modifier.fillMaxSize())
+                    else AssemblyViewer(design, layout, progress, exploded, selected, onSelect, Modifier.fillMaxSize())
+                    Text(if (realistic) "DRAG TO ORBIT · PINCH TO ZOOM" else "DRAG TO ROTATE", Modifier.align(Alignment.TopStart).padding(12.dp), color = Muted, fontSize = 9.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
                     if (selected != null) {
                         val name = design.part(selected)?.name ?: selected
                         Text(name.uppercase(Locale.getDefault()), Modifier.align(Alignment.BottomCenter).padding(10.dp).clip(RoundedCornerShape(10.dp)).background(Color.White.copy(alpha = 0.88f)).padding(horizontal = 11.dp, vertical = 6.dp), color = Ink, fontSize = 10.sp, fontWeight = FontWeight.Bold)
                     }
                 }
                 Spacer(Modifier.height(9.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!realistic) Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("FLAT", fontSize = 10.sp, color = Muted, fontWeight = FontWeight.Bold)
                     Slider(value = progress, onValueChange = { onProgress(it); if (it < 0.9f) onSelect(null) }, modifier = Modifier.weight(1f).padding(horizontal = 9.dp))
                     Text("ASSEMBLED", fontSize = 10.sp, color = Leaf, fontWeight = FontWeight.Bold)

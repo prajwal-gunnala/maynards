@@ -49,6 +49,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Origami's realistic 3D: Filament (Apache-2.0) renderer, glTF loader and viewer utilities, one release
+    implementation("com.google.android.filament:filament-android:1.71.4")
+    implementation("com.google.android.filament:gltfio-android:1.71.4")
+    implementation("com.google.android.filament:filament-utils-android:1.71.4")
     // Parses selectable text from PDFs on-device; documents never go to a parsing service.
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     // WebRTC is only the cross-network transport. llama.cpp RPC remains the inference protocol.
