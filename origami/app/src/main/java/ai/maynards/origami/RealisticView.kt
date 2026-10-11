@@ -161,10 +161,14 @@ private class FilamentScene(sv: SurfaceView) : Choreographer.FrameCallback {
         viewer.render(frameTimeNanos)
     }
 
+    /**
+     * Stops drawing. ModelViewer tears itself down (model, loader, engine) when its view is detached, so calling
+     * destroyModel() here as well ran on a freed ResourceLoader and crashed (SIGSEGV in asyncCancelLoad) when
+     * switching to the line view.
+     */
     fun destroy() {
         alive = false
         choreographer.removeFrameCallback(this)
-        viewer.destroyModel()
     }
 }
 
