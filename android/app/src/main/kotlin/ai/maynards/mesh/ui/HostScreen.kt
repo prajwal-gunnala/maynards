@@ -305,11 +305,11 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     IconLabel(Icons.Outlined.QrCode2, if (showRemoteQr && remoteInvite != null) "Scan for WebRTC remote pairing" else "Scan with a Helper")
                     if (!showRemoteQr) {
-                        Text("Connection route · choose what this QR advertises", fontSize = 12.sp, color = Muted)
+                        Text("QR route", fontSize = 12.sp, color = Muted)
                         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             RouteChoice("Auto", selectedLocalIp.isBlank()) { selectedLocalIp = "" }
                             localRoutes.forEach { address ->
-                                RouteChoice("${address.kind.uppercase()} · ${address.ip}", selectedLocalIp == address.ip) {
+                                RouteChoice("${address.kind.uppercase()} · ${address.ip}" + if (address.kind == "usb") " · laptop only" else "", selectedLocalIp == address.ip) {
                                     selectedLocalIp = address.ip
                                 }
                             }

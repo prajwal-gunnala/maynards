@@ -7,17 +7,13 @@ package ai.maynards.mesh.brain
 object Catalog {
     data class Entry(val info: ModelInfo, val url: String, val vision: Boolean = false)
 
-    /** Friendly task labels. These are UI aliases; model IDs and file names stay unchanged. */
-    data class Identity(val alias: String, val role: String, val summary: String)
-
-    fun identity(model: ModelInfo): Identity? {
+    /** What a model is for, in two or three words. The real model name is always what the UI shows. */
+    fun kind(model: ModelInfo): String? {
         val key = (model.file + " " + model.name).lowercase()
         return when {
-            "qwen3.5-9b" in key -> Identity("Scout", "Vision + text", "Understands photos and text in one model. Image input also needs its matching projector.")
-            "qwen2.5-vl-3b" in key -> Identity("Lookout", "Vision + text", "Image and text model. Requires its matching projector for photos.")
-            "qwen3-coder-30b" in key -> Identity("Websmith", "Code", "Code-focused model. The mesh must have enough memory for its full weight and KV budget.")
-            "qwen3-8b" in key -> Identity("Core", "General text", "General-purpose text model.")
-            "qwen3-0.6b" in key -> Identity("Quick", "Compact text", "Small text model for lighter tasks; check answer quality for your use case.")
+            "qwen3.5-9b" in key || "-vl-" in key -> "Vision + text"
+            "coder" in key -> "Code"
+            "qwen3" in key -> "Text"
             else -> null
         }
     }

@@ -142,15 +142,10 @@ private fun ModelCard(p: Plan, color: Color, onPhone: Boolean, onRun: (Plan) -> 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    val identity = Catalog.identity(m)
-                    Text(identity?.alias ?: "Installed model", fontWeight = FontWeight.Black, fontSize = 17.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Mono("${identity?.role ?: m.arch} · ${gb(m.fileBytes)} GB · ${m.layers} layers", 11, Ink)
+                    Text(m.name, fontWeight = FontWeight.Black, fontSize = 17.sp, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Mono("${Catalog.kind(m) ?: m.arch} · ${gb(m.fileBytes)} GB · ${m.layers} layers", 11, Ink)
                 }
                 Sticker(look(p.verdict).first, Paper)
-            }
-            Catalog.identity(m)?.let { identity ->
-                Text(identity.summary, fontSize = 12.sp, lineHeight = 16.sp, color = Ink)
-                Mono("Model ID: ${m.name}", 9, Muted)
             }
             Text(p.reason, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ink)
             if (p.slices.isNotEmpty()) LayerBar(p)
