@@ -167,7 +167,7 @@ class AskSession {
 
     companion object {
         /** Lives as long as the app process, not a screen. */
-        private val APP_SCOPE = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        internal val APP_SCOPE = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         private val rooms = HashMap<String, AskSession>()
         fun of(room: String): AskSession = synchronized(rooms) { rooms.getOrPut(room) { AskSession() } }
     }
@@ -217,7 +217,7 @@ fun CitedAsk(
 
 /** Where a question will go: the running model and every device that computes on it. */
 @Composable
-private fun AskRoute(run: RunState, consent: Boolean, onConsent: (Boolean) -> Unit) {
+internal fun AskRoute(run: RunState, consent: Boolean, onConsent: (Boolean) -> Unit) {
     val plan = run.plan
     NBox(fill = if (plan?.split == true) Yellow else HostGreen, pad = 12.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

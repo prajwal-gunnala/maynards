@@ -134,7 +134,9 @@ fun PrivateUseTab(runner: Runner, peers: Collection<Peer>, onEnsureModel: suspen
         ModeSwitch(listOf("Ask", "Timeline"), mode) { mode = it }
 
         if (mode == 1) {
-            CaseTimelineView(remember(documents) { CaseTimeline.extract(documents) })
+            val events = remember(documents) { CaseTimeline.extract(documents) }
+            CaseTimelineView(events)
+            ConflictFinder(runner, onEnsureModel, events)
             return@Column
         }
         OutlinedTextField(
