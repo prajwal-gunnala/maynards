@@ -37,5 +37,6 @@ class MeshApp : Application() {
     override fun onCreate() {
         super.onCreate()
         engine = Engine(this)
+        StatusFile.start(this)
     }
 }
