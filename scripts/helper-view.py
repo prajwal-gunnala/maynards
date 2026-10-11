@@ -1,122 +1,159 @@
-"""The laptop's dashboard while a phone is the Host: the usual host.html, fed with live data, every control locked.
-python3 view.py  -> http://localhost:8080/   (chat goes to the phone host's engine)"""
-import json, subprocess, time, threading, urllib.request
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+#!/usr/bin/env python3
+"""The laptop's dashboard (agent/src/host.html) while a phone is the Host, fed by what the phones' apps report.
+
+Usage: scripts/helper-view.py HOST_SERIAL [HELPER_SERIAL ...] [--port 8080]   then open http://localhost:8080/
+
+Every 2 s, over adb: each phone's files/status.json (written by the app: run, split, Helpers, Ned Capsules,
+last answers, Spider Sense; never prompt or answer text), memory, battery, temperature, and bytes per second on
+Wi-Fi / USB / VPN. The usual dashboard shows them; the "Phone mesh" card on Overview adds capsules, answers and
+per-cable traffic. Read-only: every control is locked, and chat stays on the phone (its API needs the phone's key).
+"""
+import argparse
+import json
+import subprocess
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import urlparse
 
-PAGE = "/home/prajwal/Documents/GitHub/maynards/agent/src/host.html"
-HOST_IP = "10.155.241.73"
-HOST, HELPER = "10BFBJ0SQJ001GG", "10BFAT1SA2000XP"
-MODEL = "Qwen3-Coder-30B-A3B-Instruct-Q4_K_M.gguf"
-SPLIT = [(HOST, 0, 14, True), ("laptop", 14, 35, False), (HELPER, 35, 48, False)]   # replaced by read_split()
-import re
-
-def rng(text):
-    m = re.search(r"[Hh]olding layers (\d+)-(\d+)", text or "")
-    return (int(m.group(1)), int(m.group(2)) + 1) if m else None
-
-def read_split():
-    """Each helper says what it holds: the laptop in its join log, phone 2 on its own screen. The Host has the front."""
-    try:
-        m = re.findall(r"holding layers (\d+)-(\d+)", open("/tmp/mesh-join.log").read())
-        lap = (int(m[-1][0]), int(m[-1][1]) + 1) if m else None
-    except Exception: lap = None
-    p2 = rng(adb(HELPER, "uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; grep -o 'HOLDING LAYERS [0-9]*-[0-9]*' /sdcard/ui.xml | head -1").replace("HOLDING LAYERS", "holding layers"))
-    if not lap or not p2: return None
-    first = min(lap[0], p2[0])
-    out = [(HOST, 0, first, True)] + sorted([("laptop", *lap, False), (HELPER, *p2, False)], key=lambda x: x[1])
-    return out
-LAYER_GB = 0.382
-GB = 1e9
+PAGE = Path(__file__).resolve().parent.parent / "agent" / "src" / "host.html"
+STATUS = "/sdcard/Android/data/ai.maynards.mesh/files/status.json"
+IFACES = {"wlan0": "Wi-Fi", "rndis0": "USB", "ncm0": "USB", "usb0": "USB", "tun0": "VPN"}
+RUN = {"READY": "ready", "LOADING": "loading", "STARTING": "starting", "FAILED": "failed", "IDLE": "idle"}
 cache = {"phones": {}, "t0": time.time()}
 
-def adb(s, cmd):
-    try: return subprocess.run(["adb", "-s", s, "shell", cmd], capture_output=True, text=True, timeout=8).stdout
-    except Exception: return ""
 
-def phone(s):
-    out = adb(s, "getprop ro.product.model; grep -E 'MemTotal|MemAvailable' /proc/meminfo; dumpsys battery | grep -E ' level:|AC powered|USB powered'")
-    L = out.splitlines(); kb = lambda k: next((float(l.split()[1]) * 1024 for l in L if l.startswith(k)), 0)
-    lvl = next((int(l.split(':')[1]) for l in L if 'level:' in l), -1)
-    chg = any('powered: true' in l for l in L)
-    return {"name": "Vivo " + (L[0].strip() if L else "phone"), "kind": "phone", "chip": "SM8850", "cores": 8, "maxGhz": 4.6,
-            "totalBytes": kb("MemTotal"), "freeBytes": kb("MemAvailable"), "heat": -1.0, "battery": lvl, "charging": chg}
+def sh(serial, cmd):
+    try:
+        return subprocess.run(["adb", "-s", serial, "shell", cmd], capture_output=True, text=True, timeout=6).stdout
+    except Exception:
+        return ""
 
-def poll():
+
+def poll(serials):
+    last = {}
     while True:
-        for s in (HOST, HELPER): cache["phones"][s] = phone(s)
-        try: code = urllib.request.urlopen(f"http://{HOST_IP}:8080/health", timeout=3).status
-        except urllib.error.HTTPError as e: code = e.code
-        except Exception: code = 0
-        cache["health"] = code
-        if time.time() - cache.get("split_t", 0) > 15:
-            sp = read_split()
-            if sp: cache["split"] = sp
-            cache["split_t"] = time.time()
-        time.sleep(3)
+        t = time.time()
+        for s in serials:
+            parts = sh(s, f"cat {STATUS}; echo '@@@'; cat /proc/net/dev; echo '@@@'; grep -E 'MemTotal|MemAvailable' /proc/meminfo;"
+                          " dumpsys battery | grep -E ' level:| temperature:|AC powered|USB powered'").split("@@@")
+            if len(parts) < 3:
+                cache["phones"][s] = {"offline": True}
+                continue
+            try:
+                status = json.loads(parts[0].strip() or "{}")
+            except json.JSONDecodeError:
+                status = cache["phones"].get(s, {}).get("status", {})
+            counts = {}
+            for line in parts[1].splitlines():
+                if ":" in line and line.split(":")[0].strip() in IFACES:
+                    name, data = line.split(":", 1)
+                    f = data.split()
+                    counts[name.strip()] = (int(f[0]), int(f[8]))
+            rates = {}
+            if s in last:
+                dt = t - last[s][0]
+                for k, (rx, tx) in counts.items():
+                    if k in last[s][1]:
+                        rates[f"{IFACES[k]} {k}"] = [round((rx - last[s][1][k][0]) / dt / 1024, 1), round((tx - last[s][1][k][1]) / dt / 1024, 1)]
+            last[s] = (t, counts)
+            v = {"charging": False}
+            for line in parts[2].splitlines():
+                b = line.replace(":", " ").split()
+                if b[:1] == ["MemTotal"]: v["totalBytes"] = int(b[1]) * 1024
+                if b[:1] == ["MemAvailable"]: v["freeBytes"] = int(b[1]) * 1024
+                if b[:1] == ["level"]: v["battery"] = int(b[1])
+                if b[:1] == ["temperature"]: v["temp_c"] = int(b[1]) / 10
+                if len(b) >= 3 and b[1] == "powered" and b[2] == "true": v["charging"] = True
+            cache["phones"][s] = {"status": status, "rates": rates, "vitals": v}
+        time.sleep(max(0.0, 2 - (time.time() - t)))
 
-def laptop():
-    m = {l.split(':')[0]: float(l.split()[1]) * 1024 for l in open('/proc/meminfo')}
-    return {"id": "laptop", "name": "81WE (this laptop · helper)", "kind": "laptop", "chip": "Intel Core i5-1035G1", "cores": 8,
-            "maxGhz": 3.6, "totalBytes": m["MemTotal"], "freeBytes": m["MemAvailable"], "heat": -1.0, "battery": 100, "charging": True}
 
 def state():
-    ph = cache["phones"]; h, p2 = ph.get(HOST, {}), ph.get(HELPER, {})
-    names = {HOST: (h.get("name", "phone") + " (host)"), "laptop": "81WE (this laptop)", HELPER: p2.get("name", "phone") + " ·00XP"}
-    slices = [{"id": i, "name": names[i], "from": a, "to": b, "gb": round((b - a) * LAYER_GB + (0.43 if host else 0), 1), "host": host}
-              for i, a, b, host in cache.get("split", SPLIT)]
-    plan = {"verdict": "doable", "reason": "Needs 3 devices", "need_gb": 19.1, "slices": slices, "skipped": {}}
-    code = cache.get("health", 0)
-    status = "ready" if code == 200 else "loading" if code == 503 else "starting"
-    peers = [{"id": s, "name": names[s], "addr": a, "usable_gb": u, "engine": "rpc" if s == HELPER else "host",
-              "specs": dict(ph.get(s, {}), name=names[s]), "store": {},
-              "quiet_s": 0, "rtt_ms": r, "rtt_worst_ms": r * 3, "link": l}
-             for s, a, u, r, l in ((HOST, HOST_IP, 8.0, 3.0, "usb"), (HELPER, "192.168.112.142", 7.2, 17.6, "wifi"))]
-    return {"mesh": "1084e7f9", "invite": {"mesh": "1084e7f9", "hosts": [HOST_IP, "192.168.112.146"], "port": 7070, "code": "host is the phone"},
-            "qr": "", "ctx": 4096, "pinned": None, "laptop": {"specs": laptop(), "usable_gb": 10.4}, "peers": peers,
-            "models": [{"file": MODEL, "name": "Qwen3-Coder-30B-A3B-Instruct", "gb": 18.6, "layers": 48, "plan": plan}],
-            "pool_gb": 25.6, "activity": [{"t": time.strftime("%H:%M:%S"), "line": f"phone host engine: {status}"}],
-            "chats": [], "stats": {}, "online": True, "benching": False, "advice": [], "last_run": MODEL, "caps": {},
-            "api": {"key": "", "urls": [f"http://{HOST_IP}:8080/v1"]},
-            "run": {"status": status, "step": "ready" if status == "ready" else "loading layers on the phone host",
-                    "model": "Qwen3-Coder-30B-A3B-Instruct", "plan": plan, "vision": False,
-                    "seconds": int(time.time() - cache["t0"])}}
+    phones = cache["phones"]
+    host = next((p["status"] for p in phones.values() if p.get("status", {}).get("role") == "host"), {})
+    host_serial = next((s for s, p in phones.items() if p.get("status", {}).get("role") == "host"), None)
+    split = host.get("split") or []
+    slices = [{"id": x["name"], "name": x["name"], "from": x["from"], "to": x["to"] + 1, "gb": round(x["gb"], 1), "host": i == 0}
+              for i, x in enumerate(split)]
+    plan = {"verdict": "doable", "reason": f"Needs {len(slices)} device(s)" if slices else "", "slices": slices, "skipped": {}}
+    status = RUN.get(host.get("status", "IDLE"), "idle")
+
+    def specs(serial, name):
+        p = phones.get(serial, {})
+        v = p.get("vitals", {})
+        return {"name": name, "kind": "phone", "totalBytes": v.get("totalBytes", 0), "freeBytes": v.get("freeBytes", 0),
+                "battery": v.get("battery", -1), "charging": v.get("charging", False), "temp_c": v.get("temp_c"), "heat": -1}
+
+    by_name = {p.get("status", {}).get("phone"): s for s, p in phones.items()}
+    peers = []
+    for p in host.get("peers", []):
+        serial = next((s for s, ph in phones.items() if ph.get("status", {}).get("role") == "helper"), None)
+        peers.append({"id": p["name"], "name": p["name"], "addr": p.get("addr"), "usable_gb": round(p.get("free_gb", 0), 1),
+                      "engine": "rpc", "specs": specs(serial, p["name"]), "store": {}, "quiet_s": 0,
+                      "rtt_ms": p.get("rtt_ms"), "rtt_worst_ms": p.get("rtt_ms"), "link": p.get("link"),
+                      "rpc_event": "graph" if p.get("rpc_events") else "", "rpc_sequence": p.get("rpc_events", 0),
+                      "rpc_event_age_s": p["rpc_age_ms"] / 1000 if p.get("rpc_age_ms", -1) >= 0 else None})
+    activity = [{"t": time.strftime("%H:%M:%S", time.localtime(e["at"] / 1000)),
+                 "line": f"{e['who']} · {e['text']}" + (f" ×{e['count']}" if e.get("kind") == "WORK" and e.get("count", 1) > 1 else "")}
+                for e in reversed(host.get("sense", []))]
+    links = {phones[s].get("status", {}).get("phone", s) + f" ({phones[s].get('status', {}).get('role', '?')})": phones[s].get("rates", {})
+             for s in phones}
+    answers = host.get("answers", [])
+    model = host.get("model") or ""
+    return {"mesh": "phone-hosted", "invite": {"mesh": "", "hosts": [], "port": 7070, "code": "the phone is the host"},
+            "qr": "", "ctx": 4096, "pinned": None, "laptop": {"specs": specs(host_serial, (host.get("phone") or "phone") + " (host)"), "usable_gb": 0},
+            "peers": peers, "models": [{"file": model, "name": model, "gb": round(sum(x["gb"] for x in split), 1), "layers": (split[-1]["to"] + 1) if split else 0, "plan": plan}] if model else [],
+            "pool_gb": round(sum(x["gb"] for x in split), 1), "activity": activity, "chats": [],
+            "stats": {"tps": answers[-1]["tps"]} if answers else {}, "online": True, "benching": False, "advice": [],
+            "last_run": model, "caps": {}, "api": {"key": "", "urls": []},
+            "run": {"status": status, "step": host.get("step", ""), "model": model, "plan": plan, "vision": False,
+                    "seconds": int(time.time() - cache["t0"])},
+            "phone_mesh": {"host": host.get("phone"), "threads": host.get("threads"), "threads_from_profile": host.get("threads_from_profile"),
+                           "capsules": host.get("capsules", []), "answers": answers, "links": links,
+                           "helpers": [p.get("status", {}) for p in phones.values() if p.get("status", {}).get("role") == "helper"]}}
+
 
 LOCK = b"""<style>#helper-lock{position:fixed;top:0;left:0;right:0;z-index:9999;background:#1d4ed8;color:#fff;font:600 13px system-ui;
-text-align:center;padding:6px}body{padding-top:30px}</style><div id="helper-lock">Helper view: the phone is the host. Controls are locked.</div>"""
+text-align:center;padding:6px}body{padding-top:30px}</style><div id="helper-lock">Laptop view: a phone is the Host. Read-only.</div>"""
+
 
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    def log_message(self, *a): pass
+
+    def log_message(self, *a):
+        pass
+
     def send(self, code, body, ctype="application/json"):
         self.send_response(code); self.send_header("content-type", ctype); self.send_header("cache-control", "no-store")
         self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
+
     def do_GET(self):
         u = urlparse(self.path).path
         if u in ("/", "/index.html"):
-            return self.send(200, open(PAGE, "rb").read().replace(b"<body>", b"<body>" + LOCK, 1)
-                .replace(b"this laptop is the host", b"this laptop is a helper").replace(b">host${layersOf('laptop')", b">helper${layersOf('laptop')"), "text/html; charset=utf-8")
-        if u == "/api/state": return self.send(200, json.dumps(state()).encode())
-        if u.startswith(("/api/", "/svc/")): return self.send(200, b"[]" if u.endswith(("devices", "results", "tasks", "projects")) else b"{}")
+            return self.send(200, PAGE.read_bytes().replace(b"<body>", b"<body>" + LOCK, 1), "text/html; charset=utf-8")
+        if u == "/api/state":
+            return self.send(200, json.dumps(state()).encode())
+        if u.startswith(("/api/", "/svc/")):
+            return self.send(200, b"[]" if u.endswith(("devices", "results", "tasks", "projects")) else b"{}")
         self.send(404, b"not found", "text/plain")
-    def do_POST(self):
-        body = self.rfile.read(int(self.headers.get("content-length") or 0))
-        u = urlparse(self.path).path
-        if u.startswith("/v1/"):   # chat: straight to the phone host's engine
-            req = urllib.request.Request(f"http://{HOST_IP}:8080{u}", body, {"content-type": "application/json"})
-            try: r = urllib.request.urlopen(req, timeout=600)
-            except urllib.error.HTTPError as e: r = e
-            self.send_response(r.status if hasattr(r, "status") else r.code)
-            self.send_header("content-type", r.headers.get("content-type", "application/json"))
-            self.send_header("transfer-encoding", "chunked"); self.end_headers()
-            while True:
-                c = r.read1(65536) if hasattr(r, "read1") else r.read(65536)
-                if not c: break
-                self.wfile.write(b"%x\r\n%s\r\n" % (len(c), c)); self.wfile.flush()
-            self.wfile.write(b"0\r\n\r\n"); return
-        self.send(403, json.dumps({"error": "locked: this laptop is a helper, the phone is the host"}).encode())
 
-threading.Thread(target=poll, daemon=True).start()
-time.sleep(4)
-print("helper view on http://localhost:8080/")
-ThreadingHTTPServer(("127.0.0.1", 8080), H).serve_forever()
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get("content-length") or 0))
+        self.send(403, json.dumps({"error": "read-only: the phone is the Host; use the phone to run or chat"}).encode())
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("serials", nargs="+")
+    ap.add_argument("--port", type=int, default=8080)
+    a = ap.parse_args()
+    threading.Thread(target=poll, args=(a.serials,), daemon=True).start()
+    time.sleep(3)
+    print(f"laptop view on http://localhost:{a.port}/ for {', '.join(a.serials)}", flush=True)
+    ThreadingHTTPServer(("127.0.0.1", a.port), H).serve_forever()
+
+
+if __name__ == "__main__":
+    main()

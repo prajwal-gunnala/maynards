@@ -300,6 +300,11 @@
       </div>
       <div id="ov-advice"></div>
       <div class="card"><div class="cb" id="ov-run"></div></div>
+      <div class="card hide" id="pm-card" style="margin-top:14px">
+        <div class="ch"><svg class="i"><use href="#i-hub"/></svg><h3>Phone mesh</h3><span class="d">what the phones report</span>
+          <span class="sp"></span><button class="sm ghost" data-go2="checks">activity</button></div>
+        <div class="cb" id="pm"></div>
+      </div>
       <div class="grid g2" style="margin-top:14px">
         <div class="card">
           <div class="ch"><svg class="i"><use href="#i-hub"/></svg><h3>Devices</h3><span class="d">scan to join</span>
@@ -625,6 +630,7 @@ function renderOverview() {
   $('ov-advice').innerHTML = S.advice.map(a =>
     `<div class="card" style="border-color:var(--warn-line); background:var(--warn-soft); margin-bottom:10px"><div class="cb tight row" style="color:var(--warn)">${ic('warn')}<span>${esc(a)}</span></div></div>`).join('');
   $('ov-run').innerHTML = runSummary();
+  renderPhoneMesh();
   // devices: the code to scan, then who has joined
   const peers = S.peers.map(p => {
     const quiet = num(p.quiet_s, 0) >= 10;
@@ -1311,6 +1317,33 @@ async function scores() {
     : `<div class="empty"><h4>Nothing measured yet</h4>
         <p>Start a model, then press <b>Measure this setup</b>. It asks fifteen coding problems and runs every answer
            against its tests, so the score is earned rather than claimed.</p></div>`;
+}
+
+/* A phone is the Host (scripts/helper-view.py): its Ned Capsules, recent answers, and bytes per cable. */
+function renderPhoneMesh() {
+  const pm = S.phone_mesh, card = $('pm-card');
+  if (!card) return;
+  card.classList.toggle('hide', !pm);
+  if (!pm) return;
+  const f = (x, d = 1) => x == null || isNaN(x) ? '–' : Number(x).toFixed(d);
+  const helpers = (pm.helpers || []).map(h => `<div class="mono" style="font-size:12px">${esc(h.phone || 'Helper')} · ${esc(h.link || '')} ·
+      ${esc(h.transport || '')} → ${esc(h.host || '')} · layers ${esc(h.layers || '–')} · ${esc(h.engine || '')}
+      ${h.rpc_age_ms >= 0 && h.rpc_age_ms < 2500 ? '<span style="color:var(--helper)">· computing</span>' : ''}</div>`).join('');
+  const caps = (pm.capsules || []).map(c => `<div class="mono" style="font-size:12px">${esc(c.name)} · proposed ${esc(c.proposed)}<br>
+      <span style="color:${String(c.applied).startsWith('layers') ? 'var(--ok)' : 'var(--warn)'}">applied ${esc(c.applied)}</span></div>`).join('')
+    || '<div class="quiet" style="font-size:12px">no capsule (whole model on the Host, or no run)</div>';
+  const ans = (pm.answers || []).slice().reverse().slice(0, 5).map(r => `<tr><td>${new Date(r.at).toLocaleTimeString()}</td>
+      <td>${esc(r.task)}</td><td>${f(r.tps)}</td><td>${f(r.prompt_tps)}</td><td>${f(r.first_ms / 1000)} s</td><td>${r.tokens}</td></tr>`).join('');
+  const links = Object.entries(pm.links || {}).map(([who, rates]) => `<div class="mono" style="font-size:12px"><b style="font-weight:500">${esc(who)}</b>
+      ${Object.entries(rates).map(([k, [rx, tx]]) => ` · ${esc(k)} ↓${f(rx)} ↑${f(tx)} KB/s`).join('') || ' · measuring…'}</div>`).join('');
+  $('pm').innerHTML = `
+    <div class="mono quiet" style="font-size:11.5px">Host ${esc(pm.host || '')} · ${pm.threads || '–'} CPU threads${pm.threads_from_profile ? ' (measured profile)' : ''}</div>
+    ${helpers}
+    <h4 style="margin:12px 0 4px; font-size:12px">Ned Capsules</h4>${caps}
+    <h4 style="margin:12px 0 4px; font-size:12px">Last answers</h4>
+    ${ans ? `<table class="mono" style="font-size:12px; width:100%"><tr class="quiet"><td>time</td><td>task</td><td>tok/s</td><td>read tok/s</td><td>first word</td><td>tokens</td></tr>${ans}</table>`
+          : '<div class="quiet" style="font-size:12px">none yet</div>'}
+    <h4 style="margin:12px 0 4px; font-size:12px">Traffic per cable</h4>${links}`;
 }
 
 /* -------------------------------------------------------------- diagnostics */
