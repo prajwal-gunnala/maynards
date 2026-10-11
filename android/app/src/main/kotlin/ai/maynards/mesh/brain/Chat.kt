@@ -27,6 +27,10 @@ sealed class ChatProgress {
 /** Streams a chat answer from the local llama-server (OpenAI-compatible /v1/chat/completions). */
 class Chat(private val endpoint: String, private val apiKey: String = "") {
     private val http = OkHttpClient.Builder().readTimeout(10, TimeUnit.MINUTES).build()
+    @Volatile private var call: okhttp3.Call? = null
+
+    /** Aborts the request in flight; ask() then throws an IOException. */
+    fun cancel() { call?.cancel() }
 
     fun ask(
         history: List<Turn>, onText: (String) -> Unit, image: String? = null, system: String? = null,
@@ -55,7 +59,7 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
         var timings: JSONObject? = null
         var route: String? = null
         var chunks = 0
-        http.newCall(req).execute().use { resp ->
+        http.newCall(req).also { call = it }.execute().use { resp ->
             route = resp.header("X-Mesh-Route")   // which device actually answered
             check(resp.isSuccessful) { "HTTP ${resp.code}" }
             val src = resp.body!!.source()
@@ -83,14 +87,17 @@ class Chat(private val endpoint: String, private val apiKey: String = "") {
         return Answer(
             text = out.toString(),
             tokens = t?.optInt("predicted_n") ?: 0,
-            tokPerSec = t?.optDouble("predicted_per_second") ?: 0.0,
-            promptPerSec = t?.optDouble("prompt_per_second") ?: 0.0,
+            tokPerSec = t.num("predicted_per_second"),
+            promptPerSec = t.num("prompt_per_second"),
             firstTokenMs = first,
             route = route,
             promptTokens = t?.optInt("prompt_n") ?: 0,
-            promptMs = t?.optDouble("prompt_ms") ?: 0.0,
-            predictedMs = t?.optDouble("predicted_ms") ?: 0.0,
+            promptMs = t.num("prompt_ms"),
+            predictedMs = t.num("predicted_ms"),
             totalMs = (System.nanoTime() - t0) / 1_000_000,
         )
     }
 }
+
+/** A timing field as a finite number; llama-server can send null or omit it (e.g. a fully cached prompt). */
+internal fun JSONObject?.num(key: String): Double = this?.optDouble(key, 0.0)?.takeIf { it.isFinite() } ?: 0.0

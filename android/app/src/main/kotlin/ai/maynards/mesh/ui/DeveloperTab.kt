@@ -117,6 +117,6 @@ fun DeveloperTab(runner: Runner, onEnsureModel: suspend () -> String, onAnswer: 
                 }
             }
         }
-        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.codeSystem, busy = searching, onAnswer = onAnswer)
+        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.codeSystem, busy = searching, room = "code", onAnswer = onAnswer)
     }
 }

@@ -24,14 +24,14 @@ data class Record(
     val promptTokens: Int = 0,
 ) {
     fun toJson(): JSONObject = JSONObject().put("at", at).put("model", model).put("devices", devices)
-        .put("layout", layout).put("tps", tokPerSec).put("ttft", firstTokenMs).put("tokens", tokens).put("heat", heat.toDouble())
-        .put("prompt_tps", promptTokPerSec).put("link", link).put("kv_bytes", kvBytes).put("free_bytes", freeBytes)
+        .put("layout", layout).put("tps", finite(tokPerSec)).put("ttft", firstTokenMs).put("tokens", tokens)
+        .put("heat", finite(heat.toDouble(), -1.0)).put("prompt_tps", finite(promptTokPerSec)).put("link", link).put("kv_bytes", kvBytes).put("free_bytes", freeBytes)
         .put("task", task).put("prompt_tokens", promptTokens)
 
     companion object {
         fun fromJson(j: JSONObject) = Record(j.getLong("at"), j.getString("model"), j.getInt("devices"),
-            j.optString("layout"), j.getDouble("tps"), j.getLong("ttft"), j.getInt("tokens"), j.optDouble("heat", -1.0).toFloat(),
-            j.optDouble("prompt_tps"), j.optString("link", "unknown"), j.optLong("kv_bytes"), j.optLong("free_bytes"),
+            j.optString("layout"), finite(j.optDouble("tps", 0.0)), j.optLong("ttft"), j.optInt("tokens"),
+            finite(j.optDouble("heat", -1.0), -1.0).toFloat(), finite(j.optDouble("prompt_tps", 0.0)), j.optString("link", "unknown"), j.optLong("kv_bytes"), j.optLong("free_bytes"),
             j.optString("task", "chat"), j.optInt("prompt_tokens"))
     }
 }
@@ -68,3 +68,6 @@ class Stats(ctx: Context) {
         List(a.length()) { Record.fromJson(a.getJSONObject(it)) }
     }.getOrDefault(emptyList())
 }
+
+/** org.json refuses NaN and infinity, and one bad value would lose every saved record. */
+internal fun finite(x: Double, fallback: Double = 0.0) = if (x.isFinite()) x else fallback

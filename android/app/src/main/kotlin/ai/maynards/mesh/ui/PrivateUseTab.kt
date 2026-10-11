@@ -170,7 +170,7 @@ fun PrivateUseTab(runner: Runner, peers: Collection<Peer>, onEnsureModel: suspen
                 }
             }
         }
-        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.system, busy = searching, onAnswer = onAnswer)
+        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.system, busy = searching, room = "case", onAnswer = onAnswer)
     }
 }
 

@@ -1,5 +1,10 @@
 package ai.maynards.mesh.ui
 
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
+import ai.maynards.mesh.brain.SenseEvent
+import ai.maynards.mesh.brain.Sense
 import ai.maynards.mesh.brain.Answer
 import ai.maynards.mesh.brain.Chat
 import ai.maynards.mesh.brain.ChatProgress
@@ -44,9 +49,106 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
+ * One room's Ask, kept outside the screen: switching tabs neither cancels the request nor loses the answer.
+ * Compose snapshot state, so the screen redraws when it changes.
+ */
+class AskSession {
+    var asking by mutableStateOf(false); private set
+    var status by mutableStateOf("")
+    var answer by mutableStateOf("")
+    var answeredFrom by mutableStateOf<List<CaseEvidence>>(emptyList())
+    var checked by mutableStateOf<CaseCitations.Check?>(null)
+    var progress by mutableStateOf<AskProgress?>(null)
+    var stats by mutableStateOf<AskStats?>(null)
+    /** Helper device ids the user trusted; a different set of Helpers needs a new tick. */
+    var trusted by mutableStateOf<Set<String>>(emptySet())
+    private var shownFor: List<CaseEvidence>? = null
+    private var job: Job? = null
+    private var chat: Chat? = null
+
+    /** New search results clear the old answer, unless an answer is still coming. */
+    fun onEvidence(evidence: List<CaseEvidence>) {
+        if (asking || evidence == shownFor) return
+        shownFor = evidence
+        answer = ""; checked = null; answeredFrom = emptyList(); progress = null; stats = null; status = ""
+    }
+
+    fun stop() {
+        chat?.cancel()
+        job?.cancel()
+    }
+
+    fun ask(runner: Runner, onEnsureModel: suspend () -> String, sources: List<CaseEvidence>, question: String,
+            system: String, onAnswer: (Answer) -> Unit) {
+        if (asking) return
+        asking = true
+        answer = ""; checked = null; answeredFrom = emptyList(); stats = null; status = ""
+        val t0 = System.currentTimeMillis()
+        progress = AskProgress(t0)
+        fun at(stage: AskStage) {
+            if (progress?.stage != stage && stage != AskStage.DONE)
+                Sense.add("Host", "Ask · ${stage.label}" + if (stage == AskStage.SENT) " · ${sources.size} sources" else "", SenseEvent.Kind.ASK)
+            progress = (progress ?: AskProgress(t0)).enter(stage)
+        }
+        job = APP_SCOPE.launch {
+            try {
+                Sense.add("Host", "Ask · ${AskStage.MODEL.label}", SenseEvent.Kind.ASK)
+                val model = onEnsureModel()
+                val plan = runner.state.value.plan
+                if (plan?.split == true && plan.helpers.map { it.deviceId }.toSet() != trusted) {
+                    progress = null
+                    status = "Tick the Helpers to trust, then ask again"
+                    return@launch
+                }
+                at(AskStage.SENT)
+                val c = Chat(runner.endpoint, runner.apiKey).also { chat = it }
+                val reply = withContext(Dispatchers.IO) {
+                    c.ask(
+                        listOf(Turn("user", CaseCitations.prompt(question, sources))),
+                        onText = { answer = CaseCitations.visible(it) },
+                        system = system,
+                        onProgress = { p ->
+                            when (p) {
+                                is ChatProgress.Reading -> { at(AskStage.READING); progress = progress?.copy(reading = p) }
+                                is ChatProgress.Writing -> { at(AskStage.WRITING); progress = progress?.copy(written = p.tokens) }
+                            }
+                        },
+                    )
+                }
+                at(AskStage.CHECKING)
+                answer = CaseCitations.visible(reply.text)
+                answeredFrom = sources
+                checked = CaseCitations.check(reply.text, sources)
+                at(AskStage.DONE)
+                stats = AskStats(model, plan?.slices?.map { it.name } ?: emptyList(), sources.size, reply,
+                    progress?.durationOf(AskStage.MODEL) ?: 0)
+                // Bookkeeping after the answer is on screen: a failure here must not lose the answer.
+                runCatching { runner.record(reply) }
+                runCatching { onAnswer(reply) }.onFailure { status = "Answer kept · stats not saved (${it.javaClass.simpleName})" }
+            } catch (e: Exception) {
+                progress = progress?.copy(failed = true)
+                val stopped = e is kotlinx.coroutines.CancellationException || (e is java.io.IOException && e.message == "Canceled")
+                Sense.add("Host", if (stopped) "Ask stopped" else "Ask failed · ${e.javaClass.simpleName}",
+                    if (stopped) SenseEvent.Kind.ASK else SenseEvent.Kind.FAIL)
+                status = if (stopped) "Stopped" else "Could not answer: ${e.message ?: e.javaClass.simpleName}"
+            } finally {
+                chat = null
+                asking = false
+            }
+        }
+    }
+
+    companion object {
+        /** Lives as long as the app process, not a screen. */
+        private val APP_SCOPE = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        private val rooms = HashMap<String, AskSession>()
+        fun of(room: String): AskSession = synchronized(rooms) { rooms.getOrPut(room) { AskSession() } }
+    }
+}
+
+/**
  * Asks the running model about passages found on this Host and checks every [Sxx] citation against them.
  * Shows the route (and asks consent when Helpers hold layers), live stages, the answer and its stats.
- * Answer state resets whenever [evidence] changes.
  */
 @Composable
 fun CitedAsk(
@@ -56,90 +158,33 @@ fun CitedAsk(
     question: String,
     system: String,
     busy: Boolean = false,
+    room: String = "case",
     onAnswer: (Answer) -> Unit = {},
 ) {
-    val scope = rememberCoroutineScope()
-    var helperConsent by remember { mutableStateOf(false) }
-    var asking by remember { mutableStateOf(false) }
-    var status by remember(evidence) { mutableStateOf("") }
-    var answer by remember(evidence) { mutableStateOf("") }
-    var answeredFrom by remember(evidence) { mutableStateOf<List<CaseEvidence>>(emptyList()) }
-    var checked by remember(evidence) { mutableStateOf<CaseCitations.Check?>(null) }
-    var progress by remember(evidence) { mutableStateOf<AskProgress?>(null) }
-    var stats by remember(evidence) { mutableStateOf<AskStats?>(null) }
+    val session = remember(room) { AskSession.of(room) }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     val run by runner.state.collectAsState()
-    fun clearAnswer() { answer = ""; checked = null; answeredFrom = emptyList(); progress = null; stats = null; status = "" }
-    LaunchedEffect(asking) { while (asking) { now = System.currentTimeMillis(); delay(200) } }
+    LaunchedEffect(evidence) { session.onEvidence(evidence) }
+    LaunchedEffect(session.asking) { while (session.asking) { now = System.currentTimeMillis(); delay(200) } }
+    val helperIds = run.plan?.takeIf { it.split }?.helpers?.map { it.deviceId }?.toSet().orEmpty()
 
     Column(verticalArrangement = Arrangement.spacedBy(13.dp)) {
         if (evidence.isNotEmpty()) {
-            AskRoute(run, helperConsent) { helperConsent = it }
-            val needsConsent = run.plan?.split == true && !helperConsent
-            NButton(
-                if (asking) "Asking…" else "Ask · ${evidence.size} sources",
-                fill = Term,
-                enabled = !asking && !busy && question.isNotBlank() && !needsConsent,
-            ) {
-                asking = true
-                clearAnswer()
-                val sources = evidence
-                val q = question.trim()
-                scope.launch {
-                    val t0 = System.currentTimeMillis()
-                    fun at(stage: AskStage) {
-                        if (progress?.stage != stage && stage != AskStage.DONE)
-                            ai.maynards.mesh.brain.Sense.add("Host", "Ask · ${stage.label}" +
-                                if (stage == AskStage.SENT) " · ${sources.size} sources" else "", ai.maynards.mesh.brain.SenseEvent.Kind.ASK)
-                        progress = (progress ?: AskProgress(t0)).enter(stage)
-                    }
-                    try {
-                        status = ""
-                        at(AskStage.MODEL)
-                        val model = onEnsureModel()
-                        val plan = runner.state.value.plan
-                        if (plan?.split == true && !helperConsent) {
-                            progress = null
-                            status = "Tick the Helpers to trust, then ask again"
-                            return@launch
-                        }
-                        at(AskStage.SENT)
-                        val reply = withContext(Dispatchers.IO) {
-                            Chat(runner.endpoint, runner.apiKey).ask(
-                                listOf(Turn("user", CaseCitations.prompt(q, sources))),
-                                onText = { answer = CaseCitations.visible(it) },
-                                system = system,
-                                onProgress = { p ->
-                                    when (p) {
-                                        is ChatProgress.Reading -> { at(AskStage.READING); progress = progress?.copy(reading = p) }
-                                        is ChatProgress.Writing -> { at(AskStage.WRITING); progress = progress?.copy(written = p.tokens) }
-                                    }
-                                },
-                            )
-                        }
-                        at(AskStage.CHECKING)
-                        runner.record(reply)
-                        onAnswer(reply)
-                        answer = CaseCitations.visible(reply.text)
-                        answeredFrom = sources
-                        checked = CaseCitations.check(reply.text, sources)
-                        at(AskStage.DONE)
-                        stats = AskStats(model, plan?.slices?.map { it.name } ?: emptyList(), sources.size, reply,
-                            progress?.durationOf(AskStage.MODEL) ?: 0)
-                    } catch (e: Exception) {
-                        progress = progress?.copy(failed = true)
-                        ai.maynards.mesh.brain.Sense.add("Host", "Ask failed · ${e.javaClass.simpleName}", ai.maynards.mesh.brain.SenseEvent.Kind.FAIL)
-                        status = "Could not answer: ${e.message ?: e.javaClass.simpleName}"
-                    } finally {
-                        asking = false
-                    }
-                }
+            AskRoute(run, helperIds.isNotEmpty() && session.trusted == helperIds) { on ->
+                session.trusted = if (on) helperIds else emptySet()
             }
+            val needsConsent = helperIds.isNotEmpty() && session.trusted != helperIds
+            if (session.asking) NButton("Stop", fill = Paper) { session.stop() }
+            else NButton(
+                "Ask · ${evidence.size} sources",
+                fill = Term,
+                enabled = !busy && question.isNotBlank() && !needsConsent,
+            ) { session.ask(runner, onEnsureModel, evidence, question.trim(), system, onAnswer) }
         }
-        progress?.let { AskProgressView(it, run, now) }
-        if (answer.isNotBlank()) CitedAnswer(answer, checked, answeredFrom)
-        stats?.let { AskStatsView(it) }
-        if (status.isNotBlank()) Mono(status, 11, if (status.startsWith("Could not")) Bad else Term)
+        session.progress?.let { AskProgressView(it, run, now) }
+        if (session.answer.isNotBlank()) CitedAnswer(session.answer, session.checked, session.answeredFrom)
+        session.stats?.let { AskStatsView(it) }
+        if (session.status.isNotBlank()) Mono(session.status, 11, if (session.status.startsWith("Could not")) Bad else Term)
     }
 }
 
