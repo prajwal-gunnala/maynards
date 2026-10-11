@@ -50,6 +50,8 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
              private val profiles: Compiler.Profiles? = null) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var job: Job? = null
+    /** The previous run's shutdown; a new run waits for it, or the two model processes race for the port. */
+    private var stopping: Job? = null
 
     private val _state = MutableStateFlow(RunState())
     val state: StateFlow<RunState> = _state
@@ -83,6 +85,9 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
         stop()
         _metrics.value = LiveMetrics(startedAtMs = System.currentTimeMillis())
         job = scope.launch {
+            // The previous run's shutdown sends "stop" to the Helpers and ends the old llama-server; it must
+            // finish before this run sends "run", or a late "stop" kills the Helper's fresh engine.
+            stopping?.join()
             val t0 = System.currentTimeMillis()
             val plan = if (devicesNow == null) requested else {
                 val held = previous?.slices?.associate { it.deviceId to it.bytes }.orEmpty()
@@ -162,7 +167,12 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                     if (!ready) return@launch fail("WebRTC RPC channel for ${plan.helpers[i].name} did not open")
                 } else if (!reachable(a)) return@launch fail("Cannot reach ${plan.helpers[i].name} at $a")
             }
-            // 3. start the model on this phone
+            // 3. start the model on this phone, once the previous one has really let go of the port: an old
+            // llama-server still answering /health made a new run look "Ready" in 0 s while the new one
+            // could not bind and exited with 1.
+            step("Waiting for the previous model to exit")
+            val portFree = withTimeoutOrNull(15_000) { while (portInUse(API_PORT)) delay(250); true } ?: false
+            if (!portFree) return@launch fail("port $API_PORT still held by an old model process")
             step("Loading ${plan.model.name}", RunState.Status.LOADING)
             // explicit (the Compiler measuring) > a measured profile for this phone, model, ctx and split > default
             val profiled = profiles?.threads(Compiler.key(android.os.Build.MODEL, plan, ctx))
@@ -210,7 +220,8 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
         _state.value = RunState()
         _metrics.value = LiveMetrics()
         job?.cancel()
-        scope.launch { stopAll() }
+        val before = stopping
+        stopping = scope.launch { before?.join(); stopAll() }
     }
 
     fun record(answer: Answer) {
@@ -241,6 +252,9 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
         }
         return false
     }
+
+    private fun portInUse(port: Int): Boolean =
+        runCatching { Socket().use { it.connect(InetSocketAddress("127.0.0.1", port), 200) }; true }.getOrDefault(false)
 
     private fun healthy(): Boolean = runCatching {
         val c = URL("$endpoint/health").openConnection() as HttpURLConnection
