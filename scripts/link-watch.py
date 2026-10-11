@@ -6,7 +6,7 @@ Usage: scripts/link-watch.py SERIAL [SERIAL ...]
 For each phone (over adb):
   - bytes/s on each network interface (wlan0 = Wi-Fi, rndis0/ncm0/usb0 = USB tethering, tun0 = VPN), from /proc/net/dev
   - every open mesh TCP connection (control 7070, model RPC 5005x-5010x, API 8080) and the interface its
-    local address belongs to, from /proc/net/tcp
+    local address belongs to, from /proc/net/tcp and /proc/net/tcp6
 
 One TCP connection is bound to one local address, so it travels over exactly one interface; Wi-Fi and USB
 connections can exist side by side, but a single connection never splits between them.
@@ -51,11 +51,21 @@ def hexip(h: str) -> str:
     return ".".join(str(int(h[i:i + 2], 16)) for i in (6, 4, 2, 0))
 
 
+def v4(h: str) -> str | None:
+    """IPv4 from a /proc/net/tcp or tcp6 address; tcp6 holds IPv4 sockets as ::ffff:a.b.c.d."""
+    if len(h) == 8:
+        return hexip(h)
+    if len(h) == 32 and h[:24] == "0000000000000000FFFF0000":
+        return hexip(h[24:])
+    return None
+
+
 def connections(serial: str, addrs: dict[str, str]) -> list[str]:
     rows = []
-    for line in sh(serial, "cat /proc/net/tcp").splitlines()[1:]:
+    lines = sh(serial, "cat /proc/net/tcp /proc/net/tcp6").splitlines()
+    for line in lines:
         f = line.split()
-        if len(f) < 4 or f[3] != "01":      # 01 = ESTABLISHED
+        if len(f) < 4 or f[3] != "01" or ":" not in f[1]:      # 01 = ESTABLISHED
             continue
         lip, lport = f[1].split(":")
         rip, rport = f[2].split(":")
@@ -63,8 +73,8 @@ def connections(serial: str, addrs: dict[str, str]) -> list[str]:
         kind = PORTS.get(lport) or PORTS.get(rport)
         if not kind:
             continue
-        local, remote = hexip(lip), hexip(rip)
-        if local.startswith("127."):
+        local, remote = v4(lip), v4(rip)
+        if local is None or remote is None or local.startswith("127."):
             continue
         iface = addrs.get(local, "?")
         rows.append(f"{kind:<7} {local}:{lport} ↔ {remote}:{rport}  via {NAMES.get(iface, iface)} ({iface})")
