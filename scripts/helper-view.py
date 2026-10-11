@@ -103,7 +103,7 @@ def state():
     answers = host.get("answers", [])
     model = host.get("model") or ""
     return {"mesh": "phone-hosted", "invite": {"mesh": "", "hosts": [], "port": 7070, "code": "the phone is the host"},
-            "qr": "", "ctx": 4096, "pinned": None, "laptop": {"specs": specs(host_serial, (host.get("phone") or "phone") + " (host)"), "usable_gb": 0},
+            "qr": "", "ctx": 4096, "pinned": None, "laptop": {"specs": specs(host_serial, (host.get("phone") or "phone") + " (host)"), "usable_gb": round(split[0]["gb"], 1) if split else 0},
             "peers": peers, "models": [{"file": model, "name": model, "gb": round(sum(x["gb"] for x in split), 1), "layers": (split[-1]["to"] + 1) if split else 0, "plan": plan}] if model else [],
             "pool_gb": round(sum(x["gb"] for x in split), 1), "activity": activity, "chats": [],
             "stats": {"tps": answers[-1]["tps"]} if answers else {}, "online": True, "benching": False, "advice": [],

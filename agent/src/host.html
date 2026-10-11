@@ -18,12 +18,12 @@
     --ok-line:#BBF7D0; --warn-line:#FDE68A; --helper-line:#DDD6FE; --bad-line:#FECACA;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
     --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-    --rail: 248px;
+    --rail: 272px;
     color-scheme: light;      /* native controls (selects, scrollbars) draw light too */
   }
   * { box-sizing:border-box; }
   html, body { height:100%; }
-  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.55 var(--sans); -webkit-font-smoothing:antialiased; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.55 var(--sans); -webkit-font-smoothing:antialiased; }
   ::selection { background:var(--ok-line); }
   ::-webkit-scrollbar { width:10px; height:10px; }
   ::-webkit-scrollbar-thumb { background:var(--line-strong); border-radius:5px; }
@@ -38,25 +38,25 @@
   .rail { border-right:1px solid var(--line); background:var(--card); display:flex; flex-direction:column;
           position:sticky; top:0; height:100vh; }
   .brand { padding:20px 18px 16px; border-bottom:1px solid var(--line-soft); }
-  .brand .mark { display:flex; align-items:center; gap:9px; font-weight:600; letter-spacing:-.2px; font-size:15px; }
+  .brand .mark { display:flex; align-items:center; gap:9px; font-weight:600; letter-spacing:-.2px; font-size:17px; }
   .brand .mark i { width:22px; height:22px; border:1px solid var(--line); border-radius:6px; display:grid; place-items:center;
-                   color:var(--ok); font-style:normal; font-size:12px; font-family:var(--mono); }
-  .brand .sub { margin-top:7px; font-size:11.5px; color:var(--fg-3); font-family:var(--mono); }
+                   color:var(--ok); font-style:normal; font-size:14px; font-family:var(--mono); }
+  .brand .sub { margin-top:7px; font-size:13px; color:var(--fg-3); font-family:var(--mono); }
   nav { padding:10px; display:flex; flex-direction:column; gap:1px; flex:1; overflow:auto; }
   nav a.nav { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:6px; color:var(--fg-2);
-              font-size:13.5px; cursor:pointer; user-select:none; }
+              font-size:15.5px; cursor:pointer; user-select:none; }
   nav a.nav:hover, nav a.nav.on { background:var(--raised); color:var(--fg); }
-  nav a.nav .k { margin-left:auto; font:11px var(--mono); color:var(--fg-3); }
-  nav .group { padding:14px 10px 6px; font:10.5px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--fg-3); }
+  nav a.nav .k { margin-left:auto; font:12.5px var(--mono); color:var(--fg-3); }
+  nav .group { padding:14px 10px 6px; font:12px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--fg-3); }
   .rail-foot { border-top:1px solid var(--line-soft); padding:12px 16px; display:flex; flex-direction:column; gap:7px;
-               font:11.5px var(--mono); color:var(--fg-3); }
+               font:13px var(--mono); color:var(--fg-3); }
   .rail-foot .r { display:flex; align-items:center; gap:7px; justify-content:space-between; }
   .rail-foot b { color:var(--fg-2); font-weight:500; }
 
   main { min-width:0; display:flex; flex-direction:column; }
   .strip { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:18px; padding:0 28px; height:48px;
            border-bottom:1px solid var(--line); background:rgba(247,247,248,.88); backdrop-filter:blur(8px);
-           font:12px var(--mono); color:var(--fg-2); }
+           font:14px var(--mono); color:var(--fg-2); }
   .strip .s { display:flex; align-items:center; gap:7px; white-space:nowrap; }
   .strip .s b { color:var(--fg); font-weight:500; }
   .strip .sp { flex:1; }
@@ -66,15 +66,15 @@
   @keyframes pulse { 50% { opacity:.25; } }
   .page { padding:28px; max-width:1180px; width:100%; }
   .head { display:flex; align-items:flex-start; gap:20px; margin-bottom:22px; }
-  .head h1 { margin:0 0 5px; font-size:22px; font-weight:600; letter-spacing:-.4px; }
-  .head p { margin:0; color:var(--fg-2); font-size:13.5px; max-width:72ch; }
+  .head h1 { margin:0 0 5px; font-size:25.5px; font-weight:600; letter-spacing:-.4px; }
+  .head p { margin:0; color:var(--fg-2); font-size:15.5px; max-width:72ch; }
   .head .act { margin-left:auto; display:flex; gap:8px; flex:none; }
 
   /* ---------------------------------------------------------------- pieces */
   .card { background:var(--card); border:1px solid var(--line); border-radius:8px; }
   .card > .ch { padding:14px 16px; border-bottom:1px solid var(--line-soft); display:flex; align-items:center; gap:10px; }
-  .card > .ch h3 { margin:0; font-size:13.5px; font-weight:600; }
-  .card > .ch .d { color:var(--fg-3); font-size:12px; }
+  .card > .ch h3 { margin:0; font-size:15.5px; font-weight:600; }
+  .card > .ch .d { color:var(--fg-3); font-size:14px; }
   .card > .cb { padding:16px; }
   .card > .cb.tight { padding:11px 16px; }
   .grid { display:grid; gap:14px; }
@@ -85,15 +85,15 @@
   .wrap { flex-wrap:wrap; }
   .sp { flex:1; }
   .muted { color:var(--fg-2); } .quiet { color:var(--fg-3); }
-  .sec { font:10.5px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--fg-3); margin:26px 0 10px; }
+  .sec { font:12px var(--mono); letter-spacing:.09em; text-transform:uppercase; color:var(--fg-3); margin:26px 0 10px; }
 
   .stat { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:13px 15px; }
-  .stat .k { display:flex; align-items:center; gap:7px; font-size:11.5px; color:var(--fg-3); }
-  .stat .v { margin-top:6px; font:600 21px/1.2 var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.5px;
+  .stat .k { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--fg-3); }
+  .stat .v { margin-top:6px; font:600 24px/1.2 var(--mono); font-variant-numeric:tabular-nums; letter-spacing:-.5px;
              white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .stat .v small { font-size:12px; color:var(--fg-3); font-weight:400; }
+  .stat .v small { font-size:14px; color:var(--fg-3); font-weight:400; }
 
-  button, .btn { font:500 13px var(--sans); border-radius:6px; padding:7px 13px; cursor:pointer; display:inline-flex;
+  button, .btn { font:500 15px var(--sans); border-radius:6px; padding:7px 13px; cursor:pointer; display:inline-flex;
                  align-items:center; gap:7px; border:1px solid var(--line); background:var(--raised); color:var(--fg); }
   button:hover:not(:disabled), .btn:hover { border-color:var(--line-strong); background:var(--hover); }
   button.primary { background:var(--fg); color:var(--card); border-color:var(--fg); font-weight:600; }
@@ -101,8 +101,8 @@
   button.ghost { background:transparent; }
   button.danger { color:var(--bad); }
   button:disabled { opacity:.45; cursor:default; }
-  button.sm { padding:5px 10px; font-size:12px; }
-  input, select, textarea { font:13px var(--mono); background:var(--card); color:var(--fg); border:1px solid var(--line);
+  button.sm { padding:5px 10px; font-size:14px; }
+  input, select, textarea { font:15px var(--mono); background:var(--card); color:var(--fg); border:1px solid var(--line);
                             border-radius:6px; padding:7px 10px; }
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--focus); }
   /* WebKitGTK draws a light native menu otherwise, grey text on white */
@@ -112,93 +112,110 @@
   input.cap { width:74px; }
 
   .tag { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--line); border-radius:999px;
-         padding:2px 9px; font:11px var(--mono); color:var(--fg-2); background:var(--raised); }
+         padding:2px 9px; font:12.5px var(--mono); color:var(--fg-2); background:var(--raised); }
   .tag.ok { color:var(--ok); border-color:var(--ok-line); background:var(--ok-soft); } .tag.warn { color:var(--warn); border-color:var(--warn-line); background:var(--warn-soft); }
   .tag.bad { color:var(--bad); border-color:var(--bad-line); background:var(--bad-soft); } .tag.helper { color:var(--helper); border-color:var(--helper-line); background:var(--helper-soft); }
 
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th { text-align:left; padding:9px 12px; font:10.5px var(--mono); letter-spacing:.08em; text-transform:uppercase;
+  table { width:100%; border-collapse:collapse; font-size:15px; }
+  th { text-align:left; padding:9px 12px; font:12px var(--mono); letter-spacing:.08em; text-transform:uppercase;
        color:var(--fg-3); border-bottom:1px solid var(--line); font-weight:500; }
   td { padding:10px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
   tr:last-child td { border-bottom:0; }
   td.num { font-family:var(--mono); font-variant-numeric:tabular-nums; }
 
-  .meter .k { display:flex; justify-content:space-between; gap:10px; font-size:12px; color:var(--fg-2); margin-bottom:6px; }
-  .meter .k b { font:500 12px var(--mono); color:var(--fg); }
+  .meter .k { display:flex; justify-content:space-between; gap:10px; font-size:14px; color:var(--fg-2); margin-bottom:6px; }
+  .meter .k b { font:500 14px var(--mono); color:var(--fg); }
   .bar { height:6px; border-radius:3px; background:var(--line); overflow:hidden; margin-bottom:13px; }
   .bar i { display:block; height:100%; border-radius:3px; }
   .layers { display:flex; height:26px; border:1px solid var(--line); border-radius:6px; overflow:hidden; background:var(--raised); }
-  .layers div { display:grid; place-items:center; font:11px var(--mono); color:var(--fg); min-width:0; overflow:hidden; white-space:nowrap; }
+  .layers div { display:grid; place-items:center; font:12.5px var(--mono); color:var(--fg); min-width:0; overflow:hidden; white-space:nowrap; }
   .layers div + div { box-shadow:inset 1px 0 0 var(--card); }   /* two helpers side by side stay two */
 
-  .feed { font:12px/1.65 var(--mono); max-height:360px; overflow:auto; }
+  .feed { font:14px/1.65 var(--mono); max-height:360px; overflow:auto; }
   .feed div { padding:3px 0; color:var(--fg-2); border-bottom:1px solid var(--line-soft); }
   .feed div:last-child { border-bottom:0; }
   .feed .t { color:var(--fg-3); margin-right:8px; }
   .feed .ok { color:var(--ok); } .feed .no { color:var(--bad); }
 
   .empty { text-align:center; padding:40px 20px; color:var(--fg-3); }
-  .empty h4 { margin:0 0 6px; color:var(--fg-2); font-size:14px; font-weight:500; }
-  .empty p { margin:0 auto; max-width:48ch; font-size:13px; }
+  .empty h4 { margin:0 0 6px; color:var(--fg-2); font-size:16px; font-weight:500; }
+  .empty p { margin:0 auto; max-width:48ch; font-size:15px; }
 
-  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:12.5px; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:6px 14px; font-size:14.5px; }
   /* a device drawn as itself: the specs live inside the outline */
-  .frame { position:relative; margin:0 auto 18px; background:var(--card); border:2px solid var(--bezel); }
-  .frame.phone { width:min(100%, 320px); border-radius:34px; padding:38px 18px 34px; }
-  .frame.phone:before { content:""; position:absolute; top:12px; left:50%; transform:translateX(-50%); width:72px; height:8px; border-radius:4px; background:var(--bezel); }
-  .frame.phone:after { content:""; position:absolute; bottom:11px; left:50%; transform:translateX(-50%); width:96px; height:4px; border-radius:2px; background:var(--bezel); }
-  .frame.laptop { width:min(100%, 440px); border-radius:14px 14px 3px 3px; padding:22px 20px 18px; }
-  .frame.laptop:before { content:""; position:absolute; top:7px; left:50%; transform:translateX(-50%); width:7px; height:7px; border-radius:50%; background:var(--bezel); }
-  .frame.laptop:after { content:""; position:absolute; left:-7%; right:-7%; bottom:-14px; height:11px; border-radius:0 0 10px 10px; background:var(--bezel); }
+  .frame { position:relative; margin:0 auto 22px; background:var(--card); border:10px solid #1F1F23;
+           box-shadow:0 0 0 1px #3F3F46, 0 22px 44px -22px rgba(24,24,27,.45); }
+  /* phone: rounded glass, punch-hole camera, two side buttons */
+  .frame.phone { width:min(100%, 350px); border-radius:48px; padding:44px 20px 32px; }
+  .frame.phone:before { content:""; position:absolute; top:13px; left:50%; transform:translateX(-50%); width:13px; height:13px;
+                        border-radius:50%; background:#1F1F23; box-shadow:inset 0 0 0 3px #3A3A40; }
+  .frame.phone:after { content:""; position:absolute; right:-15px; top:96px; width:4px; height:58px; border-radius:0 3px 3px 0;
+                       background:#3F3F46; box-shadow:0 74px 0 #3F3F46; }
+  /* laptop: thin lid with a camera dot, a hinge, and a base with a finger notch */
+  .frame.laptop { width:min(100%, 500px); border-radius:18px 18px 4px 4px; border-bottom-width:14px; padding:26px 22px 20px; margin-bottom:46px; }
+  .frame.laptop:before { content:""; position:absolute; top:-7px; left:50%; transform:translateX(-50%); width:5px; height:5px; border-radius:50%; background:#5B5B63; }
+  .frame.laptop:after { content:""; position:absolute; left:-11%; right:-11%; bottom:-30px; height:16px; border-radius:3px 3px 16px 16px;
+                        background:linear-gradient(90deg, transparent 41%, rgba(0,0,0,.22) 41% 59%, transparent 59%) top / 100% 4px no-repeat,
+                                   linear-gradient(#E4E4E7, #A1A1AA); box-shadow:0 10px 18px -12px rgba(24,24,27,.5); }
+  /* a role, said plainly */
+  .role { display:inline-flex; align-items:center; gap:7px; font:600 13px var(--sans); padding:4px 11px; border-radius:999px; }
+  .role.host { color:var(--ok); background:var(--ok-soft); } .role.helper { color:var(--helper); background:var(--helper-soft); }
+  .pm-tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:12px 0 4px; }
+  .pm-path { display:flex; align-items:center; gap:10px; flex-wrap:wrap; font:14.5px var(--sans); margin:4px 0 6px; }
+  .pm-path .wire { flex:1; min-width:60px; height:3px; border-radius:2px; background:linear-gradient(90deg, var(--ok), var(--helper)); }
+  .pm-path .wire.live { background-size:24px 3px; background-image:repeating-linear-gradient(90deg, var(--helper) 0 12px, transparent 12px 24px);
+                        animation:flow 0.8s linear infinite; }
+  @keyframes flow { to { background-position:24px 0; } }
+  .pm h4 { margin:16px 0 6px; font:600 13px var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-3); }
   .frame .ch { padding:0 0 10px; border:0; } .frame .cb { padding:0; }
   .kv .k { color:var(--fg-3); } .kv .v { font-family:var(--mono); }
 
   pre { background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:11px 13px; overflow-x:auto;
-        font:12.5px/1.6 var(--mono); color:var(--fg); margin:9px 0; }
-  code { background:var(--raised); border-radius:4px; padding:1px 5px; font:12.5px var(--mono); }
+        font:14.5px/1.6 var(--mono); color:var(--fg); margin:9px 0; }
+  code { background:var(--raised); border-radius:4px; padding:1px 5px; font:14.5px var(--mono); }
   .cmd { display:flex; align-items:center; gap:8px; background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
   .cmd code { background:transparent; padding:0; flex:1; overflow:auto; white-space:nowrap; color:var(--fg-2); }
 
   .msg { border:1px solid var(--line); border-radius:8px; padding:12px 14px; margin:10px 0; max-width:82%; background:var(--card);
-         white-space:pre-wrap; font-size:13.5px; }
+         white-space:pre-wrap; font-size:15.5px; }
   .msg.me { margin-left:auto; background:var(--raised); border-color:var(--line-strong); }
   .msg img { max-width:240px; border-radius:6px; display:block; margin-bottom:8px; }
   .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:9px; }
-  .chips span { font:11px var(--mono); color:var(--fg-3); border:1px solid var(--line-soft); border-radius:999px; padding:1px 8px; }
+  .chips span { font:12.5px var(--mono); color:var(--fg-3); border:1px solid var(--line-soft); border-radius:999px; padding:1px 8px; }
   .chips span.who { color:var(--ok); border-color:var(--ok-line); }
   .chips span.who.vision { color:var(--helper); border-color:var(--helper-line); }
   /* agent */
   .agent { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; align-items:start; }
   .agent-main { display:flex; flex-direction:column; gap:14px; min-width:0; }
   .agent-side { display:flex; flex-direction:column; gap:14px; }
-  .agent textarea { width:100%; resize:vertical; font:13.5px/1.5 var(--sans); }
+  .agent textarea { width:100%; resize:vertical; font:15.5px/1.5 var(--sans); }
   .steps { display:flex; flex-direction:column; }
   .step { display:grid; grid-template-columns:22px minmax(0,1fr) auto; gap:12px; padding:10px 0; border-top:1px solid var(--line-soft); align-items:start; }
   .step:first-child { border-top:0; }
-  .step .ico { font:13px var(--mono); color:var(--fg-3); text-align:center; padding-top:1px; }
-  .step small { display:block; font:12px var(--mono); color:var(--fg-3); }
-  .step .when { font:11.5px var(--mono); color:var(--fg-3); white-space:nowrap; }
-  .prompt { background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:11px 14px; white-space:pre-wrap; font-size:13.5px; }
+  .step .ico { font:15px var(--mono); color:var(--fg-3); text-align:center; padding-top:1px; }
+  .step small { display:block; font:14px var(--mono); color:var(--fg-3); }
+  .step .when { font:13px var(--mono); color:var(--fg-3); white-space:nowrap; }
+  .prompt { background:var(--raised); border:1px solid var(--line); border-radius:8px; padding:11px 14px; white-space:pre-wrap; font-size:15.5px; }
   .sw { width:34px; height:20px; border-radius:999px; background:var(--line); position:relative; cursor:pointer; border:0; padding:0; flex:none; }
   .sw::after { content:""; position:absolute; top:3px; left:3px; width:14px; height:14px; border-radius:50%; background:var(--fg-2); transition:left .15s; }
   .sw.on { background:var(--ok-line); } .sw.on::after { left:17px; background:var(--ok); }
   .sw.danger.on { background:var(--bad-line); } .sw.danger.on::after { background:var(--bad); }
   .perm { display:flex; gap:12px; align-items:center; padding:8px 0; border-top:1px solid var(--line-soft); }
-  .perm:first-child { border-top:0; } .perm .t { flex:1; font-size:13px; } .perm small { display:block; color:var(--fg-3); font-size:12px; }
+  .perm:first-child { border-top:0; } .perm .t { flex:1; font-size:15px; } .perm small { display:block; color:var(--fg-3); font-size:14px; }
   .hist { display:flex; gap:9px; align-items:center; width:100%; padding:7px 0; background:none; border:0; border-top:1px solid var(--line-soft);
-          border-radius:0; text-align:left; color:var(--fg-2); font-size:12.5px; cursor:pointer; }
+          border-radius:0; text-align:left; color:var(--fg-2); font-size:14.5px; cursor:pointer; }
   .hist:first-child { border-top:0; } .hist:hover { color:var(--fg); } .hist.on { color:var(--fg); }
   .hist .t { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .diffv { max-height:460px; overflow:auto; font:12px/1.5 var(--mono); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 0; }
+  .diffv { max-height:460px; overflow:auto; font:14px/1.5 var(--mono); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px 0; }
   .diffv div { padding:0 12px; white-space:pre-wrap; word-break:break-all; }
   .diffv .a { background:var(--ok-soft); color:var(--ok); } .diffv .d { background:var(--bad-soft); color:var(--bad); } .diffv .x { color:var(--info); }
   @media (max-width: 1100px) { .agent { grid-template-columns:1fr; } }
-  .latest { position:fixed; right:36px; bottom:96px; z-index:6; border-radius:999px; padding:6px 14px; font:12px var(--mono); }
+  .latest { position:fixed; right:36px; bottom:96px; z-index:6; border-radius:999px; padding:6px 14px; font:14px var(--mono); }
   .latest.hide { display:none; }
   .composer { position:sticky; bottom:0; background:linear-gradient(180deg, rgba(247,247,248,0), var(--bg) 22%); padding:18px 0 4px; }
   .composer .box { display:flex; gap:8px; align-items:flex-end; background:var(--card); border:1px solid var(--line);
                    border-radius:10px; padding:8px; }
-  .composer textarea { flex:1; border:0; background:transparent; resize:none; height:38px; padding:8px; font:13.5px var(--sans); }
+  .composer textarea { flex:1; border:0; background:transparent; resize:none; height:38px; padding:8px; font:15.5px var(--sans); }
 
   .qr { background:#fff; border-radius:8px; padding:10px; width:200px; flex:none; }
   .qr svg { width:100%; height:auto; display:block; }
@@ -209,11 +226,11 @@
   /* the agent going away is a visible state, not a page that quietly stops moving */
   .lost { position:fixed; left:50%; transform:translateX(-50%); top:12px; z-index:50; display:none;
           background:var(--bad-soft); border:1px solid var(--bad-line); color:var(--bad); border-radius:8px; padding:9px 15px;
-          font:12.5px var(--mono); }
+          font:14.5px var(--mono); }
   .lost.on { display:block; }
   .toast { position:fixed; right:18px; bottom:18px; z-index:50; display:flex; flex-direction:column; gap:8px; }
   .toast div { background:var(--bad-soft); border:1px solid var(--bad-line); color:var(--bad); border-radius:8px; padding:9px 14px;
-               font:12.5px var(--mono); max-width:420px; }
+               font:14.5px var(--mono); max-width:420px; }
 
   @media (max-width: 900px) {
     .app { grid-template-columns:1fr; }
@@ -334,13 +351,13 @@
             <div class="row wrap" style="align-items:flex-start; gap:18px">
               <div class="qr" id="qr"></div>
               <div style="min-width:180px; flex:1">
-                <ol class="muted" style="margin:0; padding-left:18px; line-height:1.9; font-size:13px">
+                <ol class="muted" style="margin:0; padding-left:18px; line-height:1.9; font-size:15px">
                   <li>Plug the phone in, turn on <b>USB tethering</b>.</li>
                   <li>Open <b>MeshAI</b>, choose <b>Helper</b>.</li>
                   <li>Scan this code.</li>
                 </ol>
-                <div class="quiet mono" style="margin-top:10px; font-size:11.5px" id="links"></div>
-                <div class="quiet mono" style="margin-top:4px; font-size:11.5px">each code works once</div>
+                <div class="quiet mono" style="margin-top:10px; font-size:13px" id="links"></div>
+                <div class="quiet mono" style="margin-top:4px; font-size:13px">each code works once</div>
               </div>
             </div>
           </div>
@@ -348,7 +365,7 @@
         <div class="card">
           <div class="ch"><svg class="i"><use href="#i-laptop"/></svg><h3>Add another laptop</h3></div>
           <div class="cb">
-            <p class="muted" style="margin:0 0 10px; font-size:13px">Run this on the other machine, from the folder you
+            <p class="muted" style="margin:0 0 10px; font-size:15px">Run this on the other machine, from the folder you
                want it to share. It brings its memory into the pool, and a phone can ask it about that repository.</p>
             <div class="cmd"><code id="joincmd">…</code><button class="sm ghost" id="copyjoin">copy</button></div>
           </div>
@@ -394,7 +411,7 @@
       <div id="log" style="margin-top:16px"></div>
       <button type="button" class="latest hide" id="latest">↓ Latest</button>
       <form class="composer" id="f">
-        <div class="quiet mono" id="preview" style="font-size:11.5px; margin-bottom:6px"></div>
+        <div class="quiet mono" id="preview" style="font-size:13px; margin-bottom:6px"></div>
         <div class="box">
           <label class="btn ghost" title="Attach a photo" id="attach"><svg class="i"><use href="#i-image"/></svg>
             <input type="file" id="img" accept="image/*" hidden></label>
@@ -417,7 +434,7 @@
             <div class="row wrap" style="margin-top:10px">
               <button class="primary" id="ag-send">Send</button>
               <button class="ghost hide" id="ag-stop">Stop</button>
-              <span class="quiet mono" id="ag-note" style="font-size:12px"></span>
+              <span class="quiet mono" id="ag-note" style="font-size:14px"></span>
               <span style="flex:1"></span>
               <span class="row wrap" id="ag-starters"></span>
             </div>
@@ -583,6 +600,16 @@ pollUsb(); setInterval(pollUsb, 5000);
 function render() {
   if (!S) return;
   try { paint(); } catch (e) { toast('render: ' + (e.message || e)); }
+  try { phoneMode(); } catch (e) { /* layout only */ }
+}
+
+/* A phone is the Host: hide the tools that only make sense when this laptop hosts (join codes, USB phones). */
+function phoneMode() {
+  const on = !!S.phone_mesh;
+  ['qr', 'joincmd', 'usb'].forEach(id => { const c = $(id) && $(id).closest('.card'); if (c) c.classList.toggle('hide', on); });
+  const usbSec = [...document.querySelectorAll('.sec')].find(e => e.textContent.trim() === 'Phones on USB');
+  if (usbSec) usbSec.classList.toggle('hide', on);
+  const nq = $('newqr'); if (nq) nq.classList.toggle('hide', on);
 }
 function paint() {
   const r = S.run, busy = r.status === 'starting' || r.status === 'loading';
@@ -595,7 +622,8 @@ function paint() {
   $('s-dev').textContent = 1 + S.peers.length;
   $('s-tps').textContent = S.stats.answers ? num(S.stats.avg_tps).toFixed(1) + ' tok/s' : '–';
   $('s-net').innerHTML = S.online === false ? `<i class="dot ok"></i><b style="color:var(--ok)">OFFLINE</b>` : '';
-  $('meshid').textContent = 'mesh-' + (S.mesh || '?') + ' · this laptop is the host';
+  $('meshid').textContent = S.phone_mesh ? 'a phone is the host · this laptop watches'
+                                         : 'mesh-' + (S.mesh || '?') + ' · this laptop is the host';
   $('f-net').textContent = S.online === false ? 'off' : 'on';
   $('f-pool').textContent = gb(S.pool_gb) + ' GB';
 
@@ -636,30 +664,53 @@ function renderOverview() {
     const quiet = num(p.quiet_s, 0) >= 10;
     return `<div class="row between" style="padding:7px 0; border-top:1px solid var(--line-soft)">
       <span class="row" style="gap:8px">${ic('phone')}<b style="font-weight:500">${esc(p.name || p.id)}</b></span>
-      <span class="mono quiet" style="font-size:11.5px">${quiet ? `quiet ${num(p.quiet_s)} s` :
+      <span class="mono quiet" style="font-size:13px">${quiet ? `quiet ${num(p.quiet_s)} s` :
         (p.rtt_ms != null ? num(p.rtt_ms).toFixed(1) + ' ms' : 'joining…')}${layersOf(p.id) ? ' · ' + layersOf(p.id) : ''} · ${gb(p.usable_gb)} GB</span></div>`;
   }).join('');
   $('ov-devices').innerHTML = `<div class="row wrap" style="align-items:flex-start; gap:16px">
       <div class="qr" id="ov-qr">${S.qr || ''}</div>
-      <div style="flex:1; min-width:160px; font-size:13px">
+      <div style="flex:1; min-width:160px; font-size:15px">
         <div class="muted">Plug the phone in, turn on <b>USB tethering</b>, open <b>MeshAI → Helper</b>, scan.</div>
-        <div class="quiet mono" style="margin-top:8px; font-size:11.5px">${S.invite.hosts.length ? 'reachable at ' + S.invite.hosts.join(' · ') : 'no address yet'}</div>
+        <div class="quiet mono" style="margin-top:8px; font-size:13px">${S.invite.hosts.length ? 'reachable at ' + S.invite.hosts.join(' · ') : 'no address yet'}</div>
       </div></div>
     <div style="margin-top:12px">
       <div class="row between" style="padding:7px 0"><span class="row" style="gap:8px">${ic('laptop')}<b style="font-weight:500">${esc(S.laptop.specs.name || 'This laptop')}</b></span>
-        <span class="mono quiet" style="font-size:11.5px">host${layersOf('laptop') ? ' · ' + layersOf('laptop') : ''} · ${gb(S.laptop.usable_gb)} GB</span></div>${peers}</div>`;
+        <span class="mono quiet" style="font-size:13px">host${layersOf('laptop') ? ' · ' + layersOf('laptop') : ''} · ${gb(S.laptop.usable_gb)} GB</span></div>${peers}</div>`;
   // models: one row each, with its verdict and a button
   $('ov-models').innerHTML = S.models.length ? S.models.map(m => {
     const p = m.plan || {}, [lab, cls, icon] = look(p.verdict), can = p.verdict !== 'not_possible', on = r.status !== 'idle' && r.model === m.name;
     return `<div class="row between wrap" style="padding:9px 0; border-top:1px solid var(--line-soft); gap:8px">
       <div style="min-width:0"><div style="font-weight:500">${esc(m.name)}</div>
-        <div class="d mono" style="font-size:11.5px">${gb(m.gb)} GB · ${m.layers} layers · ${esc(p.reason || '')}</div></div>
+        <div class="d mono" style="font-size:13px">${gb(m.gb)} GB · ${m.layers} layers · ${esc(p.reason || '')}</div></div>
       <span class="row" style="gap:8px"><span class="tag ${cls}">${ic(icon)}${lab}</span>
         ${on ? `<button class="sm ghost danger" id="ov-stop">Stop</button>` : can ? `<button class="primary sm" data-pick="${esc(m.file)}">${ic('play')}Run</button>` : ''}</span></div>`;
   }).join('') : `<div class="empty"><h4>No models here</h4><p>Put a <code>.gguf</code> file in the laptop's model folder.</p></div>`;
   document.querySelectorAll('#ov-models [data-pick]').forEach(b => b.onclick = () => { chosen = b.dataset.pick; go('run'); });
+  if (S.phone_mesh) phoneHostedOverview();
   const st = $('ov-stop'); if (st) st.onclick = () => act(post('/api/stop'), 'stopping');
   wireGo();
+}
+
+/* When a phone is the Host, the laptop only watches: say so, and list the phones instead of a code to scan. */
+function phoneHostedOverview() {
+  const r = S.run, pm = S.phone_mesh;
+  $('ov-sub').textContent = r.status === 'ready'
+    ? `${r.model} is answering on the phones. This laptop only shows what they report.`
+    : 'The phones run the model. Start it on the Host phone; this laptop only watches.';
+  $('ov-act').innerHTML = '';
+  if (r.status === 'idle') $('ov-run').innerHTML = `<div class="empty"><h4>Nothing is running on the phones</h4>
+      <p>On the Host phone: Models → pick a model → Run.</p></div>`;
+  const slices = r.plan.slices || [];
+  const row = (name, role, detail) => `<div class="row between" style="padding:9px 0; border-top:1px solid var(--line-soft)">
+      <span class="row" style="gap:9px">${ic('phone')}<b style="font-weight:500">${esc(name)}</b><span class="role ${role}">${role}</span></span>
+      <span class="mono quiet" style="font-size:13.5px">${detail}</span></div>`;
+  const h = slices[0];
+  $('ov-devices').innerHTML = row(pm.host || 'Host phone', 'host', h ? `layers ${h.from}–${h.to - 1} · ${gb(h.gb)} GB` : 'no run') +
+    S.peers.map(p => row(p.name, 'helper', `${esc(p.link || '')} · ${p.rtt_ms != null ? num(p.rtt_ms).toFixed(0) + ' ms' : '–'}${layersOf(p.id) ? ' · ' + layersOf(p.id) : ''}`)).join('') +
+    (S.peers.length ? '' : `<div class="quiet" style="font-size:14px; padding-top:8px">No Helper joined the Host yet.</div>`);
+  $('ov-models').innerHTML = r.model
+    ? `<div style="font-weight:500">${esc(r.model)}</div><div class="mono quiet" style="font-size:13.5px">${slices.length} device(s) · ${gb(S.pool_gb)} GB of layers</div>`
+    : `<div class="empty"><h4>Models live on the Host phone</h4><p>Pick and run one there.</p></div>`;
 }
 function runSummary() {
   const r = S.run;
@@ -668,7 +719,7 @@ function runSummary() {
   if (r.status === 'failed') return `<div class="row" style="color:var(--bad)">${ic('warn')}<span>${esc(r.step)}</span></div>`;
   return `<div class="row between wrap" style="margin-bottom:12px">
       <div><div style="font-weight:600">${esc(r.model)}</div>
-        <div class="mono quiet" style="font-size:12px">${esc(r.step)}${r.seconds != null && r.status !== 'ready' ? ' · ' + r.seconds + ' s' : ''}</div></div>
+        <div class="mono quiet" style="font-size:14px">${esc(r.step)}${r.seconds != null && r.status !== 'ready' ? ' · ' + r.seconds + ' s' : ''}</div></div>
       <div class="row wrap">${track(r)}</div></div>
     ${(r.plan.slices || []).length ? layerBar(r.plan) : ''}`;
 }
@@ -730,7 +781,7 @@ function card(o) {
   const st = o.store && o.store.total ? o.store : null;
   // a phone reports every two seconds; past ten it has gone quiet and these numbers are history
   const quiet = !o.laptop && num(o.quiet_s, 0) >= 10;
-  return `<div class="frame ${o.laptop ? 'laptop' : 'phone'}" ${quiet ? 'style="border-color:var(--bad)"' : ''}>
+  return `<div class="frame ${o.laptop && (s.kind || 'laptop') === 'laptop' ? 'laptop' : 'phone'}" ${quiet ? 'style="border-color:var(--bad)"' : ''}>
     <div class="ch">
       <div style="min-width:0"><h3>${esc(o.name)}</h3>
         <div class="d mono" style="overflow:hidden; text-overflow:ellipsis">${esc(s.chip || '')}${s.cores ? ' · ' + s.cores + ' cores' : ''}</div></div>
@@ -738,13 +789,13 @@ function card(o) {
         quiet ? `quiet ${num(o.quiet_s)} s` : o.laptop ? 'host' : 'helper'}</span></div>
     <div class="cb" ${quiet ? 'style="opacity:.55"' : ''}>
       ${quiet ? `<div class="row" style="color:var(--bad); margin-bottom:12px">${ic('warn')}
-        <span style="font-size:12.5px">Nothing heard for ${num(o.quiet_s)} s. What follows is the last it said, not what is true now.</span></div>` : ''}
+        <span style="font-size:14.5px">Nothing heard for ${num(o.quiet_s)} s. What follows is the last it said, not what is true now.</span></div>` : ''}
       ${meter(layersOf(o.id) ? 'Memory free, while holding its layers' : 'Memory free',
                `${gb(num(s.freeBytes) / 1e9)} / ${gb(total / 1e9)} GB`, num(s.freeBytes) / total, 'var(--info)')}
       ${meter('Offered for models' + (cap ? ` (capped ${gb(cap)} GB)` : ''), gb(o.usable) + ' GB', num(o.usable) * 1e9 / total, 'var(--ok)')}
       ${st ? meter('Layers kept on the device', `${st.done}/${st.total} · ${gb(num(st.bytes) / 1e9)} GB`, num(st.done) / num(st.total, 1), 'var(--helper)') : ''}
       ${!o.laptop && o.rpc_event ? `<div class="row" style="margin:10px 0 4px; gap:7px; color:${num(o.rpc_event_age_s, 999) < 3 ? 'var(--ok)' : 'var(--quiet)'}">
-        <span class="mono" style="font-size:11.5px">RPC ${esc(o.rpc_event)} observed · #${num(o.rpc_sequence)} · ${num(o.rpc_event_age_s, 0).toFixed(1)} s ago</span></div>` : ''}
+        <span class="mono" style="font-size:13px">RPC ${esc(o.rpc_event)} observed · #${num(o.rpc_sequence)} · ${num(o.rpc_event_age_s, 0).toFixed(1)} s ago</span></div>` : ''}
       <div class="kv" style="margin-top:4px">
         <span class="k">Heat</span><span class="v" style="color:${heatColor(s.heat, s.temp_c)}">${heatText(s.heat, s.temp_c)}</span>
         <span class="k">Battery</span><span class="v">${num(s.battery, -1) >= 0 ? s.battery + '%' : '–'}${s.charging ? ' charging' : ''}</span>
@@ -754,7 +805,7 @@ function card(o) {
         ${o.addr ? `<span class="k">Address</span><span class="v">${esc(o.addr)}</span>` : ''}
       </div>
       <div class="row between" style="margin-top:14px">
-        <label class="quiet" style="font-size:12px">cap <input class="cap mono" data-cap="${esc(o.id)}" value="${cap ? gb(cap) : ''}" placeholder="auto"> GB</label>
+        <label class="quiet" style="font-size:14px">cap <input class="cap mono" data-cap="${esc(o.id)}" value="${cap ? gb(cap) : ''}" placeholder="auto"> GB</label>
         ${o.laptop ? '' : `<button class="sm ghost danger" data-forget="${esc(o.id)}">Remove</button>`}
       </div></div></div>`;
 }
@@ -788,7 +839,7 @@ function layerBar(p) {
   const total = sl.reduce((a, s) => a + (s.to - s.from), 0) || 1;
   return `<div class="layers">${sl.map(s =>
       `<div style="flex:${Math.max(s.to - s.from, 1)}; background:${s.host ? 'var(--ok-soft); color:var(--ok)' : 'var(--helper-soft); color:var(--helper)'}" title="${esc(s.name)}: layers ${s.from}-${s.to - 1}">${s.to - s.from}</div>`).join('')}</div>
-    <div class="row wrap quiet mono" style="gap:14px; margin-top:8px; font-size:11.5px">
+    <div class="row wrap quiet mono" style="gap:14px; margin-top:8px; font-size:13px">
       ${sl.map(s => `<span><b style="color:${s.host ? 'var(--ok)' : 'var(--helper)'}">■</b> ${esc(s.name)} · ${s.from}-${s.to - 1} · ${gb(s.gb)} GB</span>`).join('')}
       <span>${total} layers in all</span></div>`;
 }
@@ -808,10 +859,10 @@ function renderModels() {
         <div class="d mono">${gb(m.gb)} GB · ${m.layers} layers${isVision(m.file) ? ' · vision' : ''}</div></div>
         <span class="sp"></span><span class="tag ${cls}">${ic(icon)}${lab}</span></div>
       <div class="cb">
-        <div class="muted" style="font-size:13px; margin-bottom:12px">${esc(p.reason || '')}</div>
+        <div class="muted" style="font-size:15px; margin-bottom:12px">${esc(p.reason || '')}</div>
         ${can ? layerBar(p) : ''}
         <div class="row between wrap" style="margin-top:14px">
-          <span class="quiet mono" style="font-size:11.5px">needs ${gb(p.need_gb)} GB</span>
+          <span class="quiet mono" style="font-size:13px">needs ${gb(p.need_gb)} GB</span>
           ${can ? `<button class="primary sm" data-pick="${esc(m.file)}">${ic('play')}Use this model</button>` : ''}
         </div></div></div>`;
   }).join('') + '</div>';
@@ -834,13 +885,13 @@ function renderUsb() {
         <div class="d mono">${esc(d.serial)} · ${gb(d.memory_gb)} GB · ${num(d.battery)}%</div></div>
         <span class="sp"></span><span class="tag ${running ? (vis ? 'helper' : 'ok') : ''}">${running ? (vis ? 'photos' : 'text') : 'idle'}</span></div>
       <div class="cb">
-        ${running ? `<div class="mono muted" style="font-size:12px; margin-bottom:10px">${esc(running)}</div>` : ''}
+        ${running ? `<div class="mono muted" style="font-size:14px; margin-bottom:10px">${esc(running)}</div>` : ''}
         ${fits.length ? `<div class="row">
           <select id="u-${esc(d.serial)}" style="flex:1; min-width:0">${fits.map(m =>
             `<option value="${esc(m.file)}">${esc(String(m.file).replace('.gguf', ''))}</option>`).join('')}</select>
           <button class="sm" data-urun="${esc(d.serial)}">${ic('play')}Run</button>
           ${running ? `<button class="sm ghost" data-ustop="${esc(d.serial)}">${ic('stop')}Stop</button>` : ''}
-        </div>` : `<div class="quiet" style="font-size:12.5px">No model on this phone small enough for its memory.</div>`}
+        </div>` : `<div class="quiet" style="font-size:14.5px">No model on this phone small enough for its memory.</div>`}
       </div></div>`;
   }).join('');
   document.querySelectorAll('[data-urun]').forEach(b => b.onclick = () => {
@@ -884,7 +935,7 @@ function planTable(p) {
         <td class="num">${gb(s.gb)} GB</td>
         <td class="num">${s.host ? '–' : (peer && peer.rtt_ms != null ? num(peer.rtt_ms).toFixed(1) + ' ms' : '–')}</td></tr>`;
     }).join('')}</tbody></table>
-    <div class="quiet" style="padding:10px 12px 0; font-size:12px">The host also keeps the embeddings and the output head,
+    <div class="quiet" style="padding:10px 12px 0; font-size:14px">The host also keeps the embeddings and the output head,
       so one small activation crosses the link per word rather than any weights.</div>`;
 }
 function renderRun() {
@@ -908,13 +959,13 @@ function renderRun() {
         <div class="ch">${ic('box', 'lg')}<div><h3>${esc(m.name)}</h3><div class="d mono">${gb(m.gb)} GB · ${m.layers} layers</div></div>
           <span class="sp"></span><span class="tag ${cls}">${lab}</span></div>
         <div class="cb">
-          <div class="muted" style="font-size:13px">${esc(p.reason || '')}</div>
+          <div class="muted" style="font-size:15px">${esc(p.reason || '')}</div>
           <div class="kv" style="margin-top:14px">
             <span class="k">Needs</span><span class="v">${gb(p.need_gb)} GB, weights and cache together</span>
             <span class="k">Pooled</span><span class="v">${gb(S.pool_gb)} GB across ${1 + S.peers.length} device${S.peers.length ? 's' : ''}</span>
           </div>
           ${can ? `<div style="margin-top:16px">${layerBar(p)}</div>` : ''}
-          ${skipped.length ? `<div class="quiet" style="margin-top:12px; font-size:12.5px">Left out: ${
+          ${skipped.length ? `<div class="quiet" style="margin-top:12px; font-size:14.5px">Left out: ${
             skipped.map(([k, v]) => `${esc(k)} (${esc(v)})`).join(', ')}</div>` : ''}
           <div class="row" style="margin-top:18px">
             <button class="primary" id="start" ${can ? '' : 'disabled'}>${ic('play')}Start this model</button>
@@ -950,10 +1001,10 @@ function renderChat() {
   $('chat-act').innerHTML = S.run.status === 'ready'
     ? `<button class="ghost" data-go2="measure">${ic('chart')}Measure this setup</button>` : '';
   $('apibox').innerHTML = `<div class="cb tight row wrap between">
-      <div class="row">${ic('key')}<div><div style="font-size:13px">Point any OpenAI-compatible tool at this</div>
-        <div class="quiet mono" style="font-size:11.5px">here <code>http://localhost:8080/v1</code>${
+      <div class="row">${ic('key')}<div><div style="font-size:15px">Point any OpenAI-compatible tool at this</div>
+        <div class="quiet mono" style="font-size:13px">here <code>http://localhost:8080/v1</code>${
           S.api.urls.length ? ' · elsewhere ' + S.api.urls.map(u => `<code>${esc(u)}</code>`).join(' ') : ''}</div></div></div>
-      <div class="quiet mono" style="font-size:11.5px">key <code>${esc(S.api.key)}</code></div></div>`;
+      <div class="quiet mono" style="font-size:13px">key <code>${esc(S.api.key)}</code></div></div>`;
   wireGo();
 }
 const chipRow = x => [
@@ -1178,18 +1229,18 @@ function renderAgentTask() {
         `<button class="ghost sm" data-diff="${esc(e.hash)}">Diff</button>${undone ? '' : `<button class="ghost sm" data-undo="${esc(e.hash)}">Undo</button>`}`)); }
     if (e.t === 'tests_start' && !AG.events.some(x => x.t === 'tests')) rows.push(step('…', 'Running tests', esc(e.cmd), e));
     if (e.t === 'tests') rows.push(step(e.ok ? '✓' : '✗', `<span style="color:var(--${e.ok ? 'ok' : 'bad'})">Tests ${e.ok ? 'pass' : 'fail'}</span> · ${esc(e.summary)}`,
-        `${e.seconds} s`, e) + `<details style="margin:0 0 6px 34px"><summary class="quiet mono" style="font-size:12px;cursor:pointer">test output</summary><pre>${esc(e.output)}</pre></details>`);
+        `${e.seconds} s`, e) + `<details style="margin:0 0 6px 34px"><summary class="quiet mono" style="font-size:14px;cursor:pointer">test output</summary><pre>${esc(e.output)}</pre></details>`);
     if (e.t === 'undo') rows.push(step('↶', `Reverted <span class="mono">${esc(e.hash)}</span>`, 'a new commit undoes it', e));
     if (e.t === 'error') rows.push(step('!', `<span style="color:var(--bad)">${esc(e.text)}</span>`, '', e));
   }
   const out = `<div class="step"><div class="ico">${live ? '<i class="dot warn" style="display:inline-block"></i>' : '≡'}</div><div>
-      <details ${live ? 'open' : ''}><summary style="cursor:pointer">${live ? 'Agent is working…' : 'Agent output'} <span class="quiet mono" style="font-size:12px">${text.split('\n').length} lines</span></summary>
+      <details ${live ? 'open' : ''}><summary style="cursor:pointer">${live ? 'Agent is working…' : 'Agent output'} <span class="quiet mono" style="font-size:14px">${text.split('\n').length} lines</span></summary>
       <pre id="ag-live" style="max-height:260px;overflow:auto;white-space:pre-wrap">${esc(text.split('\n').slice(-80).join('\n'))}</pre></details></div><div></div></div>`;
   const done = AG.events.find(e => e.t === 'done');
   const secs = done ? done.seconds : (Date.now() / 1000 - t.started);
   let html = `<div class="card"><div class="ch"><h3 style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</h3>
       <span class="tag ${live ? 'warn' : t.status === 'done' ? (t.tests && !t.tests.ok ? 'bad' : 'ok') : 'bad'}">${live ? 'working' : esc(t.status)}</span>
-      <span class="quiet mono" style="font-size:12px">${sec(secs * 1000)}${done && done.tps ? ' · ' + num(done.tps).toFixed(1) + ' tok/s' : ''}</span>
+      <span class="quiet mono" style="font-size:14px">${sec(secs * 1000)}${done && done.tps ? ' · ' + num(done.tps).toFixed(1) + ' tok/s' : ''}</span>
       ${live ? '' : '<button class="ghost sm" id="ag-again">Run again</button>'}</div>
     <div class="cb"><div class="prompt">${esc(t.prompt)}</div><div class="steps" style="margin-top:10px">${rows.join('').replace('@OUT@', out)}</div>
     ${done ? `<div class="chips">${(t.files || []).map(f => `<span>${esc(f)}</span>`).join('')}<span>${t.devices || 1} devices</span>${(t.commits || []).length ? `<span>${t.commits.length} commit${t.commits.length > 1 ? 's' : ''}</span>` : ''}</div>` : ''}</div></div>`;
@@ -1222,14 +1273,14 @@ function renderAgentSide() {
       `<div class="perm"><div class="t">${n}<small style="${k === 'shell' && AG.perms.shell ? 'color:var(--bad)' : ''}">${w}</small></div><button class="sw ${AG.perms[k] ? 'on' : ''} ${k === 'shell' ? 'danger' : ''}" data-perm="${k}" title="${n}"></button></div>`).join('')}</div></div>
     <div class="card"><div class="ch"><h3>Tests</h3></div><div class="cb">
       <input id="ag-test" value="${esc(test)}" style="width:100%" spellcheck="false">
-      <div class="row" style="margin-top:10px"><button class="sm" id="ag-runtests">Run tests now</button><span class="quiet mono" style="font-size:12px" id="ag-tnote"></span></div>
+      <div class="row" style="margin-top:10px"><button class="sm" id="ag-runtests">Run tests now</button><span class="quiet mono" style="font-size:14px" id="ag-tnote"></span></div>
       ${tr ? `<div style="margin-top:10px;color:var(--${tr.ok ? 'ok' : 'bad'});font-weight:600">${tr.ok ? '✓' : '✗'} ${esc(tr.summary || (tr.ok ? 'passed' : 'failed'))}</div>
-        <div class="quiet mono" style="font-size:11.5px">${esc(tr.cmd)} · ${tr.seconds} s · at ${esc(tr.head)}</div>
-        <details><summary class="quiet mono" style="font-size:12px;cursor:pointer;margin-top:6px">output</summary><pre style="max-height:240px;overflow:auto">${esc(tr.output)}</pre></details>` : ''}
+        <div class="quiet mono" style="font-size:13px">${esc(tr.cmd)} · ${tr.seconds} s · at ${esc(tr.head)}</div>
+        <details><summary class="quiet mono" style="font-size:14px;cursor:pointer;margin-top:6px">output</summary><pre style="max-height:240px;overflow:auto">${esc(tr.output)}</pre></details>` : ''}
     </div></div>
     <div class="card"><div class="ch"><h3>History</h3><span class="d">${hist.length}</span></div><div class="cb">${hist.map(t =>
-      `<button class="hist ${AG.cur && AG.cur.id === t.id ? 'on' : ''}" data-open="${esc(t.id)}"><i class="dot ${t.status === 'running' ? 'warn' : t.tests ? (t.tests.ok ? 'ok' : 'bad') : t.status === 'done' ? '' : 'bad'}"></i><span class="t">${esc(t.title)}</span><span class="quiet mono" style="font-size:11px">${t.tests && t.tests.passed != null ? t.tests.passed + '✓' : ''}</span></button>`).join('') || '<div class="quiet" style="font-size:13px">No tasks yet</div>'}</div></div>
-    <div class="card"><div class="cb" style="font-size:12px;color:var(--fg-3);line-height:1.7">One task at a time · the agent cannot run shell commands unless you allow it · only your test command runs · Undo is a git revert, history stays</div></div>`;
+      `<button class="hist ${AG.cur && AG.cur.id === t.id ? 'on' : ''}" data-open="${esc(t.id)}"><i class="dot ${t.status === 'running' ? 'warn' : t.tests ? (t.tests.ok ? 'ok' : 'bad') : t.status === 'done' ? '' : 'bad'}"></i><span class="t">${esc(t.title)}</span><span class="quiet mono" style="font-size:12.5px">${t.tests && t.tests.passed != null ? t.tests.passed + '✓' : ''}</span></button>`).join('') || '<div class="quiet" style="font-size:15px">No tasks yet</div>'}</div></div>
+    <div class="card"><div class="cb" style="font-size:14px;color:var(--fg-3);line-height:1.7">One task at a time · the agent cannot run shell commands unless you allow it · only your test command runs · Undo is a git revert, history stays</div></div>`;
   $('ag-proj').onchange = e => { AG.project = e.target.value; agSave('project', AG.project); AG.cur = null; AG.tests = null; agRefresh().then(renderAgent); };
   $('ag-add').onclick = async () => { const path = $('ag-path').value.trim(); if (!path) return;
     try { AG.projects = await ag('/svc/projects', { path }); AG.project = AG.projects[0].path; agSave('project', AG.project); AG.cur = null; await agRefresh(); renderAgent(); }
@@ -1297,7 +1348,7 @@ function renderStats() {
     g += `<text x="${(fx + bw / 2).toFixed(1)}" y="${(H - 27 - h).toFixed(1)}" font-size="11" text-anchor="middle" fill="#52525B" font-family="ui-monospace,monospace">${num(x.tps).toFixed(1)}</text>`;
   });
   $('chartbox').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>
-    <div class="row wrap quiet mono" style="gap:16px; font-size:11.5px; margin-top:6px">
+    <div class="row wrap quiet mono" style="gap:16px; font-size:13px; margin-top:6px">
       <span><b style="color:var(--ok)">■</b> one device</span><span><b style="color:var(--helper)">■</b> split across the mesh</span></div>`;
   $('histbox').innerHTML = `<table><thead><tr><th>Time</th><th>Question</th><th>tok/s</th><th>First word</th><th>Tokens</th><th>Devices</th></tr></thead><tbody>${
     c.slice().reverse().map(x => `<tr><td class="num quiet">${esc(x.t)}</td><td>${esc(String(x.q || '').slice(0, 80))}</td>
@@ -1319,31 +1370,47 @@ async function scores() {
            against its tests, so the score is earned rather than claimed.</p></div>`;
 }
 
-/* A phone is the Host (scripts/helper-view.py): its Ned Capsules, recent answers, and bytes per cable. */
+/* A phone is the Host (scripts/helper-view.py): who does what, the last answer's numbers, capsules, cables. */
 function renderPhoneMesh() {
   const pm = S.phone_mesh, card = $('pm-card');
   if (!card) return;
   card.classList.toggle('hide', !pm);
   if (!pm) return;
   const f = (x, d = 1) => x == null || isNaN(x) ? '–' : Number(x).toFixed(d);
-  const helpers = (pm.helpers || []).map(h => `<div class="mono" style="font-size:12px">${esc(h.phone || 'Helper')} · ${esc(h.link || '')} ·
-      ${esc(h.transport || '')} → ${esc(h.host || '')} · layers ${esc(h.layers || '–')} · ${esc(h.engine || '')}
-      ${h.rpc_age_ms >= 0 && h.rpc_age_ms < 2500 ? '<span style="color:var(--helper)">· computing</span>' : ''}</div>`).join('');
-  const caps = (pm.capsules || []).map(c => `<div class="mono" style="font-size:12px">${esc(c.name)} · proposed ${esc(c.proposed)}<br>
-      <span style="color:${String(c.applied).startsWith('layers') ? 'var(--ok)' : 'var(--warn)'}">applied ${esc(c.applied)}</span></div>`).join('')
-    || '<div class="quiet" style="font-size:12px">no capsule (whole model on the Host, or no run)</div>';
+  const slices = S.run.plan.slices || [];
+  const host = slices[0], helpers = pm.helpers || [];
+  const live = helpers.some(h => h.rpc_age_ms >= 0 && h.rpc_age_ms < 2500);
+  const last = (pm.answers || []).slice(-1)[0];
+  const usb = Object.entries(pm.links || {}).some(([, r]) => Object.keys(r).some(k => k.startsWith('USB') && (r[k][0] + r[k][1]) > 5));
+  const path = `<div class="pm-path">
+      <span class="role host">${ic('phone')}${esc(pm.host || 'Host')} · answers${host ? ` · layers ${host.from}–${host.to - 1}` : ''}</span>
+      <span class="wire ${live ? 'live' : ''}"></span>
+      <span class="mono quiet" style="font-size:13px">${usb ? 'USB cable' : helpers[0]?.transport ? esc(helpers[0].transport) : 'link'}</span>
+      <span class="wire ${live ? 'live' : ''}"></span>
+      ${helpers.map(h => `<span class="role helper">${ic('phone')}${esc(h.phone || 'Helper')} · holds layers ${esc(h.layers || '–')}${
+        h.rpc_age_ms >= 0 && h.rpc_age_ms < 2500 ? ' · computing' : ''}</span>`).join('') || '<span class="quiet">no Helper joined</span>'}
+    </div>`;
+  const tile = (k, v, unit) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}<small> ${unit}</small></div></div>`;
+  const tiles = `<div class="pm-tiles">
+      ${tile('Writing speed', last ? f(last.tps) : '–', 'tok/s')}
+      ${tile('Reading speed', last ? f(last.prompt_tps) : '–', 'tok/s')}
+      ${tile('First word after', last ? f(last.first_ms / 1000) : '–', 's')}
+      ${tile('Host CPU threads', pm.threads || '–', pm.threads_from_profile ? 'measured' : 'default')}
+    </div>`;
+  const caps = (pm.capsules || []).map(c => `<div class="row wrap" style="gap:8px; font-size:14px; margin:4px 0">
+      <b style="font-weight:500">${esc(c.name)}</b><span class="quiet">asked for ${esc(c.proposed)}</span>
+      <span style="color:${String(c.applied).startsWith('layers') ? 'var(--ok)' : 'var(--warn)'}">${String(c.applied).startsWith('layers') ? '✓ applied' : ''} ${esc(c.applied)}</span></div>`).join('')
+    || '<div class="quiet" style="font-size:14px">None: the whole model is on the Host, or nothing is running.</div>';
   const ans = (pm.answers || []).slice().reverse().slice(0, 5).map(r => `<tr><td>${new Date(r.at).toLocaleTimeString()}</td>
       <td>${esc(r.task)}</td><td>${f(r.tps)}</td><td>${f(r.prompt_tps)}</td><td>${f(r.first_ms / 1000)} s</td><td>${r.tokens}</td></tr>`).join('');
-  const links = Object.entries(pm.links || {}).map(([who, rates]) => `<div class="mono" style="font-size:12px"><b style="font-weight:500">${esc(who)}</b>
+  const links = Object.entries(pm.links || {}).map(([who, rates]) => `<div class="mono" style="font-size:13.5px; margin:3px 0"><b style="font-weight:500">${esc(who)}</b>
       ${Object.entries(rates).map(([k, [rx, tx]]) => ` · ${esc(k)} ↓${f(rx)} ↑${f(tx)} KB/s`).join('') || ' · measuring…'}</div>`).join('');
-  $('pm').innerHTML = `
-    <div class="mono quiet" style="font-size:11.5px">Host ${esc(pm.host || '')} · ${pm.threads || '–'} CPU threads${pm.threads_from_profile ? ' (measured profile)' : ''}</div>
-    ${helpers}
-    <h4 style="margin:12px 0 4px; font-size:12px">Ned Capsules</h4>${caps}
-    <h4 style="margin:12px 0 4px; font-size:12px">Last answers</h4>
-    ${ans ? `<table class="mono" style="font-size:12px; width:100%"><tr class="quiet"><td>time</td><td>task</td><td>tok/s</td><td>read tok/s</td><td>first word</td><td>tokens</td></tr>${ans}</table>`
-          : '<div class="quiet" style="font-size:12px">none yet</div>'}
-    <h4 style="margin:12px 0 4px; font-size:12px">Traffic per cable</h4>${links}`;
+  $('pm').innerHTML = `<div class="pm">${path}${tiles}
+    <h4>Ned Capsules · work orders the Host signs for each Helper</h4>${caps}
+    <h4>Last answers</h4>
+    ${ans ? `<table class="mono"><tr><th>time</th><th>task</th><th>tok/s</th><th>read tok/s</th><th>first word</th><th>tokens</th></tr>${ans}</table>`
+          : '<div class="quiet" style="font-size:14px">None yet. Ask something on the Host phone.</div>'}
+    <h4>Traffic per cable</h4>${links}</div>`;
 }
 
 /* -------------------------------------------------------------- diagnostics */
