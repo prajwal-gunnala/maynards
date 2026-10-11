@@ -30,16 +30,16 @@ fun UseHome(onChoose: (String) -> Unit) {
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        PageHeader("Use the mesh", "Choose a task. MeshAI checks the installed model, memory, battery and connected devices before it runs.")
-        UseCaseCard("chat", "Mesh Chat", "Chat with the model currently running on this mesh. The Host handles the request and assigned Helpers compute their model layers.", "The chat screen shows the active model and live route.", onChoose)
-        UseCaseCard("origami", "Origami Workshop", "Design organizers and furniture from a prompt or photo, preview the parametric result, and export fabrication files.", "Model choice is automatic; geometry remains deterministic.", onChoose)
-        UseCaseCard("case", "Legal Case Room", "Work with original case documents and get source-linked timelines, comparisons and answers.", "Local import, timeline, search and cited answers. No OCR yet.", onChoose)
-        UseCaseCard("developer", "Developer Workspace", "Open a private project folder and ask about it. Answers cite file and lines.", "Read-only. No code is run or changed.", onChoose)
+        PageHeader("Use", "Pick a task.")
+        UseCaseCard("chat", "Chat", "Talk to the running model.", onChoose)
+        UseCaseCard("case", "Case Room", "Legal files · cited answers · timeline", onChoose)
+        UseCaseCard("developer", "Code", "Private code · answers with file:lines", onChoose)
+        UseCaseCard("origami", "Origami", "Furniture from a prompt or photo", onChoose)
     }
 }
 
 @Composable
-private fun UseCaseCard(id: String, title: String, description: String, note: String, onChoose: (String) -> Unit) {
+private fun UseCaseCard(id: String, title: String, description: String, onChoose: (String) -> Unit) {
     val icon = when (id) {
         "chat" -> Icons.Outlined.Chat
         "origami" -> Icons.Outlined.DesignServices
@@ -56,7 +56,6 @@ private fun UseCaseCard(id: String, title: String, description: String, note: St
                 Text("OPEN →", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Term)
             }
             Text(description, fontSize = 13.sp, lineHeight = 18.sp, color = Ink)
-            Text(note, fontSize = 11.sp, lineHeight = 15.sp, color = Muted)
         }
     }
 }

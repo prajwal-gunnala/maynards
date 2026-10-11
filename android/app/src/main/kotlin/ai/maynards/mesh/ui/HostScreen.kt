@@ -463,8 +463,16 @@ private suspend fun ensureUseCaseModel(
 ): String {
     val current = runner.state.value
     val currentModel = current.plan?.model
-    if (current.status == ai.maynards.mesh.brain.RunState.Status.READY && currentModel != null &&
-        (!needsVision || shelf.projector(currentModel) != null)) return currentModel.name
+    val suitable = currentModel != null && (!needsVision || shelf.projector(currentModel) != null)
+    if (current.status == ai.maynards.mesh.brain.RunState.Status.READY && suitable) return currentModel!!.name
+    // A model already starting is waited for, not restarted: a restart throws away its load progress.
+    if (suitable && (current.status == ai.maynards.mesh.brain.RunState.Status.STARTING ||
+            current.status == ai.maynards.mesh.brain.RunState.Status.LOADING)) {
+        val result = kotlinx.coroutines.withTimeout(10 * 60_000L) {
+            runner.state.first { it.status == ai.maynards.mesh.brain.RunState.Status.READY || it.status == ai.maynards.mesh.brain.RunState.Status.FAILED }
+        }
+        if (result.status == ai.maynards.mesh.brain.RunState.Status.READY) return currentModel!!.name
+    }
 
     val candidates = withContext(Dispatchers.IO) { shelf.scan() }
         .filter { !needsVision || shelf.projector(it) != null }

@@ -76,7 +76,7 @@ fun CitedAsk(
             AskRoute(run, helperConsent) { helperConsent = it }
             val needsConsent = run.plan?.split == true && !helperConsent
             NButton(
-                if (asking) "Answering…" else "Ask the model · ${evidence.size} source(s)",
+                if (asking) "Asking…" else "Ask · ${evidence.size} sources",
                 fill = Term,
                 enabled = !asking && !busy && question.isNotBlank() && !needsConsent,
             ) {
@@ -94,7 +94,7 @@ fun CitedAsk(
                         val plan = runner.state.value.plan
                         if (plan?.split == true && !helperConsent) {
                             progress = null
-                            status = "$model runs across Helpers. Confirm them above, then ask again."
+                            status = "Tick the Helpers to trust, then ask again"
                             return@launch
                         }
                         at(AskStage.SENT)
@@ -143,7 +143,7 @@ private fun AskRoute(run: RunState, consent: Boolean, onConsent: (Boolean) -> Un
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Label("ROUTE")
             if (plan == null || run.status != RunState.Status.READY) {
-                Mono("No model running. Ask starts the largest installed model that fits, on this Host if it can.", 11)
+                Mono("No model running · Ask starts one", 11)
             } else {
                 Mono(plan.model.name, 12, Ink)
                 plan.slices.forEachIndexed { i, s ->
@@ -153,11 +153,11 @@ private fun AskRoute(run: RunState, consent: Boolean, onConsent: (Boolean) -> Un
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Checkbox(checked = consent, onCheckedChange = onConsent)
                         Text(
-                            "I trust ${plan.helpers.joinToString { it.name }} with activations of these passages",
+                            "Trust ${plan.helpers.joinToString { it.name }}",
                             fontSize = 12.sp, lineHeight = 16.sp, color = Ink,
                         )
                     }
-                } else Mono("Whole model on this Host. No Helper computes.", 11)
+                } else Mono("This phone only", 11)
             }
         }
     }
@@ -168,25 +168,25 @@ private fun CitedAnswer(answer: String, check: CaseCitations.Check?, sources: Li
     NBox(fill = Paper, pad = 12.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Label("ANSWER")
-            Text(answer, fontSize = 13.sp, lineHeight = 19.sp, color = Ink)
+            Markdown(answer)
             if (check != null) {
                 val (line, tone) = when (check.verdict) {
-                    CaseCitations.Verdict.CITED -> "Citations checked · ${check.cited.joinToString()} all supplied" +
-                        (if (check.uncited > 0) " · ${check.uncited} sentence(s) uncited" else "") to (if (check.uncited > 0) Warn else Term)
-                    CaseCitations.Verdict.NOT_FOUND -> "Model found no answer in these sources" to Term
-                    CaseCitations.Verdict.NO_CITATIONS -> "No citations · do not rely on this answer" to Bad
-                    CaseCitations.Verdict.UNKNOWN_SOURCE -> "Cites sources that were not supplied: ${check.unknown.joinToString()}" to Bad
+                    CaseCitations.Verdict.CITED -> "✓ Sources verified" +
+                        (if (check.uncited > 0) " · ${check.uncited} line(s) without a source" else "") to (if (check.uncited > 0) Warn else Term)
+                    CaseCitations.Verdict.NOT_FOUND -> "Not in these files" to Term
+                    CaseCitations.Verdict.NO_CITATIONS -> "✗ No sources · don't rely on it" to Bad
+                    CaseCitations.Verdict.UNKNOWN_SOURCE -> "✗ Cites ${check.unknown.joinToString()}, which was not given" to Bad
                 }
                 Mono(line, 11, tone)
-                sources.filter { it.id in check.cited }.forEach { Mono("${it.id} → ${it.fileName} · ${it.location}", 10) }
+                sources.filter { it.id in check.cited }.forEach { Mono("${it.id} · ${it.fileName} · ${it.location}", 10) }
             }
         }
     }
 }
 
 enum class AskStage(val label: String) {
-    MODEL("Model ready"), SENT("Request sent"), READING("Reading sources"),
-    WRITING("Writing answer"), CHECKING("Checking citations"), DONE("Done"),
+    MODEL("Model"), SENT("Sent"), READING("Reading"),
+    WRITING("Writing"), CHECKING("Checking sources"), DONE("Done"),
 }
 
 /** What the Ask button is doing now, with when each stage began. Times are wall clock on this Host. */
@@ -247,12 +247,12 @@ private fun AskProgressView(p: AskProgress, run: RunState, now: Long) {
                 p.stage == AskStage.READING && p.reading != null && p.reading.total > 0 -> {
                     val f = p.reading.processed.toFloat() / p.reading.total
                     LinearProgressIndicator(progress = { f }, modifier = Modifier.fillMaxWidth(), color = Term)
-                    Mono("${(f * 100).toInt()}% of the sources read", 10)
+                    Mono("${(f * 100).toInt()}%", 10)
                 }
                 p.stage == AskStage.WRITING -> {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Term)
                     val ms = now - (p.enteredMs[AskStage.WRITING] ?: now)
-                    if (ms > 500) Mono("${"%.1f".format(p.written * 1000.0 / ms)} tok/s live", 10)
+                    if (ms > 500) Mono("${"%.1f".format(p.written * 1000.0 / ms)} tok/s", 10)
                 }
                 p.stage < AskStage.CHECKING && !p.failed -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = Term)
             }
@@ -268,7 +268,7 @@ private fun AskStatsView(s: AskStats) {
             Label("STATS")
             StatLine("Model", s.model)
             StatLine("Devices", if (s.devices.size <= 1) "Host only" else s.devices.joinToString(" + "))
-            StatLine("Sources sent", "${s.sources}")
+            StatLine("Sources", "${s.sources}")
             if (s.modelMs >= 1000) StatLine("Model start", secs(s.modelMs))
             StatLine("Read", "${a.promptTokens} tokens · ${secs(a.promptMs.toLong())} · ${"%.1f".format(a.promptPerSec)} tok/s")
             StatLine("First word", if (a.firstTokenMs >= 0) secs(a.firstTokenMs) else "—")
@@ -286,3 +286,13 @@ private fun StatLine(k: String, v: String) = Row {
 }
 
 private fun secs(ms: Long) = if (ms < 10_000) "%.1f s".format(ms / 1000.0) else "${ms / 1000} s"
+
+/** A row of equal buttons; the selected one is filled. */
+@Composable
+fun ModeSwitch(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEachIndexed { i, label ->
+            NButton(label, Modifier.weight(1f), fill = if (i == selected) Term else Paper) { onSelect(i) }
+        }
+    }
+}
