@@ -35,7 +35,8 @@ import kotlin.math.sin
  * out along its own direction. The geometry is the same Mesh3D the tests check.
  */
 @Composable
-fun RealisticViewer(design: OrganizerDesign, exploded: Boolean, modifier: Modifier = Modifier) {
+fun RealisticViewer(design: OrganizerDesign, exploded: Boolean, modifier: Modifier = Modifier,
+                    focus: ai.maynards.origami.core.Point3? = null) {
     val glb = remember(design) { GlbWriter.write(Mesh3D.build(design), WoodTexture.png()) }
     val explode by animateFloatAsState(if (exploded) 1f else 0f, tween(700), label = "explode3d")
     val holder = remember { arrayOfNulls<FilamentScene>(1) }
@@ -45,6 +46,7 @@ fun RealisticViewer(design: OrganizerDesign, exploded: Boolean, modifier: Modifi
         update = { holder[0]?.load(glb) },
     )
     LaunchedEffect(explode, glb) { holder[0]?.explode(design, explode) }
+    LaunchedEffect(focus, glb) { holder[0]?.focus(focus) }
     DisposableEffect(Unit) { onDispose { holder[0]?.destroy(); holder[0] = null } }
 }
 
@@ -106,6 +108,26 @@ private class FilamentScene(sv: SurfaceView) : Choreographer.FrameCallback {
             if (rm.hasComponent(e)) rm.getInstance(e).let { i -> rm.setCastShadows(i, true); rm.setReceiveShadows(i, true) }
         }
     }
+
+    /**
+     * Brings one point of the assembly (mm, Origami axes) to the orbit centre, magnified; null = the whole object.
+     * The camera's bookmarks cannot be edited from Kotlin, so the model moves instead of the camera.
+     */
+    fun focus(p: ai.maynards.origami.core.Point3?) {
+        val asset = viewer.asset ?: return
+        if (p == null) { viewer.transformToUnitCube(); return }
+        val box = asset.boundingBox
+        val half = box.halfExtent
+        val fit = 2f / (2f * maxOf(half[0], half[1], half[2]))      // what transformToUnitCube uses
+        val s = fit * ZOOM
+        val gx = (p.x / 1000).toFloat(); val gy = (p.z / 1000).toFloat(); val gz = (-p.y / 1000).toFloat()
+        val m = FloatArray(16).also { it[0] = s; it[5] = s; it[10] = s; it[15] = 1f }
+        m[12] = 0f - s * gx; m[13] = 0f - s * gy; m[14] = -4f - s * gz     // the joint lands on (0, 0, -4), the orbit target
+        val tm = viewer.engine.transformManager
+        tm.setTransform(tm.getInstance(asset.root), m)
+    }
+
+    private val ZOOM = 5f
 
     /** Moves each part's node out along its plane's direction; 0 = assembled, 1 = fully apart. */
     fun explode(design: OrganizerDesign, amount: Float) {

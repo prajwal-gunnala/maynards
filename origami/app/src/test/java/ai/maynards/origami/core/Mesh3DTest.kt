@@ -57,4 +57,29 @@ class Mesh3DTest {
             java.io.File(dir, "table.glb").writeBytes(GlbWriter.write(Mesh3D.build(OrganizerGenerator.generate(t)), byteArrayOf(1, 2, 3, 4)))
         }
     }
+
+    @Test fun capsLeaveTheSlotsOpen() {
+        for (spec in listOf(OrganizerSpec(), OrganizerSpec(joint = JointStyle.WEDGED), Catalogue.items.first { it.id == "bookshelf" }.spec)) {
+            for (p in OrganizerGenerator.generate(spec).parts.filter { it.plane != PanelPlane.LOOSE }) {
+                val poly = p.outline.let { if (it.first() == it.last()) it.dropLast(1) else it }
+                val (pts, tris) = Mesh3D.gridCap(poly, p.cutouts)
+                assertEquals("${spec.template} ${p.id}", abs(Mesh3D.signedArea(poly)) - p.cutouts.sumOf { it.width * it.height }, area(pts, tris), 1e-6)
+            }
+        }
+    }
+
+    @Test fun everyTriangleFacesItsNormal() {
+        for (spec in listOf(OrganizerSpec(), OrganizerSpec(joint = JointStyle.WEDGED), Catalogue.items.first { it.id == "side-table" }.spec.copy(joint = JointStyle.WEDGED))) {
+            for (m in Mesh3D.build(OrganizerGenerator.generate(spec))) {
+                val p = m.positions; val n = m.normals
+                for (k in m.indices.indices step 3) {
+                    val (a, b, c) = Triple(m.indices[k] * 3, m.indices[k + 1] * 3, m.indices[k + 2] * 3)
+                    val ux = p[b] - p[a]; val uy = p[b + 1] - p[a + 1]; val uz = p[b + 2] - p[a + 2]
+                    val vx = p[c] - p[a]; val vy = p[c + 1] - p[a + 1]; val vz = p[c + 2] - p[a + 2]
+                    val gx = uy * vz - uz * vy; val gy = uz * vx - ux * vz; val gz = ux * vy - uy * vx
+                    assertTrue("${m.id} triangle ${k / 3}", gx * n[a] + gy * n[a + 1] + gz * n[a + 2] > 0)
+                }
+            }
+        }
+    }
 }

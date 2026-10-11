@@ -28,7 +28,15 @@ object Mesh3D {
         val n = (ex cross ey).unit()
         val outline = part.outline.let { if (it.first() == it.last()) it.dropLast(1) else it }.let(::dedupe)
         val ccw = signedArea(outline) > 0
-        val tris = triangulate(outline)
+        // slots and wedge holes fully inside the outline are cut through the board
+        val holes = part.cutouts.filter { c ->
+            c.width > 1e-6 && c.height > 1e-6 && listOf(Point2(c.x, c.y), Point2(c.x + c.width, c.y), Point2(c.x, c.y + c.height),
+                Point2(c.x + c.width, c.y + c.height)).all { inOrOn(it, outline) }
+        }
+        val rectilinear = outline.indices.all { i -> val a = outline[i]; val b = outline[(i + 1) % outline.size]; abs(a.x - b.x) < 1e-9 || abs(a.y - b.y) < 1e-9 }
+        // caps as (points, triangles): a grid over every corner coordinate when the outline is all straight edges
+        // (exact, and it handles holes); ear clipping otherwise (no holes then)
+        val (capPts, tris) = if (rectilinear) gridCap(outline, holes) else outline to triangulate(outline)
 
         val pos = ArrayList<Float>(); val nor = ArrayList<Float>(); val uv = ArrayList<Float>(); val idx = ArrayList<Int>()
         fun vert(p: Point3, normal: Point3, u: Double, v: Double): Int {
@@ -42,9 +50,10 @@ object Mesh3D {
 
         // two caps; winding follows each cap's outward normal
         for ((side, normal) in listOf(1.0 to n, -1.0 to n * -1.0)) {
-            val base = outline.map { q -> vert(at(q, side), normal, q.x / GRAIN_MM, q.y / GRAIN_MM) }
+            val base = capPts.map { q -> vert(at(q, side), normal, q.x / GRAIN_MM, q.y / GRAIN_MM) }
             for ((a, b, c) in tris) {
-                val front = (side > 0) == ccw
+                // grid triangles are listed counter-clockwise in part coordinates
+                val front = (side > 0) == (if (rectilinear) true else ccw)
                 if (front) { idx += base[a]; idx += base[b]; idx += base[c] } else { idx += base[a]; idx += base[c]; idx += base[b] }
             }
         }
@@ -62,7 +71,41 @@ object Mesh3D {
             val p2 = vert(at(b, -1.0), out, u1, v1); val p3 = vert(at(a, -1.0), out, u0, v1)
             idx += p0; idx += p3; idx += p2; idx += p0; idx += p2; idx += p1
         }
+        // the walls inside each hole, facing into the hole
+        for (h in holes) {
+            val r = listOf(Point2(h.x, h.y), Point2(h.x + h.width, h.y), Point2(h.x + h.width, h.y + h.height), Point2(h.x, h.y + h.height))
+            for (i in r.indices) {
+                val a = r[i]; val b = r[(i + 1) % 4]
+                val d = part.assembledPoint(b, spec) - part.assembledPoint(a, spec)
+                val len = sqrt(d dot d)
+                val inward = (n cross d).unit()      // r runs counter-clockwise, so n × edge points into the hole
+                val p0 = vert(at(a, 1.0), inward, 0.0, 0.0); val p1 = vert(at(b, 1.0), inward, len / GRAIN_MM, 0.0)
+                val p2 = vert(at(b, -1.0), inward, len / GRAIN_MM, t / GRAIN_MM); val p3 = vert(at(a, -1.0), inward, 0.0, t / GRAIN_MM)
+                idx += p0; idx += p2; idx += p3; idx += p0; idx += p1; idx += p2
+            }
+        }
         return PartMesh(part.id, part.name, pos.toFloatArray(), nor.toFloatArray(), uv.toFloatArray(), idx.toIntArray())
+    }
+
+    /**
+     * Cap of a straight-edged outline with rectangular holes: split the plane on every corner coordinate and keep
+     * each grid cell whose centre is inside the outline and outside every hole. Triangles counter-clockwise.
+     */
+    fun gridCap(outline: List<Point2>, holes: List<Cutout>): Pair<List<Point2>, List<Triple<Int, Int, Int>>> {
+        val xs = (outline.map { it.x } + holes.flatMap { listOf(it.x, it.x + it.width) }).sorted().fold(mutableListOf<Double>()) { l, v ->
+            if (l.isEmpty() || v - l.last() > 1e-9) l += v; l }
+        val ys = (outline.map { it.y } + holes.flatMap { listOf(it.y, it.y + it.height) }).sorted().fold(mutableListOf<Double>()) { l, v ->
+            if (l.isEmpty() || v - l.last() > 1e-9) l += v; l }
+        val pts = ArrayList<Point2>(); val index = HashMap<Long, Int>()
+        fun id(i: Int, j: Int): Int = index.getOrPut(i.toLong() * 100_000 + j) { pts += Point2(xs[i], ys[j]); pts.size - 1 }
+        val tris = ArrayList<Triple<Int, Int, Int>>()
+        for (i in 0 until xs.size - 1) for (j in 0 until ys.size - 1) {
+            val c = Point2((xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2)
+            if (!inOrOn(c, outline) || holes.any { h -> c.x > h.x && c.x < h.x + h.width && c.y > h.y && c.y < h.y + h.height }) continue
+            val a = id(i, j); val b = id(i + 1, j); val d = id(i + 1, j + 1); val e = id(i, j + 1)
+            tris += Triple(a, b, d); tris += Triple(a, d, e)
+        }
+        return pts to tris
     }
 
     /** Ear clipping for a simple polygon (no holes); returns index triples into [poly]. */

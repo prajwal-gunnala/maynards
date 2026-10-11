@@ -515,7 +515,9 @@ fun jointMisses(design: OrganizerDesign): List<String> {
 
 /** A joint seen in section along its tab: everything in mm from the tab's root on its own edge. */
 data class JointSection(val thickness: Double, val clearance: Double, val boardMid: Double, val tabDepth: Double,
-                        val tabSpan: Double, val hole: ClosedFloatingPointRange<Double>?, val wedgeThin: Double, val wedgeThick: Double)
+                        val tabSpan: Double, val hole: ClosedFloatingPointRange<Double>?, val wedgeThin: Double, val wedgeThick: Double,
+                        /** where the tab crosses the other board, in assembled mm (x right, y depth, z up) */
+                        val at: Point3 = Point3(0.0, 0.0, 0.0))
 
 /** The section of [joint]: where the other board sits along the tab, how far the tab goes, and the wedge hole if any. */
 fun jointSection(design: OrganizerDesign, joint: Joint): JointSection {
@@ -534,7 +536,7 @@ fun jointSection(design: OrganizerDesign, joint: Joint): JointSection {
     val mid = (b.assembledPoint(joint.slotCenter, spec) - p0) dot u
     val hole = if (spec.joint == JointStyle.WEDGED) (mid + t / 2 - OrganizerGenerator.WEDGE_BITE).let { it..(it + t) } else null
     val holeLen = tab.spanMm * 0.6
-    return JointSection(t, spec.clearanceMm, mid, tab.depthMm, tab.spanMm, hole, holeLen * 0.55, holeLen * 1.2)
+    return JointSection(t, spec.clearanceMm, mid, tab.depthMm, tab.spanMm, hole, holeLen * 0.55, holeLen * 1.2, p0 + u * mid)
 }
 
 /** Point inside or on the boundary of a simple polygon (ray casting with an edge tolerance). */

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -475,7 +476,11 @@ private fun DesignScreen(
     selected: String?, onSelect: (String?) -> Unit, onLayout: () -> Unit,
 ) {
     val spec = design.spec
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    var focus by remember(design) { mutableStateOf<Point3?>(null) }
+    val onFocus: (Point3?) -> Unit = { focus = it }
+    val list = rememberLazyListState()
+    val scroll = rememberCoroutineScope()
+    LazyColumn(modifier.fillMaxSize(), state = list, contentPadding = PaddingValues(horizontal = 18.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
@@ -489,12 +494,16 @@ private fun DesignScreen(
         item {
             CardBlock {
                 var realistic by remember { mutableStateOf(true) }
+                if (focus != null) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+                    Text("Zoomed to a joint", color = Leaf, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    OutlinedButton(onClick = { onFocus(null) }) { Text("Whole view") }
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 8.dp)) {
                     FilterChip(selected = realistic, onClick = { realistic = true }, label = { Text("Realistic") })
                     FilterChip(selected = !realistic, onClick = { realistic = false }, label = { Text("Lines · fold") })
                 }
                 Box(Modifier.fillMaxWidth().height(if (realistic) 360.dp else 310.dp).clip(RoundedCornerShape(15.dp)).background(Color(0xFFF0F1EB))) {
-                    if (realistic) RealisticViewer(design, exploded, Modifier.fillMaxSize())
+                    if (realistic) RealisticViewer(design, exploded, Modifier.fillMaxSize(), focus = focus)
                     else AssemblyViewer(design, layout, progress, exploded, selected, onSelect, Modifier.fillMaxSize())
                     Text(if (realistic) "DRAG TO ORBIT · PINCH TO ZOOM" else "DRAG TO ROTATE", Modifier.align(Alignment.TopStart).padding(12.dp), color = Muted, fontSize = 9.sp, letterSpacing = 1.sp, fontWeight = FontWeight.Bold)
                     if (selected != null) {
@@ -525,7 +534,7 @@ private fun DesignScreen(
             }
         }
         item { StrengthCard(design) }
-        item { JointCloseUp(design) }
+        item { JointCloseUp(design, onShow = { focus = it; scroll.launch { list.animateScrollToItem(1) } }) }
         item {
             Text("PARTS · TAP TO HIGHLIGHT", fontSize = 10.sp, color = Muted, letterSpacing = 1.3.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(7.dp))
@@ -871,7 +880,7 @@ private fun StrengthCard(design: OrganizerDesign) {
 
 /** One real joint of this design, drawn in section at scale: the other board, the tab through its slot, and the wedge. */
 @Composable
-private fun JointCloseUp(design: OrganizerDesign) {
+private fun JointCloseUp(design: OrganizerDesign, onShow: (Point3) -> Unit = {}) {
     if (design.joints.isEmpty()) return
     var index by remember(design) { mutableStateOf(0) }
     val joint = design.joints[index.coerceIn(0, design.joints.size - 1)]
@@ -927,6 +936,9 @@ private fun JointCloseUp(design: OrganizerDesign) {
             OutlinedButton(onClick = { index = (index - 1 + design.joints.size) % design.joints.size }) { Text("‹") }
             Spacer(Modifier.width(6.dp))
             OutlinedButton(onClick = { index = (index + 1) % design.joints.size }) { Text("›") }
+        }
+        Button(onClick = { onShow(sec.at) }, modifier = Modifier.fillMaxWidth().padding(top = 6.dp), shape = RoundedCornerShape(12.dp)) {
+            Text("SHOW THIS JOINT IN 3D")
         }
     }
 }
