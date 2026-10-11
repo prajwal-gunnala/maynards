@@ -24,7 +24,11 @@ object Compiler {
         if (s.isEmpty()) 0.0 else if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2
     }
 
-    fun decide(baseline: Int, results: Map<Int, List<Sample>>): Decision {
+    /**
+     * @param correct answers right on [AnswerCheck] per setting, when checked: a faster setting with fewer
+     * correct answers than the baseline is never adopted.
+     */
+    fun decide(baseline: Int, results: Map<Int, List<Sample>>, correct: Map<Int, Int> = emptyMap()): Decision {
         val table = results.map { (t, xs) ->
             val good = xs.filter { it.ok && it.decodeTps.isFinite() && it.decodeTps > 0 }
             Row(t, median(good.map { it.decodeTps }), median(good.map { it.promptTps }), xs.size, xs.size - good.size)
@@ -32,7 +36,14 @@ object Compiler {
         val base = table.firstOrNull { it.threads == baseline }
             ?: return Decision(baseline, false, "baseline not measured · kept $baseline threads", table)
         if (base.failed > 0 || base.medianDecode <= 0) return Decision(baseline, false, "baseline failed · kept $baseline threads", table)
-        val best = table.firstOrNull { it.failed == 0 && it.runs >= REPEATS && it.medianDecode > 0 } ?: base
+        val baseCorrect = correct[baseline]
+        val worse = table.filter { r -> baseCorrect != null && (correct[r.threads] ?: -1) < baseCorrect }.map { it.threads }.toSet()
+        val fastest = table.firstOrNull { it.failed == 0 && it.runs >= REPEATS && it.medianDecode > 0 }
+        val best = table.firstOrNull { it.failed == 0 && it.runs >= REPEATS && it.medianDecode > 0 && it.threads !in worse } ?: base
+        if (fastest != null && fastest.threads in worse && fastest.threads != baseline &&
+            fastest.medianDecode / base.medianDecode - 1 >= MIN_GAIN && best == base)
+            return Decision(baseline, false, "kept $baseline threads · ${fastest.threads} was faster but got fewer correct " +
+                "(${correct[fastest.threads]} vs $baseCorrect of ${AnswerCheck.items.size})", table)
         val gain = best.medianDecode / base.medianDecode - 1
         return if (best.threads != baseline && gain >= MIN_GAIN)
             Decision(best.threads, true, "%d threads: %.1f vs %.1f tok/s (+%.0f%%)".format(java.util.Locale.US, best.threads, best.medianDecode, base.medianDecode, gain * 100), table)

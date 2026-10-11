@@ -31,6 +31,7 @@ object TuneSession {
     var running by mutableStateOf(false); private set
     var step by mutableStateOf("")
     var decision by mutableStateOf<Compiler.Decision?>(null)
+    var correct by mutableStateOf<Map<Int, Int>>(emptyMap())
     private var job: Job? = null
 
     /** Short and fixed, so every candidate does exactly the same work. */
@@ -40,7 +41,7 @@ object TuneSession {
 
     fun run(runner: Runner, plan: Plan, profiles: Compiler.Profiles) {
         if (running) return
-        running = true; decision = null
+        running = true; decision = null; correct = emptyMap()
         val baseline = runner.threadsUsed.takeIf { it > 0 } ?: (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
         val cands = Compiler.candidates(Runtime.getRuntime().availableProcessors(), baseline)
         val key = Compiler.key(android.os.Build.MODEL, plan, 4096)
@@ -69,8 +70,21 @@ object TuneSession {
                         }.getOrElse { Compiler.Sample(0.0, 0.0, false) }
                     }
                     results[t] = samples
+                    // the same setting must still answer correctly: fixed questions with checkable answers
+                    var right = 0
+                    for ((k, item) in ai.maynards.mesh.brain.AnswerCheck.items.withIndex()) {
+                        step = "${i + 1}/${cands.size} · $t threads · answer check ${k + 1}/${ai.maynards.mesh.brain.AnswerCheck.items.size}"
+                        val reply = runCatching {
+                            withContext(Dispatchers.IO) {
+                                Chat(runner.endpoint, runner.apiKey).ask(listOf(Turn("user", item.question)), onText = {},
+                                    system = item.system, maxTokens = 60, extra = JSONObject().put("temperature", 0).put("seed", 1))
+                            }.text
+                        }.getOrDefault("")
+                        if (ai.maynards.mesh.brain.AnswerCheck.correct(item, reply)) right++
+                    }
+                    correct = correct + (t to right)
                 }
-                val d = Compiler.decide(baseline, results)
+                val d = Compiler.decide(baseline, results, correct)
                 decision = d
                 chosen = d.threads
                 if (d.changed) profiles.save(key, d.threads)
@@ -125,6 +139,7 @@ fun CompilerCard(runner: Runner) {
             if (samples.isNotEmpty()) Mono("Answers so far · " + samples.entries.sortedByDescending { it.key }
                 .joinToString(" · ") { (th, xs) -> "$th thr ${xs.size} × %.1f tok/s".format(java.util.Locale.US, Compiler.median(xs)) }, 10)
             if (runner.learningTry) Mono("This run is trying ${runner.threadsUsed} threads to learn", 10, Warn)
+            Mono("Learning changes CPU threads only: speed, not answers. Tune also checks answers.", 10)
             if (t.running) NButton("Stop", fill = Paper) { t.stop() }
             else {
                 NButton("Tune", fill = Term, enabled = !busy) { t.run(runner, plan, profiles) }
@@ -133,7 +148,8 @@ fun CompilerCard(runner: Runner) {
             }
             if (t.step.isNotBlank()) Mono(t.step, 11, Term)
             t.decision?.table?.forEach { r ->
-                Mono("${r.threads} threads · %.1f tok/s · read %.1f tok/s · ${r.runs - r.failed}/${r.runs} ok".format(java.util.Locale.US, r.medianDecode, r.medianPrompt),
+                Mono("${r.threads} threads · %.1f tok/s · read %.1f tok/s · ${r.runs - r.failed}/${r.runs} ok".format(java.util.Locale.US, r.medianDecode, r.medianPrompt) +
+                    (t.correct[r.threads]?.let { " · $it/${ai.maynards.mesh.brain.AnswerCheck.items.size} right" } ?: ""),
                     10, if (r.threads == t.decision?.threads) Term else Muted)
             }
         }
