@@ -52,6 +52,11 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
 
     private val _state = MutableStateFlow(RunState())
     val state: StateFlow<RunState> = _state
+    /** This run's Ned Capsules: per Helper id, what was proposed and what the Helper reports it applied. */
+    data class CapsuleState(val name: String, val capsule: Capsule, val applied: Applied? = null, val reported: Boolean = false)
+    private val _capsules = MutableStateFlow<Map<String, CapsuleState>>(emptyMap())
+    val capsules: StateFlow<Map<String, CapsuleState>> = _capsules
+
     private val _metrics = MutableStateFlow(LiveMetrics())
     val metrics: StateFlow<LiveMetrics> = _metrics
 
@@ -96,6 +101,8 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
 
             // 1. every helper starts its engine and tells us where it listens
             val addrs = ArrayList<String>()
+            val runId = ai.maynards.mesh.mesh.Secrets.random(6)
+            _capsules.value = emptyMap()
             for (s in plan.helpers) {
                 step("Starting ${s.name}")
                 val reply = withTimeoutOrNull(45_000) {
@@ -103,13 +110,28 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                     val answer = async(start = CoroutineStart.UNDISPATCHED) {
                         host.events.filter { (id, m) -> id == s.deviceId && m.optString("t") in setOf("ready", "failed", "gone") }.first()
                     }
+                    // The Ned Capsule rides along; a Helper on an older app ignores it and uses the plain fields.
+                    val cores = host.peers.value[s.deviceId]?.specs?.cores ?: 0
+                    val capsule = host.secretFor(s.deviceId)?.let { secret ->
+                        Capsule(ai.maynards.mesh.mesh.Secrets.random(6), runId, s.deviceId, plan.model.name, plan.model.file,
+                            plan.model.fileBytes, s.from, s.to - 1, ctx, threads = (cores - 2).coerceAtLeast(0),
+                            expiresAtMs = System.currentTimeMillis() + Capsule.LIFETIME_MS).signed(secret)
+                    }
+                    capsule?.let { c -> _capsules.value = _capsules.value + (s.deviceId to CapsuleState(s.name, c)) }
                     host.send(s.deviceId, msg("run", "layers" to "${s.from}-${s.to - 1}",
-                        "model" to plan.model.name, "model_file" to plan.model.file))
+                        "model" to plan.model.name, "model_file" to plan.model.file, "capsule" to capsule?.toJson()))
                     answer.await()
                 }
                 val m = reply?.second
                 if (m == null || m.optString("t") != "ready") return@launch fail("${s.name}: ${m?.optString("reason")?.ifBlank { null } ?: "no answer"}")
                 val addr = m.optString("addr").ifBlank { return@launch fail("${s.name}: no address") }
+                _capsules.value[s.deviceId]?.let { cs ->
+                    val applied = m.optJSONObject("applied")?.let { runCatching { Applied.fromJson(it) }.getOrNull() }
+                    _capsules.value = _capsules.value + (s.deviceId to cs.copy(applied = applied, reported = true))
+                    Sense.add(s.name, if (applied == null) "capsule · applied not reported (older app)"
+                        else "capsule applied · layers ${applied.from}–${applied.to} · ${applied.threads} threads" +
+                            applied.notes.joinToString("") { " · $it" }, SenseEvent.Kind.MODEL)
+                }
                 // The Helper reports the address it bound to. If the control socket crossed a
                 // laptop tether relay, the Host cannot route directly to that address; the
                 // control peer address is the laptop's Host-side tether IP and the relay exposes

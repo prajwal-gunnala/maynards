@@ -240,6 +240,7 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
             StatTile(Icons.Outlined.Hub, "Devices", "${peers.size + 1}", if (peers.isEmpty()) "alone" else "joined", Modifier.weight(1f))
             StatTile(Icons.Outlined.Memory, "Pooled", gb(pool), "GB", Modifier.weight(1f))
         }
+        CapsuleCard(runner)
         SenseFeed()
         if (run.status != ai.maynards.mesh.brain.RunState.Status.IDLE) {
             LiveMetricsCard(run, metrics, peers.values)

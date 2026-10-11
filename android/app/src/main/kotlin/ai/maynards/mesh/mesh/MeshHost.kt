@@ -326,6 +326,9 @@ class MeshHost(private val ctx: Context) {
 
     fun remoteRpcReady(id: String): Boolean = peers.value[id]?.rpcProxyAddress != null && remoteRpcStreams.peek()?.isOpen == true
 
+    /** The pairing secret shared with one Helper; signs its Ned Capsules. */
+    fun secretFor(id: String): String? = prefs.getString("secret:$id", null)
+
     fun forget(id: String) {
         prefs.edit().remove("secret:$id").apply()
         conns.remove(id)?.close()

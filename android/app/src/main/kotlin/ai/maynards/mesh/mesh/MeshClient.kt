@@ -182,7 +182,8 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 when (m.optString("t")) {
                     "ping" -> w.send(msg("pong", "at" to m.optLong("at")))
                     "run" -> run(w, bind = engineBind, layers = m.optString("layers"), model = m.optString("model"),
-                        modelFile = m.optString("model_file"), remote = remote)
+                        modelFile = m.optString("model_file"), remote = remote,
+                        capsule = m.optJSONObject("capsule"), secret = prefs.getString(secretKey, null), myId = me.id)
                     // the Host names the models that need helpers: keep their layers on this phone, once
                     "store" -> m.optJSONArray("models")?.let { a ->
                         store.fill(File(ctx.getExternalFilesDir(null), "models"), List(a.length()) { a.getString(it) })
@@ -293,7 +294,24 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
     }
 
     /** Start the engine on the link address, then tell the Host where to find it. */
-    private fun run(w: Wire, bind: String, layers: String, model: String, modelFile: String, remote: Boolean) = scope.launch {
+    private fun run(w: Wire, bind: String, layers: String, model: String, modelFile: String, remote: Boolean,
+                    capsule: org.json.JSONObject? = null, secret: String? = null, myId: String = "") = scope.launch {
+        // Ned Capsule: check it before doing anything, then start with what it allows and report what was applied.
+        var applied: ai.maynards.mesh.brain.Applied? = null
+        if (capsule != null) {
+            val c = runCatching { ai.maynards.mesh.brain.Capsule.fromJson(capsule) }.getOrNull()
+            val localBytes = File(File(ctx.getExternalFilesDir(null), "models"), modelFile).takeIf { modelFile.isNotBlank() && it.isFile }?.length()
+            val r = if (c == null) ai.maynards.mesh.brain.CapsuleCheck.Result.Reject("capsule unreadable")
+                else ai.maynards.mesh.brain.CapsuleCheck.check(c, secret, myId, System.currentTimeMillis(),
+                    Runtime.getRuntime().availableProcessors(), localBytes)
+            when (r) {
+                is ai.maynards.mesh.brain.CapsuleCheck.Result.Reject -> {
+                    runCatching { w.send(msg("failed", "reason" to "capsule refused: ${r.reason}")) }
+                    return@launch
+                }
+                is ai.maynards.mesh.brain.CapsuleCheck.Result.Accept -> applied = r.applied
+            }
+        }
         if (remote && modelFile.isNotBlank()) {
             val models = File(ctx.getExternalFilesDir(null), "models")
             val localModel = File(models, modelFile)
@@ -316,7 +334,7 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 return@launch
             }
         }
-        engine.startHelper(bind, threads = (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)).join()
+        engine.startHelper(bind, threads = applied?.threads ?: (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)).join()
         val s = withTimeoutOrNull(20_000) {
             engine.state.first { it.status == EngineState.Status.RUNNING || it.status == EngineState.Status.FAILED }
         }
@@ -330,7 +348,7 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
                 remoteRpcStreams.forEach { (label, stream) -> attachRemoteRpc(label, stream, port) }
             }
             _link.value = _link.value.copy(layers = layers, model = model)
-            runCatching { w.send(msg("ready", "addr" to s.address)) }
+            runCatching { w.send(msg("ready", "addr" to s.address, "applied" to applied?.toJson())) }
         } else {
             runCatching { w.send(msg("failed", "reason" to "engine did not start")) }
         }
