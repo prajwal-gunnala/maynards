@@ -99,6 +99,7 @@ private class FilamentScene(sv: SurfaceView) : Choreographer.FrameCallback {
                 PanelPlane.LEFT_SIDE -> Triple(-1f, 0f, 0f)
                 PanelPlane.RIGHT_SIDE -> Triple(1f, 0f, 0f)
                 PanelPlane.DIVIDER -> Triple(0f, 0f, 1f)
+                PanelPlane.SHELF -> Triple(0f, 1f, 0.2f)
             }
             val m = FloatArray(16).also { it[0] = 1f; it[5] = 1f; it[10] = 1f; it[15] = 1f }
             m[12] = x * gap; m[13] = z * gap; m[14] = -y * gap

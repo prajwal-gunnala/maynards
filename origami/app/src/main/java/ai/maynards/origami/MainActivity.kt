@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -79,7 +80,7 @@ class MainActivity : ComponentActivity() {
 
 private enum class Screen { CREATE, DESIGN, LAYOUT, EXPORT, GALLERY }
 private enum class ExportKind { SVG, PROJECT }
-private val stockOptions = listOf(StockSheet(600, 400), StockSheet(600, 600), StockSheet(900, 600))
+private val stockOptions = listOf(StockSheet(600, 400), StockSheet(600, 600), StockSheet(900, 600), StockSheet(1220, 2440))
 private data class ViewPart(val part: Part, val outline: List<Point3>, val cutouts: List<List<Point3>>, val depth: Double)
 
 @Composable
@@ -319,18 +320,23 @@ private fun CreateScreen(
         item {
             SectionHeader("YOUR OBJECT")
             CardBlock {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Template.entries.forEach { tpl ->
-                        FilterChip(selected = spec.template == tpl, onClick = {
-                            onSpec(if (tpl == Template.TABLE && spec.template != tpl)
-                                spec.copy(template = tpl, widthMm = 400, depthMm = 220, heightMm = 120, materialThicknessMm = maxOf(6, spec.materialThicknessMm))
-                            else spec.copy(template = tpl))
-                        }, label = { Text(tpl.label) }, modifier = Modifier.weight(1f))
+                // the catalogue: pick a thing, then adjust its sizes
+                var itemId by rememberSaveable { mutableStateOf(Catalogue.items.firstOrNull { it.spec.template == spec.template }?.id ?: "organizer") }
+                Catalogue.groups.forEach { group ->
+                    Text(group.uppercase(Locale.getDefault()), fontSize = 10.sp, letterSpacing = 1.sp, color = Muted, fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 6.dp, bottom = 2.dp))
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Catalogue.items.filter { it.group == group }.forEach { item ->
+                            FilterChip(selected = itemId == item.id, onClick = { itemId = item.id; onSpec(item.spec) },
+                                label = { Text(item.name) })
+                        }
                     }
                 }
+                val item = Catalogue.items.firstOrNull { it.id == itemId }
                 Spacer(Modifier.height(10.dp))
-                Text(if (spec.template == Template.TABLE) "Screwless small table · top, 2 legs, stretcher" else "Screwless desk organizer",
-                    color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text(item?.name ?: spec.template.label, color = Ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Text("${spec.template.label} generator · not fabrication-tested" + (item?.note?.takeIf { it.isNotBlank() }?.let { " · $it" } ?: ""),
+                    color = Muted, fontSize = 11.sp)
                 Spacer(Modifier.height(13.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     NumberField("Width", spec.widthMm.toString(), "mm", { it.toIntOrNull()?.let { value -> onSpec(spec.copy(widthMm = value)) } }, Modifier.weight(1f))
@@ -341,11 +347,11 @@ private fun CreateScreen(
                     NumberField("Height", spec.heightMm.toString(), "mm", { it.toIntOrNull()?.let { value -> onSpec(spec.copy(heightMm = value)) } }, Modifier.weight(1f))
                     NumberField("Material", spec.materialThicknessMm.toString(), "mm thick", { it.toIntOrNull()?.let { value -> onSpec(spec.copy(materialThicknessMm = value)) } }, Modifier.weight(1f))
                 }
-                if (spec.template == Template.ORGANIZER) {
+                if (spec.template == Template.ORGANIZER || spec.template == Template.BOOKSHELF) {
                     Spacer(Modifier.height(12.dp))
-                    Text("Compartments", fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
+                    Text(if (spec.template == Template.BOOKSHELF) "Shelves" else "Compartments", fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 7.dp)) {
-                        (1..4).forEach { count ->
+                        (if (spec.template == Template.BOOKSHELF) 2..6 else 1..4).forEach { count ->
                             FilterChip(selected = spec.compartments == count, onClick = { onSpec(spec.copy(compartments = count)) },
                                 label = { Text("$count") }, modifier = Modifier.weight(1f))
                         }
@@ -463,7 +469,7 @@ private fun DesignScreen(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("GENERATED", fontSize = 10.sp, letterSpacing = 1.5.sp, color = Leaf, fontWeight = FontWeight.Bold)
-                    Text("Screwless organizer", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
+                    Text("Screwless ${spec.template.label.lowercase(Locale.getDefault())}", fontSize = 23.sp, fontWeight = FontWeight.Bold, color = Ink)
                 }
                 Icon(Icons.Default.Check, null, tint = Leaf)
             }
@@ -778,6 +784,7 @@ private fun mapToView(
         PanelPlane.RIGHT_SIDE -> Point3(1.0, 0.0, 0.1)
         PanelPlane.DIVIDER -> Point3(0.0, 0.0, 1.0)
         PanelPlane.TOP -> Point3(0.0, 0.0, 1.0)
+        PanelPlane.SHELF -> Point3(0.0, 1.0, 0.2)
     }
     val p = progress.toDouble()
     val e = explodeAmount.toDouble() * 55.0 * p

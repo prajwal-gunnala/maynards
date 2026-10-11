@@ -9,10 +9,10 @@ data class Point3(val x: Double, val y: Double, val z: Double)
 data class Cutout(val x: Double, val y: Double, val width: Double, val height: Double)
 
 enum class Edge { TOP, RIGHT, BOTTOM, LEFT }
-enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER, TOP }
+enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER, TOP, SHELF }
 
 /** What is being built. Every template uses the same parts, tab-and-slot joints, layout and exports. */
-enum class Template(val label: String) { ORGANIZER("Organizer"), TABLE("Table") }
+enum class Template(val label: String) { ORGANIZER("Organizer"), TABLE("Table"), BOOKSHELF("Bookshelf") }
 enum class JointType { TAB_SLOT }
 
 data class OrganizerSpec(
@@ -25,6 +25,16 @@ data class OrganizerSpec(
     val template: Template = Template.ORGANIZER,
 ) {
     fun validate() {
+        if (template == Template.BOOKSHELF) {
+            require(widthMm in 300..1000) { "Bookshelf width must be 300–1000 mm" }
+            require(heightMm in 300..1200) { "Bookshelf height must be 300–1200 mm" }
+            require(depthMm in 150..400) { "Bookshelf depth must be 150–400 mm" }
+            require(materialThicknessMm in 6..18) { "A bookshelf needs 6–18 mm material" }
+            require(compartments in 2..6) { "Choose 2–6 shelves" }
+            require(clearanceMm in 0.0..1.5) { "Joint clearance must be 0–1.5 mm" }
+            require((heightMm - 40 - materialThicknessMm) / (compartments - 1) >= 120) { "Shelves would be under 120 mm apart" }
+            return
+        }
         if (template == Template.TABLE) {
             require(widthMm in 150..800) { "Table width must be 150–800 mm" }
             require(heightMm in 60..400) { "Table height must be 60–400 mm" }
@@ -103,6 +113,7 @@ object OrganizerGenerator {
     fun generate(spec: OrganizerSpec): OrganizerDesign {
         spec.validate()
         if (spec.template == Template.TABLE) return table(spec)
+        if (spec.template == Template.BOOKSHELF) return bookshelf(spec)
         val t = spec.materialThicknessMm.toDouble()
         val fit = spec.clearanceMm
         val tabSpan = minOf(18.0, maxOf(12.0, t * 5))
@@ -279,6 +290,70 @@ object OrganizerGenerator {
         return design
     }
 
+    /**
+     * A bookshelf: two full-depth sides, [OrganizerSpec.compartments] shelves (the lowest on a 40 mm plinth, the
+     * highest flush with the top) each with two tabs through each side, and a back strip at the top, tabbed
+     * into both sides, against racking. Shelves stand 1 t in front of the back edge, behind the strip.
+     */
+    private fun bookshelf(spec: OrganizerSpec): OrganizerDesign {
+        val t = spec.materialThicknessMm.toDouble()
+        val fit = spec.clearanceMm
+        val tabSpan = minOf(30.0, maxOf(12.0, t * 3))
+        val slotW = t + fit
+        val slotL = tabSpan + fit
+        val w = spec.widthMm.toDouble(); val h = spec.heightMm.toDouble(); val d = spec.depthMm.toDouble()
+        val shelfW = w - 2 * t
+        val shelfD = d - t
+        val strip = minOf(80.0, h * 0.2)
+        val joints = mutableListOf<Joint>()
+        val tabs = mutableMapOf<String, MutableList<Tab>>()
+        val slots = mutableMapOf<String, MutableList<Cutout>>()
+        fun tabSlot(id: String, tabPart: String, tabEdge: Edge, center: Double, slotPart: String, slot: Point2, longAxisX: Boolean, dir: Point3) {
+            tabs.getOrPut(tabPart) { mutableListOf() } += Tab(tabEdge, center, tabSpan, t)
+            val cw = if (longAxisX) slotL else slotW; val ch = if (longAxisX) slotW else slotL
+            slots.getOrPut(slotPart) { mutableListOf() } += Cutout(slot.x - cw / 2, slot.y - ch / 2, cw, ch)
+            joints += Joint(id, tabPart, tabEdge, center, slotPart, Edge.LEFT, slot, tabSpan, t, slotW, slotL, dir, fit)
+        }
+        val n = spec.compartments
+        for (i in 0 until n) {
+            val z = shelfZ(spec, i)                         // height of the shelf's middle plane
+            for ((k, frac) in listOf(0.25, 0.75).withIndex()) {
+                val c = shelfD * frac                      // along the shelf's depth
+                // side coordinates: x = depth (0 at the back), y = down from the top
+                tabSlot("shelf-${i + 1}-left-${k + 1}", "shelf-${i + 1}", Edge.LEFT, c, "left", Point2(t + c, h - z), true, Point3(-1.0, 0.0, 0.0))
+                tabSlot("shelf-${i + 1}-right-${k + 1}", "shelf-${i + 1}", Edge.RIGHT, c, "right", Point2(t + c, h - z), true, Point3(1.0, 0.0, 0.0))
+            }
+        }
+        tabSlot("strip-left", "strip", Edge.LEFT, strip / 2, "left", Point2(t / 2, strip / 2), false, Point3(-1.0, 0.0, 0.0))
+        tabSlot("strip-right", "strip", Edge.RIGHT, strip / 2, "right", Point2(t / 2, strip / 2), false, Point3(1.0, 0.0, 0.0))
+
+        val colors = listOf("#E7C99A", "#C9D8C5", "#C8D5E2", "#E6C3B7", "#D5C9E7")
+        fun part(id: String, name: String, pw: Double, ph: Double, plane: PanelPlane, index: Int, color: Int): Part {
+            val ts = tabs[id].orEmpty()
+            val cs = slots[id].orEmpty().mapNotNull { c ->
+                val l = max(0.0, c.x); val tp = max(0.0, c.y); val r = min(pw, c.x + c.width); val b = min(ph, c.y + c.height)
+                if (r <= l || b <= tp) null else Cutout(l, tp, r - l, b - tp)
+            }
+            return Part(id, name, pw, ph, outlineWithTabs(pw, ph, ts), cs, ts, plane, index, colors[color % colors.size])
+        }
+        val parts = buildList {
+            add(part("left", "Left side", d, h, PanelPlane.LEFT_SIDE, 0, 0))
+            add(part("right", "Right side", d, h, PanelPlane.RIGHT_SIDE, 0, 0))
+            for (i in 0 until n) add(part("shelf-${i + 1}", "Shelf ${i + 1}", shelfW, shelfD, PanelPlane.SHELF, i, 1 + i % 3))
+            add(part("strip", "Back strip", shelfW, strip, PanelPlane.BACK, 0, 4))
+        }
+        val design = OrganizerDesign(spec, parts, joints)
+        validateGenerated(design)
+        return design
+    }
+
+    /** Middle-plane height of shelf [i]: the lowest on a 40 mm plinth, the highest with its top flush at H. */
+    fun shelfZ(spec: OrganizerSpec, i: Int): Double {
+        val t = spec.materialThicknessMm.toDouble()
+        val low = 40 + t / 2; val high = spec.heightMm - t / 2
+        return if (spec.compartments <= 1) low else low + (high - low) * i / (spec.compartments - 1)
+    }
+
     private fun partsIndex(id: String, compartments: Int): Int = when {
         id == "base" -> 0
         id == "back" -> 1
@@ -354,6 +429,14 @@ fun Part.assembledPoint(point: Point2, spec: OrganizerSpec): Point3 {
     val h = spec.heightMm.toDouble()
     val d = spec.depthMm.toDouble()
     val t = spec.materialThicknessMm.toDouble()
+    if (spec.template == Template.BOOKSHELF) {
+        return when (plane) {
+            PanelPlane.LEFT_SIDE -> Point3(t / 2, point.x, h - point.y)
+            PanelPlane.RIGHT_SIDE -> Point3(w - t / 2, point.x, h - point.y)
+            PanelPlane.SHELF -> Point3(t + point.x, t + point.y, OrganizerGenerator.shelfZ(spec, dividerIndex))
+            else -> Point3(t + point.x, t / 2, h - point.y)       // back strip at the top, behind the shelves
+        }
+    }
     if (spec.template == Template.TABLE) {
         val legTop = h - t
         val zt = legTop - point.y
@@ -367,6 +450,7 @@ fun Part.assembledPoint(point: Point2, spec: OrganizerSpec): Point3 {
     val z = h - point.y
     return when (plane) {
         PanelPlane.TOP -> Point3(point.x, point.y, h)
+        PanelPlane.SHELF -> Point3(point.x, point.y, h)   // organizers have no shelves
         PanelPlane.FLOOR -> Point3(point.x, point.y, 0.0)
         PanelPlane.BACK -> Point3(spec.materialThicknessMm / 2.0 + point.x, spec.materialThicknessMm / 2.0, z)
         PanelPlane.FRONT -> Point3(spec.materialThicknessMm / 2.0 + point.x, d - spec.materialThicknessMm / 2.0, z)
