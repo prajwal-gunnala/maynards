@@ -56,6 +56,7 @@ fun CitedAsk(
     question: String,
     system: String,
     busy: Boolean = false,
+    onAnswer: (Answer) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     var helperConsent by remember { mutableStateOf(false) }
@@ -113,6 +114,7 @@ fun CitedAsk(
                         }
                         at(AskStage.CHECKING)
                         runner.record(reply)
+                        onAnswer(reply)
                         answer = CaseCitations.visible(reply.text)
                         answeredFrom = sources
                         checked = CaseCitations.check(reply.text, sources)

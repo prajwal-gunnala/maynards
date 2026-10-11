@@ -48,7 +48,7 @@ private const val MAX_CASE_DOCUMENTS = 8
 /** Case Room: files read on this Host, a date timeline, and answers that cite the passages. */
 @Suppress("UNUSED_PARAMETER")
 @Composable
-fun PrivateUseTab(runner: Runner, peers: Collection<Peer>, onEnsureModel: suspend () -> String) {
+fun PrivateUseTab(runner: Runner, peers: Collection<Peer>, onEnsureModel: suspend () -> String, onAnswer: (ai.maynards.mesh.brain.Answer) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var documents by remember { mutableStateOf<List<CaseDocument>>(emptyList()) }
@@ -170,7 +170,7 @@ fun PrivateUseTab(runner: Runner, peers: Collection<Peer>, onEnsureModel: suspen
                 }
             }
         }
-        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.system, busy = searching)
+        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.system, busy = searching, onAnswer = onAnswer)
     }
 }
 

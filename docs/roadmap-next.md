@@ -2,6 +2,24 @@
 
 Updated 2026-10-11. This roadmap brings together the app, phone cluster, model selection, compiler/optimizer, telemetry, privacy, developer workflows, and Origami ideas discussed so far. It is intentionally staged: finish and verify one slice before starting the next. The laptop is a monitor/coordinator when useful; model computation remains on the selected phones unless a task explicitly opts into another destination.
 
+## Status board — 2026-10-11 07:20
+
+| Stage | Status | Verified on the phones | Missing for the gate |
+|---|---|---|---|
+| 0 Baseline | done | every run in `docs/measurements.md` names model, quant, context, link, layers | repeat per release |
+| 1 Understandable app | mostly | Use cards (Chat, Case Room, Code, Origami); real model names; short labels | a first-time-user walk-through |
+| 2 Setup, pairing, links | mostly | readiness + memory limit, role chooser, QR pairing over Wi-Fi; USB-only pairing via `scripts/phone-usb-relay.py`; `scripts/link-watch.py` shows each connection's cable | laptop panel vs app agreement; restart and permission-denial cases |
+| 3 Model catalog + preflight | not started | — | model hashes, launch-time checks (stale memory, changed peers, missing projector) |
+| 4 Task router | started | picks the largest installed model that fits; never splits what fits | choose by task (Code → coder model when it fits) and say why |
+| 5 Origami | V1 | organizer generator inside Use | more templates; a fabricated reference |
+| 6 Spider Sense + Stats | started | Helper RPC events; Ask stages (Model/Sent/Reading %/Writing/Checking) and a stats card; Case and Code answers saved to Stats with a task tag | a live activity feed on the Mesh tab; matched comparisons |
+| 7 Compiler + Ned Capsules | not started | — | everything in section 7 |
+| 8 Privacy, failure | started | per-install API key; Helper consent before sending case text to a split | Helper drop during an answer, process death, network switch |
+| 9 Case Room + Code | built | Case: import, timeline, cited answers (Wi-Fi single phone; USB 8:24 split, [S01] verified). Code: folder import, cited file:lines answers (single phone, 7.5 tok/s) | a written data-flow test |
+| 10 Rented compute | future | — | — |
+
+Next, in order: 6 (live activity feed) → 3 (preflight checks) → 4 (choose by task) → 8 (Helper drop).
+
 ## Product language
 
 - **MeshAI**: the distributed inference app and runtime.

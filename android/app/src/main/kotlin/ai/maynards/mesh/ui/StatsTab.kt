@@ -151,11 +151,13 @@ private fun Row(r: Record) {
     NBox(fill = if (r.devices > 1) HelperPurple else Paper, shadow = 3.dp, pad = 10.dp) {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Sticker(when (r.task) { "case" -> "Case"; "code" -> "Code"; else -> "Chat" }, Paper)
+                androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp))
                 Text(r.model, fontWeight = FontWeight.Black, fontSize = 14.sp, color = Ink, maxLines = 1,
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text("%.1f tok/s".format(r.tokPerSec), fontWeight = FontWeight.Black, fontSize = 14.sp, color = Ink)
             }
-            Mono("${TIME.format(Date(r.at))} · ${r.layout} · first %.1fs · ${r.tokens} tok".format(r.firstTokenMs / 1000.0), 10, Muted)
+            Mono("${TIME.format(Date(r.at))} · ${r.layout} · first %.1fs · ${if (r.promptTokens > 0) "${r.promptTokens} in · " else ""}${r.tokens} out".format(r.firstTokenMs / 1000.0), 10, Muted)
             Mono("prefill ${if (r.promptTokPerSec > 0) "%.1f tok/s".format(r.promptTokPerSec) else "unknown"} · ${r.link} · estimated KV ${if (r.kvBytes > 0) "%.2f GB".format(r.kvBytes / 1e9) else "unknown"}", 9, Muted)
         }
     }

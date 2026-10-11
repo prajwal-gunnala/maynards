@@ -144,13 +144,13 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                         NButton("← Use cases", fill = Paper) { useCase = null }
                         PrivateUseTab(runner, peers.values, onEnsureModel = {
                             ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
-                        })
+                        }, onAnswer = { a -> runner.state.value.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes, "case") } })
                     }
                     "developer" -> Column(Modifier.fillMaxSize()) {
                         NButton("← Use cases", fill = Paper) { useCase = null }
                         DeveloperTab(runner, onEnsureModel = {
                             ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
-                        })
+                        }, onAnswer = { a -> runner.state.value.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes, "code") } })
                     }
                     else -> {
                         val run by runner.state.collectAsState()

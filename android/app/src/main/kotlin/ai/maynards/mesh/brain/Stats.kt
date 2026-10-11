@@ -20,15 +20,19 @@ data class Record(
     val link: String = "unknown",
     val kvBytes: Long = 0,
     val freeBytes: Long = 0,
+    val task: String = "chat",     // chat, case or code
+    val promptTokens: Int = 0,
 ) {
     fun toJson(): JSONObject = JSONObject().put("at", at).put("model", model).put("devices", devices)
         .put("layout", layout).put("tps", tokPerSec).put("ttft", firstTokenMs).put("tokens", tokens).put("heat", heat.toDouble())
         .put("prompt_tps", promptTokPerSec).put("link", link).put("kv_bytes", kvBytes).put("free_bytes", freeBytes)
+        .put("task", task).put("prompt_tokens", promptTokens)
 
     companion object {
         fun fromJson(j: JSONObject) = Record(j.getLong("at"), j.getString("model"), j.getInt("devices"),
             j.optString("layout"), j.getDouble("tps"), j.getLong("ttft"), j.getInt("tokens"), j.optDouble("heat", -1.0).toFloat(),
-            j.optDouble("prompt_tps"), j.optString("link", "unknown"), j.optLong("kv_bytes"), j.optLong("free_bytes"))
+            j.optDouble("prompt_tps"), j.optString("link", "unknown"), j.optLong("kv_bytes"), j.optLong("free_bytes"),
+            j.optString("task", "chat"), j.optInt("prompt_tokens"))
     }
 }
 
@@ -38,7 +42,8 @@ class Stats(ctx: Context) {
     private val _records = MutableStateFlow(load())
     val records: StateFlow<List<Record>> = _records
 
-    fun add(plan: Plan, a: Answer, heat: Float, peers: Collection<ai.maynards.mesh.mesh.Peer> = emptyList(), hostFreeBytes: Long = 0) {
+    fun add(plan: Plan, a: Answer, heat: Float, peers: Collection<ai.maynards.mesh.mesh.Peer> = emptyList(), hostFreeBytes: Long = 0,
+            task: String = "chat") {
         if (a.tokens == 0) return
         val peerById = peers.associateBy { it.id }
         val route = plan.helpers.joinToString(" · ") { slice ->
@@ -47,7 +52,8 @@ class Stats(ctx: Context) {
         }.ifBlank { "host only" }
         val r = Record(System.currentTimeMillis(), plan.model.name, plan.slices.size,
             plan.slices.joinToString(" · ") { "${it.name} ${it.count}" }, a.tokPerSec, a.firstTokenMs, a.tokens, heat,
-            a.promptPerSec, route, Planner.kvBytes(plan.model, 4096), hostFreeBytes + peers.sumOf { it.specs.usableBytes })
+            a.promptPerSec, route, Planner.kvBytes(plan.model, 4096), hostFreeBytes + peers.sumOf { it.specs.usableBytes },
+            task, a.promptTokens)
         _records.value = (_records.value + r).takeLast(100)
         prefs.edit().putString("records", JSONArray(_records.value.map { it.toJson() }).toString()).apply()
     }

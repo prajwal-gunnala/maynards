@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
 
 /** Ask about a private codebase: the folder is read on this Host and answers cite file:lines. */
 @Composable
-fun DeveloperTab(runner: Runner, onEnsureModel: suspend () -> String) {
+fun DeveloperTab(runner: Runner, onEnsureModel: suspend () -> String, onAnswer: (ai.maynards.mesh.brain.Answer) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var project by remember { mutableStateOf<CodeProject?>(null) }
@@ -117,6 +117,6 @@ fun DeveloperTab(runner: Runner, onEnsureModel: suspend () -> String) {
                 }
             }
         }
-        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.codeSystem, busy = searching)
+        CitedAsk(runner, onEnsureModel, evidence, query, CaseCitations.codeSystem, busy = searching, onAnswer = onAnswer)
     }
 }
