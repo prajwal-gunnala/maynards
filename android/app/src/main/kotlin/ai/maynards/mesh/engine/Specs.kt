@@ -78,6 +78,17 @@ data class Specs(
             )
         }
 
+        /** Maximum user-selectable ceiling from installed RAM, with the Android reserve kept back. */
+        fun offerCapacityBytes(ctx: Context): Long {
+            val mem = ActivityManager.MemoryInfo().also {
+                (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it)
+            }
+            val kernel = meminfo()
+            val total = kernel?.first ?: mem.totalMem
+            val reserve = (total * 15 / 100).coerceIn(800_000_000L, 2_500_000_000L)
+            return (total - reserve).coerceAtLeast(0L)
+        }
+
         /**
          * What the kernel itself says, as MemTotal and MemAvailable in bytes.
          *

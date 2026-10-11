@@ -12,10 +12,10 @@ import ai.maynards.mesh.ui.NBox
 import ai.maynards.mesh.ui.NButton
 import ai.maynards.mesh.ui.Paper
 import ai.maynards.mesh.ui.RolePicker
+import ai.maynards.mesh.ui.StartupChecks
 import ai.maynards.mesh.ui.Title
 import ai.maynards.mesh.ui.WebNode
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -39,9 +39,6 @@ import androidx.compose.ui.unit.dp
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Staying on screen keeps us the top app, which is what earns the big CPU cores.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        handleAdbExtras(intent)
 
         val app = application as MeshApp
         ai.maynards.mesh.ui.Themes.load(this)
@@ -55,11 +52,45 @@ class MainActivity : ComponentActivity() {
             }
             MeshTheme {
                 Surface(Modifier.fillMaxSize().systemBarsPadding(), color = MaterialTheme.colorScheme.background) {
-                    var role by remember { mutableStateOf(RoleStore.load(this) ?: Role.HELPER) }   // phones help; laptops host
-                    var picking by remember { mutableStateOf(false) }
-                    val pick: (Role?) -> Unit = { if (it == null) picking = true else { RoleStore.save(this, it); role = it; picking = false } }
-                    when (val r = if (picking) null else role) {
-                        null -> RolePicker(onPick = pick)
+                    // The readiness gate must lead to a deliberate role choice. Restoring HOST
+                    // here made two phones that had both previously been Hosts silently start
+                    // as Hosts again, with no visible way to assign one as a Helper.
+                    var role by remember { mutableStateOf<Role?>(null) }
+                    var lastRole by remember { mutableStateOf(RoleStore.load(this)) }
+                    var startupComplete by remember { mutableStateOf(false) }
+                    val pick: (Role?) -> Unit = { chosen ->
+                        val previous = RoleStore.load(this)
+                        if (chosen != null && previous != null && chosen != previous) {
+                            // A role switch must not leave the old listener/helper session alive.
+                            app.runner.stop()
+                            app.host.stop()
+                            app.client.leave()
+                            MeshService.stop(this)
+                        }
+                        RoleStore.save(this, chosen)
+                        lastRole = chosen
+                        role = chosen
+                    }
+                    if (!startupComplete) {
+                        StartupChecks {
+                            // Do not start/join a mesh from an automation/deep-link intent until the
+                            // owner has finished the same device-readiness checks as the normal UI.
+                            handleAdbExtras(intent)
+                            val requestedRole = intent?.getStringExtra("role")
+                                ?.let { runCatching { Role.valueOf(it) }.getOrNull() }
+                            if (requestedRole != null) {
+                                // Keep the explicit ADB/deep-link workflow used by controlled tests.
+                                role = RoleStore.load(this)
+                            } else {
+                                // Normal launches always let the owner choose Host or Helper.
+                                // The previous selection is shown as context, never auto-started.
+                                lastRole = RoleStore.load(this)
+                                role = null
+                            }
+                            startupComplete = true
+                        }
+                    } else when (val r = role) {
+                        null -> RolePicker(currentRole = lastRole, onPick = pick)
                         Role.HELPER -> HelperScreen(app.engine, app.client, onChangeRole = { pick(null) })
                         Role.HOST -> HostScreen(app.host, app.shelf, app.runner, app.stats, app.downloads, app.hostCapBytes, app.autoRun.also { app.autoRun = null }, app.autoRunHelpers, onChangeRole = { app.runner.stop(); app.host.stop(); pick(null) })
                     }

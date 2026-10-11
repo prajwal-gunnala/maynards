@@ -13,7 +13,7 @@ object Offer {
     private const val KEY = "offer_bytes"
 
     /** The choices worth offering, in GB. Anything larger than the device is filtered out by the UI. */
-    val choices = listOf(0L, 2L, 4L, 6L, 8L, 12L, 16L)
+    val choices = listOf(0L, 1L, 2L, 4L, 6L, 8L, 12L, 16L)
 
     fun bytes(ctx: Context): Long =
         ctx.getSharedPreferences("mesh", Context.MODE_PRIVATE).getLong(KEY, 0L)

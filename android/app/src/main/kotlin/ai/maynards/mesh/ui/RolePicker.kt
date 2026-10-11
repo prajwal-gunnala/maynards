@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,16 +30,27 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun RolePicker(onPick: (Role) -> Unit) {
+fun RolePicker(currentRole: Role? = null, onPick: (Role) -> Unit) {
     Box(Modifier.fillMaxSize()) {
         WebBackdrop(Modifier.fillMaxSize())
-        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
             Spacer(Modifier.height(18.dp))
             Header()
             PageHeader(
                 "Which is this phone?",
-                "A model too big for any one device runs across several. One device plans and answers; the others hold layers.",
+                "Choose this phone's role for this launch. Use one Host to plan and answer, and choose Helper on each device that should lend memory.",
             )
+            currentRole?.let {
+                NBox(fill = Yellow, pad = 10.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Label("LAST USED · ${it.name}")
+                        Small("MeshAI asks each launch so two phones do not silently start as Hosts again.", Ink)
+                    }
+                }
+            }
             NBox(fill = Paper, pad = 8.dp) {
                 MeshWeb(
                     listOf(
@@ -49,8 +62,8 @@ fun RolePicker(onPick: (Role) -> Unit) {
                 )
             }
             Section("Pick a role")
-            RoleCard("Host", "plans and answers", "Decides which device holds which layers, runs the model, and this is where you ask it things.", HostGreen) { onPick(Role.HOST) }
-            RoleCard("Helper", "lends memory", "Holds part of the model for a host on the other end of a cable. Nothing to configure.", HelperPurple) { onPick(Role.HELPER) }
+            RoleCard("Host", "plans and answers", "Runs the request, chooses a compatible model plan, and shows the result. Start with one Host per mesh.", HostGreen) { onPick(Role.HOST) }
+            RoleCard("Helper", "lends memory + compute", "Choose this on the other phone, then scan the Host's pairing code. The Helper runs its assigned model layers.", HelperPurple) { onPick(Role.HELPER) }
         }
     }
 }
