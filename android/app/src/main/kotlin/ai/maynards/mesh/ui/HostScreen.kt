@@ -137,19 +137,19 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                     "origami" -> Column(Modifier.fillMaxSize()) {
                         NButton("← Use cases", fill = Paper) { useCase = null }
                         OrigamiTab(aiEndpoint = runner.endpoint, aiApiKey = runner.apiKey, prepareAi = { needsVision -> ensureUseCaseModel(
-                            needsVision, shelf, runner, meshDevices(me, peers.values, hostCap))
+                            if (needsVision) ai.maynards.mesh.brain.Task.VISION else ai.maynards.mesh.brain.Task.CHAT, shelf, runner, meshDevices(me, peers.values, hostCap))
                         })
                     }
                     "case" -> Column(Modifier.fillMaxSize()) {
                         NButton("← Use cases", fill = Paper) { useCase = null }
                         PrivateUseTab(runner, peers.values, onEnsureModel = {
-                            ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
+                            ensureUseCaseModel(ai.maynards.mesh.brain.Task.CASE, shelf, runner, meshDevices(me, peers.values, hostCap))
                         }, onAnswer = { a -> runner.state.value.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes, "case") } })
                     }
                     "developer" -> Column(Modifier.fillMaxSize()) {
                         NButton("← Use cases", fill = Paper) { useCase = null }
                         DeveloperTab(runner, onEnsureModel = {
-                            ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
+                            ensureUseCaseModel(ai.maynards.mesh.brain.Task.CODE, shelf, runner, meshDevices(me, peers.values, hostCap))
                         }, onAnswer = { a -> runner.state.value.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes, "code") } })
                     }
                     else -> {
@@ -455,44 +455,40 @@ private fun PeerRow(p: Peer, holding: ai.maynards.mesh.brain.Slice? = null) = De
     p.rttMs, HelperPurple, p.specs.kind == "laptop", holding,
 )
 
-/** Chooses the best installed model that fits the connected memory pool for the requested modality. */
+/** Chooses the installed model for a task (see [ai.maynards.mesh.brain.Router]) and makes sure it is running. */
 private suspend fun ensureUseCaseModel(
-    needsVision: Boolean,
+    task: ai.maynards.mesh.brain.Task,
     shelf: ai.maynards.mesh.brain.Shelf,
     runner: ai.maynards.mesh.brain.Runner,
     devices: List<ai.maynards.mesh.brain.Device>,
 ): String {
+    val ready = ai.maynards.mesh.brain.RunState.Status.READY
+    val failed = ai.maynards.mesh.brain.RunState.Status.FAILED
     val current = runner.state.value
-    val currentModel = current.plan?.model
-    val suitable = currentModel != null && (!needsVision || shelf.projector(currentModel) != null)
-    if (current.status == ai.maynards.mesh.brain.RunState.Status.READY && suitable) return currentModel!!.name
     // A model already starting is waited for, not restarted: a restart throws away its load progress.
-    if (suitable && (current.status == ai.maynards.mesh.brain.RunState.Status.STARTING ||
+    if (current.plan != null && (current.status == ai.maynards.mesh.brain.RunState.Status.STARTING ||
             current.status == ai.maynards.mesh.brain.RunState.Status.LOADING)) {
-        val result = kotlinx.coroutines.withTimeout(10 * 60_000L) {
-            runner.state.first { it.status == ai.maynards.mesh.brain.RunState.Status.READY || it.status == ai.maynards.mesh.brain.RunState.Status.FAILED }
-        }
-        if (result.status == ai.maynards.mesh.brain.RunState.Status.READY) return currentModel!!.name
+        kotlinx.coroutines.withTimeout(10 * 60_000L) { runner.state.first { it.status == ready || it.status == failed } }
     }
+    val now = runner.state.value
+    val running = now.plan?.model?.takeIf { now.status == ready }
+    val installed = withContext(Dispatchers.IO) { shelf.scan() }
+    val hasProjector = { m: ai.maynards.mesh.brain.ModelInfo -> shelf.projector(m) != null }
+    // memory the running model holds frees if it is replaced: count it as available when planning others
+    val held = now.plan?.takeIf { running != null }?.slices?.associate { it.deviceId to it.bytes }.orEmpty()
+    val freed = devices.map { d -> d.copy(usableBytes = d.usableBytes + (held[d.id] ?: 0L)) }
+    val choice = ai.maynards.mesh.brain.Router.choose(task, installed, running, hasProjector) { m ->
+        ai.maynards.mesh.brain.Planner.plan(m, freed, hostExtra = shelf.projector(m)?.length() ?: 0, preferSplit = false)
+    } ?: throw IllegalStateException(ai.maynards.mesh.brain.Router.reasonNone(task, installed, hasProjector))
+    ai.maynards.mesh.brain.Sense.add("Host", "Model · ${choice.why}", ai.maynards.mesh.brain.SenseEvent.Kind.MODEL)
+    if (choice.keep) return choice.model.name
 
-    val candidates = withContext(Dispatchers.IO) { shelf.scan() }
-        .filter { !needsVision || shelf.projector(it) != null }
-        .sortedByDescending { it.fileBytes }
-    val selected = candidates.firstNotNullOfOrNull { model ->
-        val plan = ai.maynards.mesh.brain.Planner.plan(model, devices,
-            hostExtra = shelf.projector(model)?.length() ?: 0, preferSplit = false)
-        plan.takeIf { it.verdict != ai.maynards.mesh.brain.Verdict.NOT_POSSIBLE }
-    } ?: throw IllegalStateException(if (needsVision)
-        "No installed vision model with its matching mmproj fits this mesh. Add one in Models."
-    else "No installed text model fits this mesh. Add one in Models.")
-
-    runner.run(selected, devicesNow = { devices })
+    runner.run(choice.plan!!, devicesNow = { devices })
     val result = kotlinx.coroutines.withTimeout(10 * 60_000L) {
-        runner.state.first { it.status == ai.maynards.mesh.brain.RunState.Status.READY || it.status == ai.maynards.mesh.brain.RunState.Status.FAILED }
+        runner.state.first { it.status == ready || it.status == failed }
     }
-    if (result.status != ai.maynards.mesh.brain.RunState.Status.READY)
-        throw IllegalStateException(result.step.ifBlank { "Could not start ${selected.model.name}" })
-    return selected.model.name
+    if (result.status != ready) throw IllegalStateException(result.step.ifBlank { "Could not start ${choice.model.name}" })
+    return result.plan?.model?.name ?: choice.model.name
 }
 
 /**
