@@ -45,4 +45,18 @@ class CompilerTest {
         assertFalse(Compiler.decide(6, mapOf(4 to s(9.0, 9.0, 9.0))).changed)
         assertFalse(Compiler.decide(6, mapOf(6 to listOf(Sample(0.0, 0.0, false)), 4 to s(9.0, 9.0, 9.0))).changed)
     }
+
+    @Test fun learningSamplesEachSettingBeforeJudging() {
+        assertEquals(6, Compiler.nextThreads(emptyMap(), listOf(6, 4), current = 6, baseline = 6))
+        assertEquals(6, Compiler.nextThreads(mapOf(6 to listOf(7.0, 7.0)), listOf(6, 4), current = 6, baseline = 6))
+        assertEquals(4, Compiler.nextThreads(mapOf(6 to listOf(7.0, 7.0, 7.1)), listOf(6, 4), current = 6, baseline = 6))
+    }
+
+    @Test fun learningKeepsTheWinnerOnceEveryoneHasThreeAnswers() {
+        val faster4 = mapOf(6 to listOf(7.0, 7.1, 7.0), 4 to listOf(8.0, 7.9, 8.1))
+        assertEquals(4, Compiler.nextThreads(faster4, listOf(6, 4), current = 4, baseline = 6))
+        assertTrue(Compiler.learn(faster4, 6).changed)
+        val noise = mapOf(6 to listOf(7.0, 7.1, 7.0), 4 to listOf(7.2, 7.1, 7.2))
+        assertEquals(6, Compiler.nextThreads(noise, listOf(6, 4), current = 4, baseline = 6))
+    }
 }

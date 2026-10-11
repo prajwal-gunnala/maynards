@@ -10,6 +10,7 @@ import ai.maynards.mesh.brain.SenseEvent
 import ai.maynards.mesh.brain.Turn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,6 +64,7 @@ object TuneSession {
                                 Chat(runner.endpoint, runner.apiKey).ask(listOf(Turn("user", PROMPT)), onText = {}, maxTokens = 48,
                                     extra = JSONObject().put("temperature", 0).put("seed", 1).put("cache_prompt", false))
                             }
+                            if (a.tokens >= Compiler.MIN_TOKENS) profiles.addSample(key, t, a.tokPerSec)   // Tune feeds the same history
                             Compiler.Sample(a.tokPerSec, a.promptPerSec, a.tokens > 0)
                         }.getOrElse { Compiler.Sample(0.0, 0.0, false) }
                     }
@@ -113,6 +115,16 @@ fun CompilerCard(runner: Runner) {
                         u.capsule.taskSeconds, u.capsule.baselineSeconds), 10, Warn)
                 null -> Mono("Capsule · none for ${plan.model.name} on this phone model · ${runner.capsuleTask}", 10)
             }
+            var learning by androidx.compose.runtime.remember { mutableStateOf(profiles.learning) }
+            androidx.compose.foundation.layout.Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                androidx.compose.material3.Switch(checked = learning, onCheckedChange = { learning = it; profiles.learning = it })
+                androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.width(8.dp))
+                Mono("Learn from use", 11, Ink)
+            }
+            val samples = profiles.samples(key)
+            if (samples.isNotEmpty()) Mono("Answers so far · " + samples.entries.sortedByDescending { it.key }
+                .joinToString(" · ") { (th, xs) -> "$th thr ${xs.size} × %.1f tok/s".format(java.util.Locale.US, Compiler.median(xs)) }, 10)
+            if (runner.learningTry) Mono("This run is trying ${runner.threadsUsed} threads to learn", 10, Warn)
             if (t.running) NButton("Stop", fill = Paper) { t.stop() }
             else {
                 NButton("Tune", fill = Term, enabled = !busy) { t.run(runner, plan, profiles) }

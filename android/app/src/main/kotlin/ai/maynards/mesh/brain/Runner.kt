@@ -78,6 +78,9 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
     private val _compilerCapsule = MutableStateFlow<CompilerCapsule.Use?>(null)
     val compilerCapsule: StateFlow<CompilerCapsule.Use?> = _compilerCapsule
     var capsuleTask = "chat"; private set
+    /** The Compiler key of the current run (phone model, model, ctx, split); answers are learned under it. */
+    var compilerKey: String? = null; private set
+    var learningTry = false; private set
 
     fun run(requested: Plan, ctx: Int = 4096, devicesNow: (() -> List<Device>)? = null, threads: Int? = null, task: Task? = null) {
         // A model still running holds memory that frees once it stops: count it as free for the check.
@@ -190,8 +193,18 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
                 is CompilerCapsule.Use.Refuse -> Sense.add("Host", "Compiler capsule · ${use.capsule.task} · refused · ${use.reason}", SenseEvent.Kind.MODEL)
                 null -> {}
             }
-            // explicit (the on-phone Tune measuring) > this phone's measured profile > a compiler capsule > default
-            val threads = threads ?: profiled ?: tuning?.threads ?: (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
+            // explicit (the on-phone Tune measuring) > learning from use > this phone's measured profile >
+            // a compiler capsule > default
+            val key = Compiler.key(android.os.Build.MODEL, plan, ctx)
+            compilerKey = key
+            val cores = Runtime.getRuntime().availableProcessors()
+            val default = (cores - 2).coerceAtLeast(2)
+            val baseline = profiled ?: tuning?.threads ?: default
+            val learned = if (threads == null && profiles?.learning == true)
+                Compiler.nextThreads(profiles.samples(key), Compiler.candidates(cores, baseline), baseline, baseline) else null
+            val threads = threads ?: learned ?: baseline
+            learningTry = learned != null && learned != baseline
+            if (learningTry) Sense.add("Host", "Compiler · trying $threads threads · learning from use", SenseEvent.Kind.MODEL)
             threadsUsed = threads; threadsFromProfile = threads == profiled && profiled != null
             engine.startHost(EngineArgs.host(plan, shelf.path(plan.model), ctx, threads, addrs, shelf.projector(plan.model)?.path, tuning), "0.0.0.0", API_PORT, apiKey).join()
             while (true) {
@@ -226,6 +239,7 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
 
     fun record(answer: Answer) {
         if (answer.tokens <= 0) return
+        learn(answer)
         Sense.add("Host", "Answer · ${answer.tokens} tokens · %.1f tok/s · first word %.1f s".format(
             answer.tokPerSec, answer.firstTokenMs / 1000.0), SenseEvent.Kind.ASK)
         val old = _metrics.value
@@ -251,6 +265,21 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             delay(500)      // suspends, so cancelling the run stops the wait immediately
         }
         return false
+    }
+
+    /** Learning from use: the answer is a sample for the threads that produced it; a clear winner becomes the profile. */
+    private fun learn(answer: Answer) {
+        val p = profiles ?: return
+        val key = compilerKey ?: return
+        if (answer.tokens < Compiler.MIN_TOKENS || threadsUsed <= 0) return
+        p.addSample(key, threadsUsed, answer.tokPerSec)
+        if (!p.learning) return
+        val default = (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
+        val d = Compiler.learn(p.samples(key), p.threads(key) ?: default)
+        if (d.changed && p.threads(key) != d.threads) {
+            p.save(key, d.threads)
+            Sense.add("Host", "Compiler · learned · ${d.why}", SenseEvent.Kind.MODEL)
+        }
     }
 
     private fun portInUse(port: Int): Boolean =
