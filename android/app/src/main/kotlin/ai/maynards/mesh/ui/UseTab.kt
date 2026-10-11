@@ -94,6 +94,8 @@ private const val REVIEW_PROMPT =
     "Review this change. List real bugs first, then risky spots. Be brief; say 'looks fine' if it is."
 
 object ChatState {
+    /** What the last message was taken as, and which model it went to. */
+    var route by mutableStateOf("")
     val bubbles = mutableStateListOf<Bubble>()
     // An answer runs here, not in the screen's scope: leaving the Use tab while the 30B was still
     // reading the question cancelled it ("rememberCoroutineScope left the composition").
@@ -111,15 +113,20 @@ object ChatState {
 }
 
 @Composable
-fun UseTab(runner: Runner, host: MeshHost?, canSee: Boolean, onPickModel: () -> Unit, system: () -> String? = { null }, onAnswer: (Answer) -> Unit = {}) {
+fun UseTab(runner: Runner, host: MeshHost?, canSee: Boolean, onPickModel: () -> Unit, system: () -> String? = { null }, onAnswer: (Answer) -> Unit = {},
+           onEnsureModel: (suspend (ai.maynards.mesh.brain.Task) -> String)? = null) {
     val run by runner.state.collectAsState()
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
         Spacer(Modifier.height(16.dp))
-        when (run.status) {
-            RunState.Status.IDLE -> Empty(onPickModel)
-            RunState.Status.STARTING, RunState.Status.LOADING -> Loading(run, runner)
-            RunState.Status.FAILED -> Failed(run, onPickModel)
-            RunState.Status.READY -> ChatView(run, runner, host, canSee, system, onAnswer)
+        when {
+            run.status == RunState.Status.STARTING || run.status == RunState.Status.LOADING -> Loading(run, runner)
+            // Auto: any message picks its own model, so chat is open even with nothing running yet.
+            onEnsureModel != null || run.status == RunState.Status.READY -> {
+                if (run.status == RunState.Status.FAILED) Mono("Last model stopped · ${run.step}", 11, Bad)
+                ChatView(run, runner, host, canSee || onEnsureModel != null, system, onAnswer, onEnsureModel)
+            }
+            run.status == RunState.Status.IDLE -> Empty(onPickModel)
+            else -> Failed(run, onPickModel)
         }
     }
 }
@@ -161,7 +168,8 @@ private fun Failed(run: RunState, onPickModel: () -> Unit) {
 }
 
 @Composable
-private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boolean, system: () -> String?, onAnswer: (Answer) -> Unit) {
+private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boolean, system: () -> String?, onAnswer: (Answer) -> Unit,
+                     onEnsureModel: (suspend (ai.maynards.mesh.brain.Task) -> String)? = null) {
     val chat = ChatState.chat(runner.endpoint, runner.apiKey)
     val bubbles = ChatState.bubbles
     var input by remember { mutableStateOf("") }
@@ -193,6 +201,13 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
             .toMutableList().also { if (question != shown) it[it.lastIndex] = Turn("user", question) }
         scope.launch {
             val a = runCatching {
+                if (onEnsureModel != null) {
+                    val d = ai.maynards.mesh.brain.TaskDetector.detect(question, shot != null)
+                    ChatState.route = "${d.task.name.lowercase()} · ${d.why}"
+                    ai.maynards.mesh.brain.Sense.add("Host", "Task · ${d.task.name.lowercase()} · ${d.why}", ai.maynards.mesh.brain.SenseEvent.Kind.ASK)
+                    val model = onEnsureModel(d.task)
+                    ChatState.route = "${d.task.name.lowercase()} → $model · ${d.why}"
+                }
                 withContext(Dispatchers.IO) {
                     chat.ask(history, onText = { t ->
                         scope.launch { bubbles[bubbles.lastIndex] = Bubble(false, t) }
@@ -300,6 +315,7 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                 }
             }
         }
+        if (onEnsureModel != null && ChatState.route.isNotBlank()) Mono("Auto · ${ChatState.route}", 10, Muted)
         Row(Modifier.padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             val bar = RoundedCornerShape(26.dp)
             Row(Modifier.weight(1f).heightIn(min = 52.dp).background(Paper, bar).border(Border, Line, bar).padding(horizontal = 4.dp),

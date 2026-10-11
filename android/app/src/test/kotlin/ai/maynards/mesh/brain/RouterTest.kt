@@ -68,6 +68,13 @@ class RouterTest {
         assertTrue(c.why, c.why.contains("Qwen3-Coder-30B: short by"))
     }
 
+    @Test fun reasoningPrefersAReasoningModelAndDocumentsTheLongestContext() {
+        val r1 = model("DeepSeek-R1-Distill-7B", 4.7)
+        assertEquals("DeepSeek-R1-Distill-7B", Router.choose(Task.REASONING, listOf(qwen9, r1), null, noProjector, planner(10.0))!!.model.name)
+        val longCtx = ModelInfo("long.gguf", "Long-4B", "qwen3", 2_500_000_000L, List(32) { 70_000_000L }, 60_000_000L, 100_000L, 262_144)
+        assertEquals("Long-4B", Router.choose(Task.DOCUMENT, listOf(qwen9, longCtx), null, noProjector, planner(10.0))!!.model.name)
+    }
+
     @Test fun nothingFitsGivesNullAndAReason() {
         assertNull(Router.choose(Task.CHAT, listOf(coder30), null, noProjector, planner(4.0)))
         assertTrue(Router.reasonNone(Task.CHAT, listOf(coder30), noProjector).contains("fits"))

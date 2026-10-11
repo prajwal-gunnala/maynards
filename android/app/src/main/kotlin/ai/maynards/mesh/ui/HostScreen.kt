@@ -159,10 +159,13 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                             UseTab(
                                 runner, host, canSee = run.plan?.model?.let { shelf.projector(it) != null } == true, onPickModel = { tab = 1 },
                                 system = { meshNote(run.plan, me, peers.values) },
-                            ) { a ->
-                                run.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes) }
-                                runner.record(a)
-                            }
+                                onAnswer = { a ->
+                                    // the model may have switched for this message: use the plan that answered
+                                    runner.state.value.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes) }
+                                    runner.record(a)
+                                },
+                                onEnsureModel = { task -> ensureUseCaseModel(task, shelf, runner, meshDevices(me, peers.values, hostCap)) },
+                            )
                         }
                     }
                 }

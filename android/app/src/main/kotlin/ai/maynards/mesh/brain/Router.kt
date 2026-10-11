@@ -1,7 +1,7 @@
 package ai.maynards.mesh.brain
 
 /** What a request is for. The router prefers models suited to it, among those that fit right now. */
-enum class Task { CHAT, CASE, CODE, VISION }
+enum class Task { CHAT, CASE, CODE, VISION, REASONING, DOCUMENT }
 
 /**
  * Picks the model for a task from the installed models, using the planner's verdict on the devices present.
@@ -16,7 +16,14 @@ object Router {
     fun suited(task: Task, m: ModelInfo, hasProjector: Boolean): Boolean = when (task) {
         Task.VISION -> hasProjector
         Task.CODE -> isCoder(m)
-        Task.CHAT, Task.CASE -> !isCoder(m)
+        Task.CHAT, Task.CASE, Task.DOCUMENT, Task.REASONING -> !isCoder(m)
+    }
+
+    /** Within the suited models: reasoning prefers a reasoning model, documents the longest context; then size. */
+    private fun rank(task: Task): Comparator<ModelInfo> = when (task) {
+        Task.REASONING -> compareByDescending<ModelInfo> { isReasoner(it) }.thenByDescending { it.fileBytes }
+        Task.DOCUMENT, Task.CASE -> compareByDescending<ModelInfo> { it.contextMax }.thenByDescending { it.fileBytes }
+        else -> compareByDescending { it.fileBytes }
     }
 
     /**
@@ -31,7 +38,7 @@ object Router {
         planFor: (ModelInfo) -> Plan,
     ): Choice? {
         val usable = installed.filter { task != Task.VISION || hasProjector(it) }
-        val ordered = usable.sortedWith(compareByDescending<ModelInfo> { suited(task, it, hasProjector(it)) }.thenByDescending { it.fileBytes })
+        val ordered = usable.sortedWith(compareByDescending<ModelInfo> { suited(task, it, hasProjector(it)) }.then(rank(task)))
         val skipped = ArrayList<String>()
         for (m in ordered) {
             val good = suited(task, m, hasProjector(m))
@@ -55,5 +62,6 @@ object Router {
     }
 
     private fun isCoder(m: ModelInfo) = "coder" in (m.name + " " + m.file).lowercase()
+    private fun isReasoner(m: ModelInfo) = Regex("r1|qwq|math|thinking|reason").containsMatchIn((m.name + " " + m.file).lowercase())
     private fun skippedNote(s: List<String>) = if (s.isEmpty()) "" else " (${s.joinToString("; ")})"
 }
