@@ -17,6 +17,8 @@ object Sense {
     private const val KEEP = 80
     private const val BURST_MS = 3_000L
     private const val LOOK_BACK = 4
+    /** Helper work arrives in bursts with pauses while the Host reads the prompt; one answer stays one line. */
+    private const val WORK_BURST_MS = 15_000L
 
     private val _events = MutableStateFlow<List<SenseEvent>>(emptyList())
     val events: StateFlow<List<SenseEvent>> = _events
@@ -31,7 +33,8 @@ object Sense {
     fun pulse(who: String, text: String, kind: SenseEvent.Kind, now: Long = System.currentTimeMillis()) = _events.update { list ->
         // Only look past lines of the same kind: a different event in between keeps the order honest.
         val window = (list.lastIndex downTo maxOf(0, list.size - LOOK_BACK)).takeWhile { list[it].kind == kind }
-        val i = window.firstOrNull { list[it].who == who && list[it].text == text && now - list[it].at in 0..BURST_MS }
+        val i = window.firstOrNull { list[it].who == who && list[it].text == text &&
+            now - list[it].at in 0..(if (kind == SenseEvent.Kind.WORK) WORK_BURST_MS else BURST_MS) }
         if (i != null) list.toMutableList().also { it[i] = list[i].copy(at = now, count = list[i].count + 1) }
         else (list + SenseEvent(now, who, text, kind)).takeLast(KEEP)
     }

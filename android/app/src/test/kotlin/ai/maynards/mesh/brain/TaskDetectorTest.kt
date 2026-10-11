@@ -18,6 +18,12 @@ class TaskDetectorTest {
         assertTrue(d.why, d.why.contains("stack trace"))
     }
 
+    @Test fun aBareErrorNameIsCode() {
+        assertEquals(Task.CODE, task("java.lang.NullPointerException"))
+        assertEquals(Task.CODE, task("I get IndexOutOfBoundsException when I scroll"))
+        assertEquals(Task.CODE, task("kotlinx.coroutines.JobCancellationException"))
+    }
+
     @Test fun oneCodeishWordAloneStaysGeneral() {
         assertEquals(Task.CHAT, task("what does the code of conduct say about breaks"))
         assertEquals(Task.CHAT, task("tell me a joke"))

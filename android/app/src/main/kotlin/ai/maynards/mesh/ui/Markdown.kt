@@ -35,7 +35,7 @@ fun Markdown(text: String) {
                     fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Term, softWrap = false,
                 )
             } else {
-                Text(inline(body.trim('\n')), fontSize = 15.sp, color = Ink, lineHeight = 21.sp)
+                Text(inline(stripMath(body.trim('\n'))), fontSize = 15.sp, color = Ink, lineHeight = 21.sp)
             }
         }
     }
@@ -78,3 +78,13 @@ private fun inline(text: String): AnnotatedString = buildAnnotatedString {
         if (heading) pop()
     }
 }
+
+/**
+ * Models write maths as LaTeX ($3x = 15$, $$x = 5$$, \\(x\\)); there is no maths renderer, so show the inside.
+ * A price stays: "$5 and $10" has no closing $ right after a non-space character.
+ */
+internal fun stripMath(text: String): String = text
+    .replace(Regex("\\$\\$([^$]+?)\\$\\$"), "$1")
+    .replace(Regex("\\\\\\((.+?)\\\\\\)"), "$1")
+    .replace(Regex("\\$(\\S(?:[^$\\n]*?\\S)?)\\$"), "$1")
+    .replace("\\cdot", "·").replace("\\times", "×").replace("\\div", "÷")

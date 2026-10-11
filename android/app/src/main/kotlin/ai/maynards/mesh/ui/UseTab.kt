@@ -96,6 +96,8 @@ private const val REVIEW_PROMPT =
 object ChatState {
     /** What the last message was taken as, and which model it went to. */
     var route by mutableStateOf("")
+    /** Set once a message is code: errors the user pastes come from their program, not from this model. */
+    var codeNote by mutableStateOf(false)
     val bubbles = mutableStateListOf<Bubble>()
     // An answer runs here, not in the screen's scope: leaving the Use tab while the 30B was still
     // reading the question cancelled it ("rememberCoroutineScope left the composition").
@@ -205,13 +207,15 @@ private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boo
                     val d = ai.maynards.mesh.brain.TaskDetector.detect(question, shot != null)
                     ChatState.route = "${d.task.name.lowercase()} · ${d.why}"
                     ai.maynards.mesh.brain.Sense.add("Host", "Task · ${d.task.name.lowercase()} · ${d.why}", ai.maynards.mesh.brain.SenseEvent.Kind.ASK)
+                    if (d.task == ai.maynards.mesh.brain.Task.CODE) ChatState.codeNote = true
                     val model = onEnsureModel(d.task)
                     ChatState.route = "${d.task.name.lowercase()} → $model · ${d.why}"
                 }
                 withContext(Dispatchers.IO) {
                     chat.ask(history, onText = { t ->
                         scope.launch { bubbles[bubbles.lastIndex] = Bubble(false, t) }
-                    }, image = shot?.second, system = system())
+                    }, image = shot?.second, system = listOfNotNull(
+                        CODE_NOTE.takeIf { ChatState.codeNote }, system()).joinToString("\n\n").ifBlank { null })
                 }
             }
             a.onSuccess {
@@ -461,3 +465,6 @@ private fun SquareButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
 }
 
 private fun Modifier.clickableNoRipple(onClick: () -> Unit): Modifier = this.clickable(onClick = onClick)
+
+private const val CODE_NOTE = "The user may paste code, errors or stack traces from their own program. " +
+    "They come from the user's software, not from you or this device: explain the cause and suggest a fix."

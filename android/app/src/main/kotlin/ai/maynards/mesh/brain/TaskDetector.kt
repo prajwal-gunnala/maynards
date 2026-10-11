@@ -12,6 +12,7 @@ object TaskDetector {
         Regex("```") to "code block",
         Regex("(?m)^\\s*(def|fun|class|import|package|public|private|func|fn|const|let|var|#include)\\b") to "source lines",
         Regex("(?m)\\bat [\\w.$]+\\([\\w]+\\.(kt|java|scala):\\d+\\)|Traceback \\(most recent call last\\)|\\berror\\[E\\d+]") to "stack trace",
+        Regex("\\b(java|javax|kotlin|kotlinx|android|org|com|io)\\.[a-z]\\w*\\.[\\w.]*[A-Z]\\w*|\\b[A-Z]\\w*(Exception|Error)\\b") to "error name",
         Regex("[{};]\\s*$", RegexOption.MULTILINE) to "code punctuation",
     )
     private val MATH_WORDS = Regex("(?i)\\b(solve|prove|proof|equation|integral|derivative|probability|calculate|compute|how many|percentage|theorem|logic puzzle|step by step)\\b")

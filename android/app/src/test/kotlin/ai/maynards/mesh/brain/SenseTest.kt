@@ -16,11 +16,16 @@ class SenseTest {
         assertEquals(1_400L, e.at)
     }
 
+    @Test fun helperWorkWithPausesUnder15sStaysOneLine() {
+        listOf(0L, 4_000L, 13_000L, 20_000L).forEach { Sense.pulse("Vivo", "computing", Kind.WORK, now = it) }
+        assertEquals(listOf(4), Sense.events.value.map { it.count })
+    }
+
     @Test fun aPauseOrAnotherEventStartsANewLine() {
         Sense.pulse("Vivo", "computing", Kind.WORK, now = 0)
-        Sense.pulse("Vivo", "computing", Kind.WORK, now = 5_000)       // > 3 s later
-        Sense.add("Host", "Answer", Kind.ASK, now = 5_100)
-        Sense.pulse("Vivo", "computing", Kind.WORK, now = 5_200)       // after a different event
+        Sense.pulse("Vivo", "computing", Kind.WORK, now = 16_000)      // > 15 s later
+        Sense.add("Host", "Answer", Kind.ASK, now = 16_100)
+        Sense.pulse("Vivo", "computing", Kind.WORK, now = 16_200)      // after a different event
         assertEquals(listOf(1, 1, 1, 1), Sense.events.value.map { it.count })
     }
 
@@ -33,7 +38,7 @@ class SenseTest {
     }
 
     @Test fun anOutOfOrderClockDoesNotMergeBackwards() {
-        Sense.pulse("Vivo", "computing", Kind.WORK, now = 10_000)
+        Sense.pulse("Vivo", "computing", Kind.WORK, now = 30_000)
         Sense.pulse("Vivo", "computing", Kind.WORK, now = 9_000)      // clock moved back: new line, not merged
         assertEquals(2, Sense.events.value.size)
     }
