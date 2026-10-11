@@ -2,24 +2,24 @@
 
 Updated 2026-10-11. This roadmap brings together the app, phone cluster, model selection, compiler/optimizer, telemetry, privacy, developer workflows, and Origami ideas discussed so far. It is intentionally staged: finish and verify one slice before starting the next. The laptop is a monitor/coordinator when useful; model computation remains on the selected phones unless a task explicitly opts into another destination.
 
-## Status board — 2026-10-11 07:20
+## Status board — 2026-10-11 07:35
 
 | Stage | Status | Verified on the phones | Missing for the gate |
 |---|---|---|---|
 | 0 Baseline | done | every run in `docs/measurements.md` names model, quant, context, link, layers | repeat per release |
 | 1 Understandable app | mostly | Use cards (Chat, Case Room, Code, Origami); real model names; short labels | a first-time-user walk-through |
-| 2 Setup, pairing, links | mostly | readiness + memory limit, role chooser, QR pairing over Wi-Fi; USB-only pairing via `scripts/phone-usb-relay.py`; `scripts/link-watch.py` shows each connection's cable | laptop panel vs app agreement; restart and permission-denial cases |
-| 3 Model catalog + preflight | not started | — | model hashes, launch-time checks (stale memory, changed peers, missing projector) |
-| 4 Task router | started | picks the largest installed model that fits; never splits what fits | choose by task (Code → coder model when it fits) and say why |
-| 4b Multiple models | not started | one model per request today | a bounded chain with typed handoffs (e.g. vision model → text model, or photo → Origami proposal → user confirm → geometry); two models loaded at once only when both fit with their KV |
+| 2 Setup, pairing, links | mostly | readiness + memory limit, role chooser, QR pairing over Wi-Fi; USB-only pairing via `scripts/phone-usb-relay.py`; `scripts/link-watch.py` showed every mesh connection on USB, none on Wi-Fi | laptop panel vs app agreement; restart and permission-denial cases |
+| 3 Model catalog + preflight | built | — (unit tests) | `Preflight` re-checks file size, Helpers, links, battery and memory at launch and re-plans or refuses; no content hash (too slow for 18 GB on a phone) |
+| 4 Task router | built | — (unit tests) | `TaskDetector` reads any message (vision / code / reasoning / document / general) and `Router` picks the fitting installed model with a reason; Mesh Chat routes every message; rooms pass their task |
+| 4b Multiple models | first chain built | — (unit tests) | Case Room "Find conflicts": timeline (local) → model JSON pairs → checked; each step picks its model via the router. Not yet run with two different models on the phones |
 | 5 Origami | V1 | organizer generator inside Use | more templates; a fabricated reference |
-| 6 Spider Sense + Stats | started | Helper RPC events; Ask stages (Model/Sent/Reading %/Writing/Checking) and a stats card; Case and Code answers saved to Stats with a task tag; live Spider Sense feed on the Mesh tab (built, not yet seen on the phone) | matched comparisons |
-| 7 Compiler + Ned Capsules | not started | — | everything in section 7 |
-| 8 Privacy, failure | started | per-install API key; Helper consent before sending case text to a split | Helper drop during an answer, process death, network switch |
-| 9 Case Room + Code | built | Case: import, timeline, cited answers (Wi-Fi single phone; USB 8:24 split, [S01] verified). Code: folder import, cited file:lines answers (single phone, 7.5 tok/s) | a written data-flow test |
+| 6 Spider Sense + Stats | built | Ask stages and stats card; USB split answer; Case and Code answers in Stats | live feed built, not yet seen on the phone; matched comparisons |
+| 7 Compiler + Ned Capsules | not started | — | everything in section 7 (multi-day) |
+| 8 Privacy, failure | built | per-install API key; Helper consent (re-asked when the Helper set changes) | dead model process and cut-off answers are caught; a Helper leaving mid-answer gives one disclosed restart. Not yet tested by pulling a cable |
+| 9 Case Room + Code | built | Case: import, timeline, cited answers (Wi-Fi single phone; USB 8:24 split). Code: cited file:lines answers | a written data-flow test |
 | 10 Rented compute | future | — | — |
 
-Next, in order: 6 (live activity feed) → 3 (preflight checks) → 4 (choose by task) → 4b (multiple models) → 8 (Helper drop).
+Next: on-device checks of 3, 4, 4b, 6 and 8 (pull a Helper's cable mid-answer); then 2's remaining cases; 7 needs its own plan.
 
 ## Product language
 
