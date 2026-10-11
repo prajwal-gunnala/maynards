@@ -18,7 +18,7 @@ class PartMesh(val id: String, val name: String, val positions: FloatArray, val 
 object Mesh3D {
     private const val GRAIN_MM = 300.0      // one texture repeat per 30 cm of board
 
-    fun build(design: OrganizerDesign): List<PartMesh> = design.parts.map { part(it, design.spec) }
+    fun build(design: OrganizerDesign): List<PartMesh> = design.parts.filter { it.plane != PanelPlane.LOOSE }.map { part(it, design.spec) }
 
     fun part(part: Part, spec: OrganizerSpec): PartMesh {
         val t = spec.materialThicknessMm.toDouble()

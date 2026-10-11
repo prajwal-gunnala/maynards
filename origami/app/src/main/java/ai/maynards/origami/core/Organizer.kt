@@ -9,7 +9,10 @@ data class Point3(val x: Double, val y: Double, val z: Double)
 data class Cutout(val x: Double, val y: Double, val width: Double, val height: Double)
 
 enum class Edge { TOP, RIGHT, BOTTOM, LEFT }
-enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER, TOP, SHELF }
+enum class PanelPlane { FLOOR, FRONT, BACK, LEFT_SIDE, RIGHT_SIDE, DIVIDER, TOP, SHELF, LOOSE }
+
+/** How parts hold together. Both are screwless; the wedged tenon also cannot pull apart until its wedge is knocked out. */
+enum class JointStyle(val label: String) { TAB_SLOT("Tab & slot"), WEDGED("Wedged tenon") }
 
 /** What is being built. Every template uses the same parts, tab-and-slot joints, layout and exports. */
 enum class Template(val label: String) { ORGANIZER("Organizer"), TABLE("Table"), BOOKSHELF("Bookshelf") }
@@ -23,6 +26,7 @@ data class OrganizerSpec(
     val compartments: Int = 2,
     val clearanceMm: Double = 0.2,
     val template: Template = Template.ORGANIZER,
+    val joint: JointStyle = JointStyle.TAB_SLOT,
 ) {
     fun validate() {
         if (template == Template.BOOKSHELF) {
@@ -112,8 +116,69 @@ data class OrganizerDesign(
 object OrganizerGenerator {
     fun generate(spec: OrganizerSpec): OrganizerDesign {
         spec.validate()
-        if (spec.template == Template.TABLE) return table(spec)
-        if (spec.template == Template.BOOKSHELF) return bookshelf(spec)
+        val base = when (spec.template) {
+            Template.TABLE -> table(spec)
+            Template.BOOKSHELF -> bookshelf(spec)
+            Template.ORGANIZER -> organizer(spec)
+        }
+        return if (spec.joint == JointStyle.WEDGED) wedged(base) else base
+    }
+
+    /**
+     * Wedged (tusk) tenons: every tab is lengthened to come out past the far face of the board it passes
+     * through, and gets a wedge hole whose inner edge sits [WEDGE_BITE] inside that face, so a driven wedge pulls
+     * the joint tight. Distances come from the assembled 3D positions, so this works for every template.
+     * One wedge part per joint is added to the cut list.
+     */
+    private fun wedged(design: OrganizerDesign): OrganizerDesign {
+        val spec = design.spec
+        val t = spec.materialThicknessMm.toDouble()
+        val newTabs = design.parts.associate { it.id to it.tabs.toMutableList() }
+        val holes = design.parts.associate { it.id to mutableListOf<Cutout>() }
+        val wedges = ArrayList<Part>()
+        for ((n, j) in design.joints.withIndex()) {
+            val a = design.part(j.partA) ?: continue
+            val b = design.part(j.partB) ?: continue
+            val idx = newTabs.getValue(a.id).indexOfFirst { it.edge == j.edgeA && abs(it.centerMm - j.tabCenterMm) < 1e-6 }
+            if (idx < 0) continue
+            val tab = newTabs.getValue(a.id)[idx]
+            // the tab's root point on its edge, and the outward direction in the part's own 2D coordinates
+            val (root, out) = when (tab.edge) {
+                Edge.TOP -> Point2(tab.centerMm, 0.0) to Point2(0.0, -1.0)
+                Edge.BOTTOM -> Point2(tab.centerMm, a.heightMm) to Point2(0.0, 1.0)
+                Edge.LEFT -> Point2(0.0, tab.centerMm) to Point2(-1.0, 0.0)
+                Edge.RIGHT -> Point2(a.widthMm, tab.centerMm) to Point2(1.0, 0.0)
+            }
+            val p0 = a.assembledPoint(root, spec)
+            val u = a.assembledPoint(Point2(root.x + out.x, root.y + out.y), spec) - p0      // 1 mm along the tab, in 3D
+            val farFace = ((b.assembledPoint(j.slotCenter, spec) - p0) dot u) + t / 2         // mm from the edge
+            val holeIn = farFace - WEDGE_BITE
+            val depth = holeIn + t + 1.5 * t                                                   // hole + strong end
+            newTabs.getValue(a.id)[idx] = tab.copy(depthMm = depth)
+            val holeLen = tab.spanMm * 0.6
+            val c0 = Point2(root.x + out.x * holeIn, root.y + out.y * holeIn)
+            val c1 = Point2(root.x + out.x * (holeIn + t), root.y + out.y * (holeIn + t))
+            val along = if (out.x != 0.0) Point2(0.0, 1.0) else Point2(1.0, 0.0)
+            val x0 = minOf(c0.x, c1.x) - along.x * holeLen / 2; val y0 = minOf(c0.y, c1.y) - along.y * holeLen / 2
+            holes.getValue(a.id) += Cutout(x0, y0, abs(c1.x - c0.x) + along.x * holeLen, abs(c1.y - c0.y) + along.y * holeLen)
+            // a tapered wedge: thin end slides in, the thick end stops it
+            val lw = 4 * t; val w0 = holeLen * 0.55; val w1 = holeLen * 1.2
+            val outline = listOf(Point2(0.0, (w1 - w0) / 2), Point2(lw, 0.0), Point2(lw, w1), Point2(0.0, (w1 + w0) / 2))
+            wedges += Part("wedge-${n + 1}", "Wedge ${n + 1}", lw, w1, outline, emptyList(), emptyList(), PanelPlane.LOOSE, n, "#B98C5A")
+        }
+        val parts = design.parts.map { p ->
+            val tabs = newTabs.getValue(p.id)
+            if (tabs == p.tabs && holes.getValue(p.id).isEmpty()) p
+            else p.copy(outline = outlineWithTabs(p.widthMm, p.heightMm, tabs), tabs = tabs, cutouts = p.cutouts + holes.getValue(p.id))
+        } + wedges
+        val result = OrganizerDesign(spec, parts, design.joints)
+        validateGenerated(result)
+        return result
+    }
+
+    const val WEDGE_BITE = 0.5
+
+    private fun organizer(spec: OrganizerSpec): OrganizerDesign {
         val t = spec.materialThicknessMm.toDouble()
         val fit = spec.clearanceMm
         val tabSpan = minOf(18.0, maxOf(12.0, t * 5))
@@ -195,8 +260,9 @@ object OrganizerGenerator {
             for (i in 1 until compartments) {
                 val divider = "divider-$i"
                 val dividerX = innerWidth * i / compartments
+                // the divider's x runs from the back wall (0) to the front wall (its width), so its front tab is on RIGHT
                 tabSlot("$longPart-$divider", divider,
-                    if (front) Edge.LEFT else Edge.RIGHT,
+                    if (front) Edge.RIGHT else Edge.LEFT,
                     lockHeight, longPart,
                     if (front) Edge.TOP else Edge.BOTTOM,
                     Point2(dividerX, lockHeight), width = tabSpan, depth = tabDepth,
@@ -376,8 +442,13 @@ object OrganizerGenerator {
             } == true)
         }
         require(design.parts.all { it.outline.size >= 4 && it.materialAreaMm2 > 0 })
+        // every tab, followed straight out in 3D, must go through its slot where the other board really is
+        jointMisses(design).let { require(it.isEmpty()) { "joint geometry: ${it.first()}" } }
         design.parts.forEach { part ->
-            require(part.cutouts.all { it.x >= 0 && it.y >= 0 && it.x + it.width <= part.widthMm && it.y + it.height <= part.heightMm })
+            require(part.cutouts.all { c ->
+                listOf(Point2(c.x, c.y), Point2(c.x + c.width, c.y), Point2(c.x, c.y + c.height), Point2(c.x + c.width, c.y + c.height))
+                    .all { inOrOn(it, part.outline) }
+            }) { "${part.id}: a cut-out leaves the part" }
         }
     }
 }
@@ -411,6 +482,72 @@ private fun outlineWithTabs(width: Double, height: Double, tabs: List<Tab>): Lis
     edge(Point2(width, height), Point2(0.0, height), Edge.BOTTOM) { d -> Point2(0.0, height + d) }
     edge(Point2(0.0, height), Point2(0.0, 0.0), Edge.LEFT) { d -> Point2(-d, 0.0) }
     return points
+}
+
+/** Problems: joints whose tab centre line misses the slot where it crosses the other board's mid-plane. */
+fun jointMisses(design: OrganizerDesign): List<String> {
+    val spec = design.spec
+    return design.joints.mapNotNull { j ->
+        val a = design.part(j.partA)!!; val b = design.part(j.partB)!!
+        val tab = a.tabs.first { it.edge == j.edgeA && kotlin.math.abs(it.centerMm - j.tabCenterMm) < 1e-6 }
+        val (root, out) = when (tab.edge) {
+            Edge.TOP -> Point2(tab.centerMm, 0.0) to Point2(0.0, -1.0)
+            Edge.BOTTOM -> Point2(tab.centerMm, a.heightMm) to Point2(0.0, 1.0)
+            Edge.LEFT -> Point2(0.0, tab.centerMm) to Point2(-1.0, 0.0)
+            Edge.RIGHT -> Point2(a.widthMm, tab.centerMm) to Point2(1.0, 0.0)
+        }
+        val p0 = a.assembledPoint(root, spec)
+        val u = a.assembledPoint(Point2(root.x + out.x, root.y + out.y), spec) - p0
+        // B's plane: origin and in-plane axes
+        val o = b.assembledPoint(Point2(0.0, 0.0), spec)
+        val bx = b.assembledPoint(Point2(1.0, 0.0), spec) - o; val by = b.assembledPoint(Point2(0.0, 1.0), spec) - o
+        val n = (bx cross by).unit()
+        val denom = u dot n
+        if (kotlin.math.abs(denom) < 1e-9) return@mapNotNull "${j.id}: tab runs parallel to ${b.id}"
+        val s = ((o - p0) dot n) / denom                     // mm along the tab to B's mid-plane
+        if (s < 0 || s > tab.depthMm + 1e-6) return@mapNotNull "${j.id}: ${b.id}'s mid-plane is ${"%.1f".format(s)} mm along a ${tab.depthMm} mm tab"
+        val q = p0 + u * s - o
+        val qx = (q dot bx) / (bx dot bx); val qy = (q dot by) / (by dot by)
+        val hit = b.cutouts.any { qx in (it.x - 1e-6)..(it.x + it.width + 1e-6) && qy in (it.y - 1e-6)..(it.y + it.height + 1e-6) }
+        if (hit) null else "${j.id}: tab meets ${b.id} at (${"%.1f".format(qx)}, ${"%.1f".format(qy)}), no slot there"
+    }
+}
+
+/** A joint seen in section along its tab: everything in mm from the tab's root on its own edge. */
+data class JointSection(val thickness: Double, val clearance: Double, val boardMid: Double, val tabDepth: Double,
+                        val tabSpan: Double, val hole: ClosedFloatingPointRange<Double>?, val wedgeThin: Double, val wedgeThick: Double)
+
+/** The section of [joint]: where the other board sits along the tab, how far the tab goes, and the wedge hole if any. */
+fun jointSection(design: OrganizerDesign, joint: Joint): JointSection {
+    val spec = design.spec
+    val t = spec.materialThicknessMm.toDouble()
+    val a = design.part(joint.partA)!!; val b = design.part(joint.partB)!!
+    val tab = a.tabs.first { it.edge == joint.edgeA && abs(it.centerMm - joint.tabCenterMm) < 1e-6 }
+    val (root, out) = when (tab.edge) {
+        Edge.TOP -> Point2(tab.centerMm, 0.0) to Point2(0.0, -1.0)
+        Edge.BOTTOM -> Point2(tab.centerMm, a.heightMm) to Point2(0.0, 1.0)
+        Edge.LEFT -> Point2(0.0, tab.centerMm) to Point2(-1.0, 0.0)
+        Edge.RIGHT -> Point2(a.widthMm, tab.centerMm) to Point2(1.0, 0.0)
+    }
+    val p0 = a.assembledPoint(root, spec)
+    val u = a.assembledPoint(Point2(root.x + out.x, root.y + out.y), spec) - p0
+    val mid = (b.assembledPoint(joint.slotCenter, spec) - p0) dot u
+    val hole = if (spec.joint == JointStyle.WEDGED) (mid + t / 2 - OrganizerGenerator.WEDGE_BITE).let { it..(it + t) } else null
+    val holeLen = tab.spanMm * 0.6
+    return JointSection(t, spec.clearanceMm, mid, tab.depthMm, tab.spanMm, hole, holeLen * 0.55, holeLen * 1.2)
+}
+
+/** Point inside or on the boundary of a simple polygon (ray casting with an edge tolerance). */
+internal fun inOrOn(p: Point2, poly: List<Point2>, eps: Double = 1e-6): Boolean {
+    var inside = false
+    for (i in poly.indices) {
+        val a = poly[i]; val b = poly[(i + 1) % poly.size]
+        val cross = (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)
+        if (abs(cross) <= eps * maxOf(1.0, abs(b.x - a.x) + abs(b.y - a.y)) &&
+            p.x in (minOf(a.x, b.x) - eps)..(maxOf(a.x, b.x) + eps) && p.y in (minOf(a.y, b.y) - eps)..(maxOf(a.y, b.y) + eps)) return true
+        if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) inside = !inside
+    }
+    return inside
 }
 
 fun polygonArea(points: List<Point2>): Double {
@@ -451,6 +588,7 @@ fun Part.assembledPoint(point: Point2, spec: OrganizerSpec): Point3 {
     return when (plane) {
         PanelPlane.TOP -> Point3(point.x, point.y, h)
         PanelPlane.SHELF -> Point3(point.x, point.y, h)   // organizers have no shelves
+        PanelPlane.LOOSE -> Point3(point.x, point.y, 0.0)  // wedges are loose parts, not placed
         PanelPlane.FLOOR -> Point3(point.x, point.y, 0.0)
         PanelPlane.BACK -> Point3(spec.materialThicknessMm / 2.0 + point.x, spec.materialThicknessMm / 2.0, z)
         PanelPlane.FRONT -> Point3(spec.materialThicknessMm / 2.0 + point.x, d - spec.materialThicknessMm / 2.0, z)

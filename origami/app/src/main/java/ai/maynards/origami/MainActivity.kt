@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -361,6 +362,15 @@ private fun CreateScreen(
                     Spacer(Modifier.height(10.dp))
                     Text("Not fabrication-tested yet · check fit on a scrap first", fontSize = 11.sp, color = Muted)
                 }
+                Spacer(Modifier.height(12.dp))
+                Text("Joint", fontSize = 12.sp, color = Muted, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 7.dp)) {
+                    JointStyle.entries.forEach { js ->
+                        FilterChip(selected = spec.joint == js, onClick = { onSpec(spec.copy(joint = js)) }, label = { Text(js.label) })
+                    }
+                }
+                Text(if (spec.joint == JointStyle.WEDGED) "Tabs come through and a wedge locks each one: no glue, no screws, comes apart again."
+                     else "Tabs press into slots; the clearance sets how snug.", fontSize = 11.sp, color = Muted)
             }
         }
         item {
@@ -515,6 +525,7 @@ private fun DesignScreen(
             }
         }
         item { StrengthCard(design) }
+        item { JointCloseUp(design) }
         item {
             Text("PARTS · TAP TO HIGHLIGHT", fontSize = 10.sp, color = Muted, letterSpacing = 1.3.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(7.dp))
@@ -795,6 +806,7 @@ private fun mapToView(
         PanelPlane.DIVIDER -> Point3(0.0, 0.0, 1.0)
         PanelPlane.TOP -> Point3(0.0, 0.0, 1.0)
         PanelPlane.SHELF -> Point3(0.0, 1.0, 0.2)
+        PanelPlane.LOOSE -> Point3(0.0, 0.0, 0.0)
     }
     val p = progress.toDouble()
     val e = explodeAmount.toDouble() * 55.0 * p
@@ -854,5 +866,67 @@ private fun StrengthCard(design: OrganizerDesign) {
         }
         Text("Span ${"%.0f".format(checks.first().spanMm)} mm · handbook ${material.label.lowercase(Locale.US)} values with a ×${Structure.SAFETY.toInt()} safety factor · a guide, not a rating",
             color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+/** One real joint of this design, drawn in section at scale: the other board, the tab through its slot, and the wedge. */
+@Composable
+private fun JointCloseUp(design: OrganizerDesign) {
+    if (design.joints.isEmpty()) return
+    var index by remember(design) { mutableStateOf(0) }
+    val joint = design.joints[index.coerceIn(0, design.joints.size - 1)]
+    val sec = remember(design, joint) { jointSection(design, joint) }
+    CardBlock {
+        Text("JOINT CLOSE-UP", fontSize = 10.sp, letterSpacing = 1.5.sp, color = Leaf, fontWeight = FontWeight.Bold)
+        Text("${design.part(joint.partA)?.name} → ${design.part(joint.partB)?.name} · ${design.spec.joint.label}", color = Ink, fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 4.dp))
+        Canvas(Modifier.fillMaxWidth().height(230.dp).padding(top = 8.dp)) {
+            val t = sec.thickness
+            val left = -3 * t
+            val right = maxOf(sec.tabDepth, sec.boardMid + t / 2) + 1.5 * t
+            val half = maxOf(3.2 * t, (sec.wedgeThick + t) / 2 + t)
+            val k = minOf(size.width / (right - left).toFloat(), size.height / (2 * half).toFloat())
+            val ox = (size.width - (right - left).toFloat() * k) / 2 - left.toFloat() * k
+            val oy = size.height / 2
+            fun x(mm: Double) = ox + mm.toFloat() * k
+            fun y(mm: Double) = oy + mm.toFloat() * k
+            val ink = Color(0xFF23302A)
+            // the other board, cut by the section, with the slot opening (board + clearance)
+            val slotHalf = (t + sec.clearance) / 2
+            val b0 = sec.boardMid - t / 2; val b1 = sec.boardMid + t / 2
+            drawRect(Color(0xFFC8D5E2), Offset(x(b0), y(-half)), Size((x(b1) - x(b0)), (y(-slotHalf) - y(-half))))
+            drawRect(Color(0xFFC8D5E2), Offset(x(b0), y(slotHalf)), Size((x(b1) - x(b0)), (y(half) - y(slotHalf))))
+            // this part and its tab (one board thick), with the wedge hole if wedged
+            val tabColor = Color(0xFFE7C99A)
+            val h = sec.hole
+            if (h == null) drawRect(tabColor, Offset(x(left), y(-t / 2)), Size(x(sec.tabDepth) - x(left), y(t / 2) - y(-t / 2)))
+            else {
+                drawRect(tabColor, Offset(x(left), y(-t / 2)), Size(x(h.start) - x(left), y(t / 2) - y(-t / 2)))
+                drawRect(tabColor, Offset(x(h.endInclusive), y(-t / 2)), Size(x(sec.tabDepth) - x(h.endInclusive), y(t / 2) - y(-t / 2)))
+                // the wedge, driven through the hole, bearing on the board's far face
+                drawRect(Color(0xFFB98C5A), Offset(x(h.start), y(-sec.wedgeThick / 2)), Size(x(h.endInclusive) - x(h.start), y(sec.wedgeThick / 2) - y(-sec.wedgeThick / 2)))
+            }
+            drawLine(ink, Offset(x(0.0), y(-t / 2 - 1)), Offset(x(0.0), y(t / 2 + 1)), strokeWidth = 2f)
+            val paint = android.graphics.Paint().apply { color = 0xFF23302A.toInt(); textSize = 30f; isAntiAlias = true }
+            drawContext.canvas.nativeCanvas.apply {
+                drawText("this part", x(left) + 6f, y(-t / 2) - 10f, paint)
+                // board labels go on whichever side of the board has room
+                fun beside(text: String, yy: Float) {
+                    val w = paint.measureText(text)
+                    val xx = if (x(b1) + 10f + w <= size.width) x(b1) + 10f else (x(b0) - 10f - w).coerceAtLeast(0f)
+                    drawText(text, xx, yy, paint)
+                }
+                beside("other board · ${"%.0f".format(t)} mm", y(-half) + 34f)
+                beside("slot ${"%.1f".format(t + sec.clearance)} mm (+${sec.clearance})", y(-half) + 70f)
+                drawText("tab ${"%.1f".format(sec.tabDepth)} mm", x(left) + 6f, y(t / 2) + 36f, paint)
+                if (h != null) drawText("wedge bites ${OrganizerGenerator.WEDGE_BITE} mm into the face", x(left) + 6f, y(half) - 12f, paint)
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+            Text("Joint ${index + 1} of ${design.joints.size}", color = Muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = { index = (index - 1 + design.joints.size) % design.joints.size }) { Text("‹") }
+            Spacer(Modifier.width(6.dp))
+            OutlinedButton(onClick = { index = (index + 1) % design.joints.size }) { Text("›") }
+        }
     }
 }
