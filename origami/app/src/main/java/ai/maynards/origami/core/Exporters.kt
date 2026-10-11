@@ -4,20 +4,22 @@ import java.util.Locale
 
 object SvgExporter {
     /** Red hairline cut paths, grouped by part. This is a 1:1 mm SVG for a laser/CNC workflow. */
-    fun render(design: OrganizerDesign, layout: LayoutPlan): String {
+    /** @param kerfMm the laser's cut width: outlines grow and slots shrink by half of it, so parts come out true. */
+    fun render(design: OrganizerDesign, layout: LayoutPlan, kerfMm: Double = 0.0): String {
         require(layout.fits) { "Generate a fitting sheet layout before exporting SVG" }
+        val half = kerfMm / 2
         val out = StringBuilder()
         out.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n")
         out.append("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"${layout.stock.widthMm}mm\" height=\"${layout.stock.heightMm}mm\" viewBox=\"0 0 ${layout.stock.widthMm} ${layout.stock.heightMm}\">\n")
         out.append("  <title>Screwless organizer cutting pattern</title>\n")
-        out.append("  <desc>${design.spec.widthMm} x ${design.spec.depthMm} x ${design.spec.heightMm} mm; ${design.spec.materialThicknessMm} mm stock; ${design.parts.size} parts; ${design.joints.size} tab-slot joints. Red hairlines are cuts.</desc>\n")
+        out.append("  <desc>${design.spec.widthMm} x ${design.spec.depthMm} x ${design.spec.heightMm} mm; ${design.spec.materialThicknessMm} mm stock; ${design.parts.size} parts; ${design.joints.size} tab-slot joints; kerf compensation ${kerfMm} mm. Red hairlines are cuts.</desc>\n")
         out.append("  <g fill=\"none\" stroke=\"#ff0000\" stroke-width=\"0.1\" vector-effect=\"non-scaling-stroke\">\n")
         for (part in design.parts) {
             val placement = layout.placement(part.id) ?: error("Missing placement for ${part.name}")
-            val outline = part.outline.map { part.sheetPoint(it, placement) }
+            val outline = Kerf.grow(part.outline.map { part.sheetPoint(it, placement) }, half)
             out.append("    <path id=\"${xml(part.id)}\" d=\"${polygonPath(outline)}\"/>\n")
             for ((index, cutout) in part.cutouts.withIndex()) {
-                val r = part.sheetCutout(cutout, placement)
+                val r = Kerf.shrink(part.sheetCutout(cutout, placement), half)
                 out.append("    <rect id=\"${xml(part.id)}-slot-${index + 1}\" x=\"${fmt(r.x)}\" y=\"${fmt(r.y)}\" width=\"${fmt(r.width)}\" height=\"${fmt(r.height)}\"/>\n")
             }
         }

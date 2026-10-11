@@ -105,6 +105,7 @@ fun OrigamiTab(
     var photoPreview by remember { mutableStateOf<ImageBitmap?>(null) }
     var notice by remember { mutableStateOf("") }
     var exportKind by remember { mutableStateOf(ExportKind.SVG) }
+    var kerfMm by remember { mutableStateOf(0.0) }
     val context = androidx.compose.ui.platform.LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -119,7 +120,7 @@ fun OrigamiTab(
         val l = layout ?: return
         val content = runCatching {
             when (exportKind) {
-                ExportKind.SVG -> SvgExporter.render(d, l)
+                ExportKind.SVG -> SvgExporter.render(d, l, kerfMm)
                 ExportKind.PROJECT -> ProjectJsonExporter.render(d, l)
             }
         }.getOrElse { notice = "Export failed: ${it.message ?: "invalid layout"}"; return }
@@ -251,7 +252,7 @@ fun OrigamiTab(
                     ExportScreen(Modifier.padding(insets), d, l,
                         onSvg = { exportKind = ExportKind.SVG; if (l.fits) svgPicker.launch("organizer-cut-pattern.svg") else notice = l.error ?: "Layout does not fit" },
                         onProject = { exportKind = ExportKind.PROJECT; jsonPicker.launch("organizer-project.json") },
-                        onLayout = { screen = Screen.LAYOUT })
+                        onLayout = { screen = Screen.LAYOUT }, kerfMm = kerfMm, onKerf = { kerfMm = it })
                 } }
                 Screen.GALLERY -> DesignGallery(Modifier.padding(insets))
             }
@@ -513,6 +514,7 @@ private fun DesignScreen(
                 StatPill("NO SCREWS")
             }
         }
+        item { StrengthCard(design) }
         item {
             Text("PARTS · TAP TO HIGHLIGHT", fontSize = 10.sp, color = Muted, letterSpacing = 1.3.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(7.dp))
@@ -588,7 +590,8 @@ private fun LayoutScreen(modifier: Modifier, design: OrganizerDesign, layout: La
 }
 
 @Composable
-private fun ExportScreen(modifier: Modifier, design: OrganizerDesign, layout: LayoutPlan, onSvg: () -> Unit, onProject: () -> Unit, onLayout: () -> Unit) {
+private fun ExportScreen(modifier: Modifier, design: OrganizerDesign, layout: LayoutPlan, onSvg: () -> Unit, onProject: () -> Unit, onLayout: () -> Unit,
+                         kerfMm: Double = 0.0, onKerf: (Double) -> Unit = {}) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Text("EXPORT", fontSize = 10.sp, letterSpacing = 1.6.sp, color = Leaf, fontWeight = FontWeight.Bold)
@@ -600,6 +603,13 @@ private fun ExportScreen(modifier: Modifier, design: OrganizerDesign, layout: La
                 Text("SVG · cutting pattern", fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Ink)
                 Spacer(Modifier.height(5.dp))
                 Text("1:1 millimetre viewBox · red hairline cut paths · tabs and slots", color = Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                Text("Laser kerf · outlines grow, slots shrink by half", fontSize = 12.sp, color = Muted)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 6.dp)) {
+                    listOf(0.0, 0.1, 0.15, 0.2).forEach { k ->
+                        FilterChip(selected = kerfMm == k, onClick = { onKerf(k) }, label = { Text(if (k == 0.0) "None" else "$k mm") })
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 Button(onClick = onSvg, enabled = layout.fits, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(13.dp)) { Text("SAVE SVG") }
                 if (!layout.fits) Text("SVG is disabled until all parts fit on the stock sheet.", color = Amber, fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
@@ -812,4 +822,37 @@ private fun pointInPolygon(point: Offset, polygon: List<Offset>): Boolean {
         j = i
     }
     return inside
+}
+
+/** Will it hold: each spanning board's sag and stress for a material and load (handbook values, a guide). */
+@Composable
+private fun StrengthCard(design: OrganizerDesign) {
+    var material by remember { mutableStateOf(Structure.Material.PLYWOOD) }
+    val default = Structure.defaultLoad(design.spec)
+    val loads = listOf("Light · 5 kg" to Structure.Load(5.0), "Default · ${"%.0f".format(default.kg)} kg" to default,
+        "Person · 90 kg centre" to Structure.Load(90.0, pointLoad = true))
+    var loadIndex by remember(design) { mutableStateOf(1) }
+    val checks = remember(design, material, loadIndex) { Structure.check(design, material, loads[loadIndex].second) }
+    CardBlock {
+        Text("WILL IT HOLD?", fontSize = 10.sp, letterSpacing = 1.5.sp, color = Leaf, fontWeight = FontWeight.Bold)
+        if (checks.isEmpty()) { Text("It rests on its base: no board spans a gap.", color = Muted, fontSize = 13.sp); return@CardBlock }
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Structure.Material.entries.forEach { m -> FilterChip(selected = material == m, onClick = { material = m }, label = { Text(m.label) }) }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            loads.forEachIndexed { i, (label, _) -> FilterChip(selected = loadIndex == i, onClick = { loadIndex = i }, label = { Text(label) }) }
+        }
+        checks.forEach { c ->
+            val (mark, color) = when (c.verdict) {
+                Structure.Verdict.OK -> "✓" to Leaf
+                Structure.Verdict.SAGS -> "◐" to Amber
+                Structure.Verdict.FAILS -> "✗" to Color(0xFFB91C1C)
+            }
+            Text("$mark ${c.partName} · sags %.1f mm (looks flat under %.1f) · %.1f of %.1f MPa".format(Locale.US, c.sagMm, c.limitMm, c.stressMpa, c.allowedMpa),
+                color = color, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp))
+            if (c.advice.isNotBlank()) Text("  → ${c.advice}", color = Muted, fontSize = 12.sp)
+        }
+        Text("Span ${"%.0f".format(checks.first().spanMm)} mm · handbook ${material.label.lowercase(Locale.US)} values with a ×${Structure.SAFETY.toInt()} safety factor · a guide, not a rating",
+            color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+    }
 }
