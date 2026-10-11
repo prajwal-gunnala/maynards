@@ -101,8 +101,11 @@ object ChatState {
     var busy by mutableStateOf(false)
     private var client: Chat? = null
     private var endpoint: String = ""
-    fun chat(url: String): Chat {
-        if (client == null || endpoint != url) { client = Chat(url); endpoint = url }
+    private var apiKey: String = ""
+    fun chat(url: String, apiKey: String): Chat {
+        if (client == null || endpoint != url || this.apiKey != apiKey) {
+            client = Chat(url, apiKey); endpoint = url; this.apiKey = apiKey
+        }
         return client!!
     }
 }
@@ -159,7 +162,7 @@ private fun Failed(run: RunState, onPickModel: () -> Unit) {
 
 @Composable
 private fun ChatView(run: RunState, runner: Runner, host: MeshHost?, canSee: Boolean, system: () -> String?, onAnswer: (Answer) -> Unit) {
-    val chat = ChatState.chat(runner.endpoint)
+    val chat = ChatState.chat(runner.endpoint, runner.apiKey)
     val bubbles = ChatState.bubbles
     var input by remember { mutableStateOf("") }
     val busy = ChatState.busy

@@ -2,6 +2,7 @@ package ai.maynards.mesh.ui
 
 import ai.maynards.mesh.MeshService
 import ai.maynards.mesh.engine.gb
+import ai.maynards.mesh.engine.Net
 import ai.maynards.mesh.mesh.MeshHost
 import ai.maynards.mesh.mesh.Peer
 import ai.maynards.origami.OrigamiTab
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -29,7 +31,6 @@ import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryChargingFull
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Hub
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Laptop
 import androidx.compose.material.icons.outlined.PhoneAndroid
@@ -46,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -72,13 +74,13 @@ private val TABS = listOf(
     Tab("Models", Icons.Outlined.Inventory2),
     Tab("Use", Icons.Outlined.Chat),
     Tab("Stats", Icons.Outlined.BarChart),
-    Tab("Origami", Icons.Outlined.Edit),
 )
 
 @Composable
 fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.maynards.mesh.brain.Runner, stats: ai.maynards.mesh.brain.Stats, downloads: ai.maynards.mesh.brain.Downloads, hostCap: Long = 0, autoRun: String? = null, autoRunHelpers: Int = 0, onChangeRole: () -> Unit) {
     val ctx = LocalContext.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
+    var useCase by rememberSaveable { mutableStateOf<String?>(null) }
     val peers by host.peers.collectAsState()
     val me = rememberSpecs()
     LaunchedEffect(Unit) {
@@ -105,7 +107,7 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
     LaunchedEffect(Unit) { while (true) { online = ai.maynards.mesh.engine.Net.online(ctxNow); kotlinx.coroutines.delay(4_000) } }
     Column(Modifier.fillMaxSize()) {
         // the one line that says, from across a room, what this phone is doing (the chat page has its own header)
-        if (tab != 2 && tab != 4) StatusStrip(
+        if (tab != 2) StatusStrip(
             state = when (runNow.status) {
                 ai.maynards.mesh.brain.RunState.Status.READY -> "ready"
                 ai.maynards.mesh.brain.RunState.Status.LOADING -> "loading"
@@ -130,18 +132,35 @@ fun HostScreen(host: MeshHost, shelf: ai.maynards.mesh.brain.Shelf, runner: ai.m
                 0 -> MeshTab(host, runner, onChangeRole, onGo = { tab = it })
                 1 -> ModelsTab(shelf, meshDevices(me, peers.values, hostCap), onRun = { runner.run(it); tab = 2 },
                     peers = peers.values, downloads = downloads)
-                2 -> {
-                    val run by runner.state.collectAsState()
-                    UseTab(
-                        runner, host, canSee = run.plan?.model?.let { shelf.projector(it) } != null, onPickModel = { tab = 1 },
-                        system = { meshNote(run.plan, me, peers.values) },
-                    ) { a ->
-                        run.plan?.let { stats.add(it, a, me.heat) }
-                        runner.record(a)
+                2 -> when (useCase) {
+                    null -> UseHome(onChoose = { useCase = it })
+                    "origami" -> Column(Modifier.fillMaxSize()) {
+                        NButton("← Use cases", fill = Paper) { useCase = null }
+                        OrigamiTab(aiEndpoint = runner.endpoint, aiApiKey = runner.apiKey, prepareAi = { needsVision -> ensureUseCaseModel(
+                            needsVision, shelf, runner, meshDevices(me, peers.values, hostCap))
+                        })
+                    }
+                    "case" -> Column(Modifier.fillMaxSize()) {
+                        NButton("← Use cases", fill = Paper) { useCase = null }
+                        PrivateUseTab(runner, peers.values, onEnsureModel = {
+                            ensureUseCaseModel(false, shelf, runner, meshDevices(me, peers.values, hostCap))
+                        })
+                    }
+                    else -> {
+                        val run by runner.state.collectAsState()
+                        Column(Modifier.fillMaxSize()) {
+                            NButton("← Use cases", fill = Paper) { useCase = null }
+                            UseTab(
+                                runner, host, canSee = run.plan?.model?.let { shelf.projector(it) != null } == true, onPickModel = { tab = 1 },
+                                system = { meshNote(run.plan, me, peers.values) },
+                            ) { a ->
+                                run.plan?.let { stats.add(it, a, me.heat, peers.values, me.usableBytes) }
+                                runner.record(a)
+                            }
+                        }
                     }
                 }
                 3 -> StatsTab(stats)
-                4 -> OrigamiTab(aiEndpoint = "http://127.0.0.1:8080")
                 else -> Soon(TABS[tab])
             }
         }
@@ -161,6 +180,17 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
     val remoteState by host.remoteState.collectAsState()
     val remoteRoute by host.remoteRoute.collectAsState()
     val me = rememberSpecs()
+    var senseNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            senseNow = System.currentTimeMillis()
+            kotlinx.coroutines.delay(500)
+        }
+    }
+    val helperGraphRecentlyObserved = run.plan?.helpers.orEmpty().any { slice ->
+        val eventAt = peers[slice.deviceId]?.rpcEventAtMs ?: 0L
+        eventAt > 0 && senseNow - eventAt in 0..2_000
+    }
     var showQr by remember { mutableStateOf(host.peers.value.isEmpty()) }   // once someone joined, the web comes first
     var showRemoteQr by remember { mutableStateOf(false) }
     var publicUrl by rememberSaveable {
@@ -170,6 +200,18 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
     var forceRelay by rememberSaveable { mutableStateOf(false) }
     var remoteError by remember { mutableStateOf("") }
     val remoteScope = rememberCoroutineScope()
+    var localRoutes by remember { mutableStateOf(Net.addresses()) }
+    var selectedLocalIp by rememberSaveable { mutableStateOf("") } // blank is the explicit Auto option
+    LaunchedEffect(Unit) {
+        while (true) {
+            localRoutes = Net.addresses()
+            kotlinx.coroutines.delay(2_000)
+        }
+    }
+    LaunchedEffect(localRoutes, selectedLocalIp) {
+        if (selectedLocalIp.isNotBlank() && localRoutes.none { it.ip == selectedLocalIp }) selectedLocalIp = ""
+    }
+    val localInvite = host.invite(selectedLocalIp.takeIf { it.isNotBlank() })
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -206,7 +248,7 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
                 listOf(WebNode("This phone", HostGreen, isHost = true, note = layersOf(run.plan, me.id))) +
                     peers.values.map { WebNode(it.specs.name, HelperPurple, note = layersOf(run.plan, it.id)) },
                 Modifier.fillMaxWidth().aspectRatio(1.4f),
-                busy = run.status == ai.maynards.mesh.brain.RunState.Status.READY,
+                busy = helperGraphRecentlyObserved,
             )
         }
 
@@ -256,13 +298,29 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
             NBox(fill = Yellow) {
                 Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     IconLabel(Icons.Outlined.QrCode2, if (showRemoteQr && remoteInvite != null) "Scan for WebRTC remote pairing" else "Scan with a Helper")
+                    if (!showRemoteQr) {
+                        Text("Connection route · choose what this QR advertises", fontSize = 12.sp, color = Muted)
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            RouteChoice("Auto", selectedLocalIp.isBlank()) { selectedLocalIp = "" }
+                            localRoutes.forEach { address ->
+                                RouteChoice("${address.kind.uppercase()} · ${address.ip}", selectedLocalIp == address.ip) {
+                                    selectedLocalIp = address.ip
+                                }
+                            }
+                        }
+                        Text(
+                            if (selectedLocalIp.isBlank()) "Auto advertises available routes in preference order."
+                            else "This QR advertises only ${selectedLocalIp}; the Helper will not silently switch routes.",
+                            fontSize = 11.sp, color = Muted,
+                        )
+                    }
                     Box(Modifier.background(Paper, RoundedCornerShape(8.dp)).border(Border, Ink, RoundedCornerShape(8.dp)).padding(10.dp)) {
-                        val inviteJson = if (showRemoteQr) remoteInvite?.toJson() ?: host.invite().toJson() else host.invite().toJson()
+                        val inviteJson = if (showRemoteQr) remoteInvite?.toJson() ?: localInvite.toJson() else localInvite.toJson()
                         QrImage(remember(inviteJson, token, peers.size) { inviteJson }, Modifier.size(220.dp))
                     }
                     val qrRemoteInvite = remoteInvite
                     if (showRemoteQr && qrRemoteInvite != null) Mono("${qrRemoteInvite.remoteUrl} · expires in 10 minutes", 11)
-                    else Mono(host.invite().hosts.joinToString("  "), 11)
+                    else Mono(localInvite.hosts.joinToString("  ").ifBlank { "No compatible local route available" }, 11)
                 }
             }
         }
@@ -288,6 +346,19 @@ private fun MeshTab(host: MeshHost, runner: ai.maynards.mesh.brain.Runner, onCha
     }
 }
 
+@Composable
+private fun RouteChoice(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier
+            .background(if (selected) Term else Paper, RoundedCornerShape(18.dp))
+            .border(1.dp, if (selected) Term else Ink, RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Text(label, color = if (selected) Paper else Ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 /**
  * A short note for the model about where it is running, so "what am I running on?" gets a real answer.
  * Only this mesh's own device specs go in; nothing leaves the devices.
@@ -299,10 +370,11 @@ private fun meshNote(plan: ai.maynards.mesh.brain.Plan?, me: ai.maynards.mesh.en
         plan?.slices?.firstOrNull { it.deviceId == id }?.let { append(", holding layers ${it.from}-${it.to - 1} (${gb(it.bytes)} GB)") }
     }
     return buildString {
-        appendLine("You are ${plan?.model?.name ?: "a local model"}, running inside MeshAI: fully offline, on the user's own devices, no cloud.")
+        appendLine("You are ${plan?.model?.name ?: "a local model"}, served by llama-server on the Host phone. MeshAI does not route this request to a cloud model API.")
         appendLine("The model is ${plan?.reason?.lowercase() ?: "running"}. Devices:")
         appendLine(line("This phone (${me.name}, the Host)", me, me.id))
-        peers.forEach { appendLine(line("${it.specs.name} (Helper, link ${"%.0f".format(it.rttMs)} ms)", it.specs, it.id)) }
+        peers.forEach { appendLine(line("${it.specs.name} (Helper, ${it.linkKind} link, ${"%.0f".format(it.rttMs)} ms)", it.specs, it.id)) }
+        appendLine("A Helper assigned layers receives intermediate activations to compute those layers. Do not claim those activations contain no recoverable user information.")
         append("Answer briefly. Use these facts when asked about the devices or where you run.")
     }
 }
@@ -331,7 +403,7 @@ private fun LiveMetricsCard(
     val link = peers.mapNotNull { it.rttMs.takeIf { ms -> ms >= 0 } }.minOrNull()
     NBox(pad = 12.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Label("LIVE MESH METRICS")
+            Label("SPIDER SENSE · LIVE MESH METRICS")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 MetricCell("STATE", run.status.name.lowercase(), Modifier.weight(1f))
                 MetricCell("UPTIME", "${elapsed}s", Modifier.weight(1f))
@@ -344,11 +416,19 @@ private fun LiveMetricsCard(
             }
             val plan = run.plan
             Mono(
-                "${plan?.slices?.size ?: 0} device${if ((plan?.slices?.size ?: 0) == 1) "" else "s"} executing · " +
+                "${plan?.slices?.size ?: 0} device${if ((plan?.slices?.size ?: 0) == 1) "" else "s"} assigned · " +
                     "${metrics.completedRequests} completed request${if (metrics.completedRequests == 1) "" else "s"} · " +
                     "last output ${metrics.lastTokens} tokens",
                 10, Muted,
             )
+            if (plan?.helpers?.isNotEmpty() == true) {
+                peers.filter { peer -> plan.helpers.any { it.deviceId == peer.id } }.forEach { peer ->
+                    val age = if (peer.rpcEventAtMs > 0) ((now - peer.rpcEventAtMs) / 1_000).coerceAtLeast(0) else -1
+                    Mono("${peer.specs.name}: " + if (peer.rpcSequence > 0)
+                        "native RPC ${peer.rpcEvent} observed #${peer.rpcSequence} · ${age}s ago"
+                    else "waiting for native RPC graph activity evidence", 10, if (age in 0..2) Term else Muted)
+                }
+            }
         }
     }
 }
@@ -363,9 +443,42 @@ private fun MetricCell(label: String, value: String, modifier: Modifier = Modifi
 
 @Composable
 private fun PeerRow(p: Peer, holding: ai.maynards.mesh.brain.Slice? = null) = DeviceRow(
-    p.specs.name, "${p.addr} · helper", p.specs.usableBytes, p.specs.heat, p.specs.battery, p.specs.charging,
+    p.specs.name, "${p.linkKind} · ${p.addr} · helper" + if (p.rpcSequence > 0) " · RPC ${p.rpcEvent} #${p.rpcSequence} observed" else " · awaiting RPC event",
+    p.specs.usableBytes, p.specs.heat, p.specs.battery, p.specs.charging,
     p.rttMs, HelperPurple, p.specs.kind == "laptop", holding,
 )
+
+/** Chooses the best installed model that fits the connected memory pool for the requested modality. */
+private suspend fun ensureUseCaseModel(
+    needsVision: Boolean,
+    shelf: ai.maynards.mesh.brain.Shelf,
+    runner: ai.maynards.mesh.brain.Runner,
+    devices: List<ai.maynards.mesh.brain.Device>,
+): String {
+    val current = runner.state.value
+    val currentModel = current.plan?.model
+    if (current.status == ai.maynards.mesh.brain.RunState.Status.READY && currentModel != null &&
+        (!needsVision || shelf.projector(currentModel) != null)) return currentModel.name
+
+    val candidates = withContext(Dispatchers.IO) { shelf.scan() }
+        .filter { !needsVision || shelf.projector(it) != null }
+        .sortedByDescending { it.fileBytes }
+    val selected = candidates.firstNotNullOfOrNull { model ->
+        val plan = ai.maynards.mesh.brain.Planner.plan(model, devices,
+            hostExtra = shelf.projector(model)?.length() ?: 0, preferSplit = false)
+        plan.takeIf { it.verdict != ai.maynards.mesh.brain.Verdict.NOT_POSSIBLE }
+    } ?: throw IllegalStateException(if (needsVision)
+        "No installed vision model with its matching mmproj fits this mesh. Add one in Models."
+    else "No installed text model fits this mesh. Add one in Models.")
+
+    runner.run(selected)
+    val result = kotlinx.coroutines.withTimeout(10 * 60_000L) {
+        runner.state.first { it.status == ai.maynards.mesh.brain.RunState.Status.READY || it.status == ai.maynards.mesh.brain.RunState.Status.FAILED }
+    }
+    if (result.status != ai.maynards.mesh.brain.RunState.Status.READY)
+        throw IllegalStateException(result.step.ifBlank { "Could not start ${selected.model.name}" })
+    return selected.model.name
+}
 
 /**
  * The one thing to do next, whatever the state is. Without this a person opening the app has to
