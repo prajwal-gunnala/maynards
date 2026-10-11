@@ -164,7 +164,7 @@ object GlbWriter {
         val all = parts.flatMap { it.positions.asList() }
         val minX = all.filterIndexed { i, _ -> i % 3 == 0 }.minOrNull() ?: 0f; val maxX = all.filterIndexed { i, _ -> i % 3 == 0 }.maxOrNull() ?: 1f
         val minZ = all.filterIndexed { i, _ -> i % 3 == 2 }.minOrNull() ?: 0f; val maxZ = all.filterIndexed { i, _ -> i % 3 == 2 }.maxOrNull() ?: 1f
-        val pad = maxOf(maxX - minX, maxZ - minZ) * 1.5f
+        val pad = maxOf(maxX - minX, maxZ - minZ) * 0.35f      // enough for the shadow, small enough not to shrink the framing
         val fy = floorY - 0.0005f
         val floor = PartMesh("floor", "Floor",
             floatArrayOf(minX - pad, fy, minZ - pad, maxX + pad, fy, minZ - pad, maxX + pad, fy, maxZ + pad, minX - pad, fy, maxZ + pad),

@@ -18,6 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import com.google.android.filament.IndirectLight
 import com.google.android.filament.Skybox
+import com.google.android.filament.Texture
+import com.google.android.filament.TextureSampler
+import com.google.android.filament.android.TextureHelper
 import com.google.android.filament.View
 import com.google.android.filament.utils.ModelViewer
 import com.google.android.filament.utils.Utils
@@ -49,12 +52,30 @@ private class FilamentScene(sv: SurfaceView) : Choreographer.FrameCallback {
     companion object { init { Utils.init() } }
 
     private val choreographer = Choreographer.getInstance()
-    private val viewer = ModelViewer(sv)
+    // start at a three-quarter view from above, so depth and joints show; the model sits at the default (0, 0, -4)
+    private val viewer = ModelViewer(sv, com.google.android.filament.Engine.create(),
+        com.google.android.filament.android.UiHelper(com.google.android.filament.android.UiHelper.ContextErrorPolicy.DONT_CHECK),
+        com.google.android.filament.utils.Manipulator.Builder()
+            .targetPosition(0f, -0.05f, -4f).orbitHomePosition(1.95f, 1.3f, -4f + 2.95f)
+            .viewport(maxOf(sv.width, 1), maxOf(sv.height, 1)).zoomSpeed(0.05f)
+            .build(com.google.android.filament.utils.Manipulator.Mode.ORBIT))
     private var loaded: ByteArray? = null
     private var alive = true
+    /** The wood grain, uploaded once: this Filament build's glTF loader cannot decode PNG itself. */
+    private val wood: Texture by lazy {
+        val bmp = WoodTexture.bitmap()
+        Texture.Builder().width(bmp.width).height(bmp.height).levels(10).sampler(Texture.Sampler.SAMPLER_2D)
+            .format(Texture.InternalFormat.SRGB8_A8)
+            .usage(Texture.Usage.SAMPLEABLE or Texture.Usage.UPLOADABLE or Texture.Usage.GEN_MIPMAPPABLE)
+            .build(viewer.engine).also { t ->
+                TextureHelper.setBitmap(viewer.engine, t, 0, bmp)
+                t.generateMipmaps(viewer.engine)
+            }
+    }
 
     init {
         sv.setOnTouchListener { _, e -> viewer.onTouchEvent(e); true }
+        viewer.cameraFocalLength = 38f
         val engine = viewer.engine
         viewer.scene.skybox = Skybox.Builder().color(0.96f, 0.95f, 0.93f, 1f).build(engine)
         // soft daylight from every side (one spherical-harmonics band), plus the viewer's sun for shadows
@@ -76,6 +97,10 @@ private class FilamentScene(sv: SurfaceView) : Choreographer.FrameCallback {
         viewer.destroyModel()
         viewer.loadModelGlb(ByteBuffer.wrap(glb))
         viewer.transformToUnitCube()
+        val sampler = TextureSampler(TextureSampler.MinFilter.LINEAR_MIPMAP_LINEAR, TextureSampler.MagFilter.LINEAR, TextureSampler.WrapMode.REPEAT)
+        viewer.asset?.instance?.materialInstances?.forEach { mi ->
+            if (mi.material.hasParameter("baseColorMap")) mi.setParameter("baseColorMap", wood, sampler)
+        }
         val rm = viewer.engine.renderableManager
         viewer.asset?.entities?.forEach { e ->
             if (rm.hasComponent(e)) rm.getInstance(e).let { i -> rm.setCastShadows(i, true); rm.setReceiveShadows(i, true) }
@@ -123,23 +148,30 @@ private class FilamentScene(sv: SurfaceView) : Choreographer.FrameCallback {
 /** Plywood face veneer drawn in code: no downloaded texture, nothing to license, works offline. */
 object WoodTexture {
     private var cached: ByteArray? = null
+    private var cachedBitmap: Bitmap? = null
 
-    fun png(size: Int = 512): ByteArray = cached ?: run {
+    /** A 4×4 placeholder for the glTF file: it only marks the material as textured; the grain is bound directly. */
+    fun png(): ByteArray = cached ?: ByteArrayOutputStream().also {
+        Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply { eraseColor(0xFFC8A070.toInt()) }.compress(Bitmap.CompressFormat.PNG, 100, it)
+    }.toByteArray().also { cached = it }
+
+    fun bitmap(size: Int = 512): Bitmap = cachedBitmap ?: run {
         val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val px = IntArray(size * size)
         for (y in 0 until size) for (x in 0 until size) {
             val u = x / size.toDouble(); val v = y / size.toDouble()
-            // long grain along u, gently wavy, with fine fibres and a few darker growth lines (tileable: whole periods)
-            val wave = sin(2 * Math.PI * (u * 2 + 0.15 * sin(2 * Math.PI * v * 3)))
-            val rings = sin(2 * Math.PI * (v * 14 + 0.35 * wave))
-            val fibre = sin(2 * Math.PI * (v * 97 + u * 3)) * 0.5 + sin(2 * Math.PI * (v * 211 + u * 7)) * 0.25
-            val t = 0.5 + 0.22 * rings + 0.06 * fibre - 0.08 * abs(rings * rings * rings)
-            val r = (205 * t + 40).coerceIn(0.0, 255.0).toInt()
-            val g = (158 * t + 30).coerceIn(0.0, 255.0).toInt()
-            val b = (104 * t + 18).coerceIn(0.0, 255.0).toInt()
+            // birch plywood face veneer: pale, fine, almost straight grain along u, low contrast (tileable: whole periods)
+            val drift = 0.04 * sin(2 * Math.PI * (u * 2 + 0.3 * sin(2 * Math.PI * v)))
+            val rings = sin(2 * Math.PI * (v * 22 + drift))
+            val fibre = sin(2 * Math.PI * (v * 131 + u * 2)) * 0.5 + sin(2 * Math.PI * (v * 263 + u * 5)) * 0.3
+            val streak = sin(2 * Math.PI * (v * 5 + 0.1 * sin(2 * Math.PI * u)))
+            val t = 1.0 - 0.07 * abs(rings * rings * rings * rings * rings) - 0.025 * fibre - 0.035 * streak
+            val r = (228 * t).coerceIn(0.0, 255.0).toInt()
+            val g = (199 * t).coerceIn(0.0, 255.0).toInt()
+            val b = (156 * t).coerceIn(0.0, 255.0).toInt()
             px[y * size + x] = (0xFF shl 24) or (r shl 16) or (g shl 8) or b
         }
         bmp.setPixels(px, 0, size, 0, 0, size, size)
-        ByteArrayOutputStream().also { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray().also { cached = it }
+        bmp.also { cachedBitmap = it }
     }
 }
