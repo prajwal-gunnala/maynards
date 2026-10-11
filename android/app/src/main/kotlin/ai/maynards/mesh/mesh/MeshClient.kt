@@ -172,7 +172,9 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
             while (isActive) {
                 delay(2_000)
                 val running = engine.state.value.let { if (it.status == EngineState.Status.RUNNING) it.address else "" }
-                runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson(), "engine" to running, "store" to store.state.value.json())) }.onFailure { w.close() }
+                runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson(), "engine" to running, "store" to store.state.value.json(),
+                    "stored" to org.json.JSONObject(store.stored().mapValues { org.json.JSONArray(it.value) }),
+                    "hashes" to org.json.JSONArray(store.hashes()))) }.onFailure { w.close() }
             }
             eventReporter.cancel()
         }

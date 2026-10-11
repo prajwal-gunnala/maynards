@@ -95,9 +95,9 @@ fun ModelsTab(shelf: Shelf, devices: List<Device>, onRun: (Plan) -> Unit,
             )
         }
 
-        Section(Verdict.DOABLE, plans, onPhone, onRun, get, active)
-        Section(Verdict.TIGHT, plans, onPhone, onRun, get, active)
-        Section(Verdict.NOT_POSSIBLE, plans, onPhone, onRun, get, active)
+        Section(Verdict.DOABLE, plans, onPhone, onRun, get, active, peers)
+        Section(Verdict.TIGHT, plans, onPhone, onRun, get, active, peers)
+        Section(Verdict.NOT_POSSIBLE, plans, onPhone, onRun, get, active, peers)
         // files a laptop offers that we know nothing about yet: get them, then they are planned like the rest
         val notChat = listOf("mmproj", "tts", "asr", "whisper", "diffusion", "embed")
         val unknown = offers.keys.filter { f ->
@@ -126,17 +126,18 @@ private fun look(v: Verdict) = when (v) {
 
 @Composable
 private fun Section(v: Verdict, plans: List<Plan>, onPhone: Set<String>, onRun: (Plan) -> Unit,
-                    get: (String) -> (() -> Unit)?, active: Map<String, ai.maynards.mesh.brain.Download>) {
+                    get: (String) -> (() -> Unit)?, active: Map<String, ai.maynards.mesh.brain.Download>,
+                    peers: Collection<Peer> = emptyList()) {
     val mine = plans.filter { it.verdict == v }
     if (mine.isEmpty()) return
     val (label, color, icon) = look(v)
     IconLabel(icon, "$label · ${mine.size}")
-    mine.forEach { ModelCard(it, color, it.model.file in onPhone, onRun, get(it.model.file), active[it.model.file]) }
+    mine.forEach { ModelCard(it, color, it.model.file in onPhone, onRun, get(it.model.file), active[it.model.file], peers) }
 }
 
 @Composable
 private fun ModelCard(p: Plan, color: Color, onPhone: Boolean, onRun: (Plan) -> Unit,
-                      get: (() -> Unit)?, progress: ai.maynards.mesh.brain.Download?) {
+                      get: (() -> Unit)?, progress: ai.maynards.mesh.brain.Download?, peers: Collection<Peer> = emptyList()) {
     val m = p.model
     NBox(fill = color, shadow = 5.dp, pad = 14.dp) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -149,6 +150,24 @@ private fun ModelCard(p: Plan, color: Color, onPhone: Boolean, onRun: (Plan) -> 
             }
             Text(p.reason, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Ink)
             if (p.slices.isNotEmpty()) LayerBar(p)
+            // which Helpers already hold their planned layers: those weights load from the phone, not the cable
+            if (p.helpers.isNotEmpty() && onPhone) {
+                val app = androidx.compose.ui.platform.LocalContext.current.applicationContext as ai.maynards.mesh.MeshApp
+                val indexes by app.layerIndex.ready.collectAsState()
+                androidx.compose.runtime.LaunchedEffect(m.file) { app.layerIndex.ensure(java.io.File(app.shelf.dir, m.file)) }
+                p.helpers.forEach { slice ->
+                    val peer = peers.firstOrNull { it.id == slice.deviceId }
+                    val total = slice.to - slice.from
+                    val have = ai.maynards.mesh.brain.storedLayers(indexes[m.file], peer?.hashes.orEmpty(), slice.from, slice.to - 1)
+                    val (text, tone) = when {
+                        have == null -> "… ${slice.name} · checking which layers it already has" to Muted
+                        have == total -> "✓ ${slice.name} already has all $total layers (${slice.from}–${slice.to - 1}) · they load from the phone" to Term
+                        have > 0 -> "◐ ${slice.name} has $have of $total layers · the rest cross the cable once" to Warn
+                        else -> "○ ${slice.name} has none of layers ${slice.from}–${slice.to - 1} · the first run sends them" to Muted
+                    }
+                    Mono(text, 11, tone)
+                }
+            }
             when {
                 !onPhone -> GetRow(p.model.file, get, progress)
                 p.verdict != Verdict.NOT_POSSIBLE -> NButton("Run", fill = Paper) { onRun(p) }

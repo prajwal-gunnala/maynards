@@ -32,3 +32,15 @@ class LayerStoreTest {
         }
     }
 }
+
+class StoredCoverageTest {
+    @org.junit.Test fun rangesCoverPlansFullyPartlyOrNot() {
+        org.junit.Assert.assertEquals(Stored.ALL, storedCoverage(listOf("8-31"), 8, 31))
+        org.junit.Assert.assertEquals(Stored.ALL, storedCoverage(listOf("all"), 0, 47))
+        org.junit.Assert.assertEquals(Stored.ALL, storedCoverage(listOf("0-15", "16-31"), 8, 31))
+        org.junit.Assert.assertEquals(Stored.PART, storedCoverage(listOf("12-31"), 8, 31))
+        org.junit.Assert.assertEquals(Stored.NONE, storedCoverage(listOf("0-7"), 8, 31))
+        org.junit.Assert.assertEquals(Stored.NONE, storedCoverage(null, 8, 31))
+        org.junit.Assert.assertEquals(Stored.NONE, storedCoverage(listOf("garbage"), 8, 31))
+    }
+}

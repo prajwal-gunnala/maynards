@@ -45,6 +45,10 @@ data class Peer(
     val rpcSequence: Long = 0,
     val rpcEventAtMs: Long = 0,
     val models: Map<String, Long> = emptyMap(),  // model files this device offers (laptops), name -> bytes
+    /** Layer ranges this Helper already stores per model file ("8-31", "all"): those weights skip the cable. */
+    val stored: Map<String, List<String>> = emptyMap(),
+    /** Every stored tensor hash this Helper holds; the Host maps them to layers with its LayerIndex. */
+    val hashes: Set<String> = emptySet(),
     val filesPort: Int = 0,
 ) {
     fun modelUrl(file: String) = "http://$addr:$filesPort/models/$file"
@@ -407,7 +411,11 @@ class MeshHost(private val ctx: Context) {
                 val m = wire.read() ?: break
                 when (m.optString("t")) {
                     "specs" -> runCatching { Specs.fromJson(m.getJSONObject("specs")) }.getOrNull()?.let { s ->
-                        _peers.update { p -> p[id]?.let { p + (id to it.copy(specs = s)) } ?: p }
+                        val stored = m.optJSONObject("stored")?.let { o ->
+                            o.keys().asSequence().associateWith { k -> o.getJSONArray(k).let { a -> List(a.length()) { a.getString(it) } } }
+                        }
+                        val hashes = m.optJSONArray("hashes")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }
+                        _peers.update { p -> p[id]?.let { p + (id to it.copy(specs = s, stored = stored ?: it.stored, hashes = hashes ?: it.hashes)) } ?: p }
                     }
                     "pong" -> {
                         rtts.addLast((System.nanoTime() - m.optLong("at")) / 1e6)

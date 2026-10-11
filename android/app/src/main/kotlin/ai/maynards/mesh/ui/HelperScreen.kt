@@ -244,6 +244,11 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
                         if (store.total > 0) store.done.toFloat() / store.total else 1f, HostGreen)
                     if (store.total > 0) Mono("${store.model.removeSuffix(".gguf").take(34)} · ${store.done}/${store.total}" +
                         if (store.working) " · saving…" else if (store.done == store.total) " · ready" else "", 11, Ink)
+                    // per model, which layers are kept here (the Host skips sending these)
+                    val ranges = androidx.compose.runtime.remember(store.bytes, store.done) { client.store.stored() }
+                    ranges.forEach { (file, rs) ->
+                        Mono("${file.removeSuffix(".gguf").take(30)} · layers ${rs.joinToString { if (it == "all") "all" else it.replace("-", "–") }}", 11, Term)
+                    }
                     NButton("Clear", fill = Paper) { client.store.clear() }
                 }
             }

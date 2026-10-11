@@ -24,6 +24,7 @@ class MeshApp : Application() {
         }
     }
     val stats: Stats by lazy { Stats(this) }
+    val layerIndex: ai.maynards.mesh.brain.LayerIndex by lazy { ai.maynards.mesh.brain.LayerIndex(this) }
     val downloads: Downloads by lazy { Downloads(shelf) }
 
     /** Test switch: pretend the Host has at most this much memory for models (0 = off). */
