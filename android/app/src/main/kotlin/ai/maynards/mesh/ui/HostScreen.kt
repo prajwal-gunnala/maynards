@@ -488,7 +488,7 @@ private suspend fun ensureUseCaseModel(
     ai.maynards.mesh.brain.Sense.add("Host", "Model · ${choice.why}", ai.maynards.mesh.brain.SenseEvent.Kind.MODEL)
     if (choice.keep) return choice.model.name
 
-    runner.run(choice.plan!!, devicesNow = { devices })
+    runner.run(choice.plan!!, devicesNow = { devices }, task = task)
     val result = kotlinx.coroutines.withTimeout(10 * 60_000L) {
         runner.state.first { it.status == ready || it.status == failed }
     }

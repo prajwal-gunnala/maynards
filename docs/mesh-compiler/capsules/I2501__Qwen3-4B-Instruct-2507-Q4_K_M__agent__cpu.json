@@ -1,0 +1,44 @@
+{
+  "kind": "ned-capsule",
+  "version": 1,
+  "source": "mesh-compiler",
+  "device": "I2501",
+  "model_file": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+  "model_bytes": 2497281120,
+  "task": "agent",
+  "scope": "cpu",
+  "engine_build": "66fba63",
+  "enact": {
+    "engine": "cpu",
+    "threads": 6,
+    "ctk": "q8_0",
+    "ctv": "q8_0",
+    "ub": 512,
+    "b": 2048,
+    "fa": "on",
+    "ngl": 0
+  },
+  "evidence": {
+    "run_ids": [
+      1,
+      2,
+      3,
+      4,
+      9,
+      10,
+      30,
+      31,
+      45,
+      46,
+      47,
+      48,
+      49,
+      68
+    ],
+    "label": "4B Q4_K_M trial 0",
+    "quality": "14/15",
+    "task_seconds": 95.7,
+    "baseline_task_seconds": 95.7,
+    "is_baseline": true
+  }
+}

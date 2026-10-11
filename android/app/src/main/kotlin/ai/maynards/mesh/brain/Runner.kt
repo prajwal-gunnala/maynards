@@ -72,8 +72,12 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
     /** Host CPU threads of the current run, and whether they came from a Mesh Compiler profile. */
     var threadsUsed = 0; private set
     var threadsFromProfile = false; private set
+    /** The Mesh Compiler capsule considered for the current run: applied, refused with a reason, or none. */
+    private val _compilerCapsule = MutableStateFlow<CompilerCapsule.Use?>(null)
+    val compilerCapsule: StateFlow<CompilerCapsule.Use?> = _compilerCapsule
+    var capsuleTask = "chat"; private set
 
-    fun run(requested: Plan, ctx: Int = 4096, devicesNow: (() -> List<Device>)? = null, threads: Int? = null) {
+    fun run(requested: Plan, ctx: Int = 4096, devicesNow: (() -> List<Device>)? = null, threads: Int? = null, task: Task? = null) {
         // A model still running holds memory that frees once it stops: count it as free for the check.
         val previous = _state.value.takeIf { it.status != RunState.Status.IDLE && it.status != RunState.Status.FAILED }?.plan
         stop()
@@ -162,9 +166,24 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             step("Loading ${plan.model.name}", RunState.Status.LOADING)
             // explicit (the Compiler measuring) > a measured profile for this phone, model, ctx and split > default
             val profiled = profiles?.threads(Compiler.key(android.os.Build.MODEL, plan, ctx))
-            val threads = threads ?: profiled ?: (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
+            // the Mesh Compiler's measured capsule for this phone model, model file and task, if any
+            capsuleTask = CompilerCapsule.taskFor(task)
+            val use = runCatching {
+                CompilerCapsule.choose(CompilerCapsule.load(java.io.File(shelf.dir.parentFile, "capsules")),
+                    android.os.Build.MODEL, plan.model.file, plan.model.fileBytes, capsuleTask)
+            }.getOrNull()
+            _compilerCapsule.value = use
+            val tuning = (use as? CompilerCapsule.Use.Apply)?.tuning
+            when (use) {
+                is CompilerCapsule.Use.Apply -> Sense.add("Host", "Compiler capsule · ${use.capsule.task} · applied · runs " +
+                    use.capsule.runIds.take(4).joinToString(","), SenseEvent.Kind.MODEL)
+                is CompilerCapsule.Use.Refuse -> Sense.add("Host", "Compiler capsule · ${use.capsule.task} · refused · ${use.reason}", SenseEvent.Kind.MODEL)
+                null -> {}
+            }
+            // explicit (the on-phone Tune measuring) > this phone's measured profile > a compiler capsule > default
+            val threads = threads ?: profiled ?: tuning?.threads ?: (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
             threadsUsed = threads; threadsFromProfile = threads == profiled && profiled != null
-            engine.startHost(EngineArgs.host(plan, shelf.path(plan.model), ctx, threads, addrs, shelf.projector(plan.model)?.path), "0.0.0.0", API_PORT, apiKey).join()
+            engine.startHost(EngineArgs.host(plan, shelf.path(plan.model), ctx, threads, addrs, shelf.projector(plan.model)?.path, tuning), "0.0.0.0", API_PORT, apiKey).join()
             while (true) {
                 if (engine.state.value.status == EngineState.Status.FAILED) return@launch fail("Engine stopped: ${engine.state.value.log.lastOrNull() ?: ""}")
                 if (healthy()) break

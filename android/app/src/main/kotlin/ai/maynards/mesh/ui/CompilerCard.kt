@@ -100,6 +100,19 @@ fun CompilerCard(runner: Runner) {
         Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
             Label("MESH COMPILER")
             Mono("Host threads ${runner.threadsUsed} · " + if (runner.threadsFromProfile) "measured profile" else "default", 11, Ink)
+            val cc by runner.compilerCapsule.collectAsState()
+            when (val u = cc) {
+                is ai.maynards.mesh.brain.CompilerCapsule.Use.Apply -> {
+                    Mono("Capsule · ${u.capsule.task} · applied · quality ${u.capsule.quality ?: "?"} · runs ${u.capsule.runIds.take(6).joinToString(",")}", 10, Term)
+                    Mono("  " + listOfNotNull(u.tuning.threads?.let { "$it threads" }, u.tuning.ctk?.let { "cache $it" },
+                        u.tuning.ub?.let { "ub $it" }, u.tuning.b?.let { "b $it" }, u.tuning.fa?.let { "flash $it" }).joinToString(" · "), 10)
+                    if (u.capsule.isBaseline) Mono("  no measured setting beat MeshAI's defaults for this task", 10)
+                }
+                is ai.maynards.mesh.brain.CompilerCapsule.Use.Refuse ->
+                    Mono("Capsule · ${u.capsule.task} · refused · ${u.reason} (measured %.0f s vs %.0f s)".format(java.util.Locale.US,
+                        u.capsule.taskSeconds, u.capsule.baselineSeconds), 10, Warn)
+                null -> Mono("Capsule · none for ${plan.model.name} on this phone model · ${runner.capsuleTask}", 10)
+            }
             if (t.running) NButton("Stop", fill = Paper) { t.stop() }
             else {
                 NButton("Tune", fill = Term, enabled = !busy) { t.run(runner, plan, profiles) }

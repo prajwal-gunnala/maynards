@@ -10,17 +10,20 @@ object EngineArgs {
     /**
      * @param helperAddrs "ip:port" of each helper, in the same order as [Plan.helpers]
      */
-    fun host(plan: Plan, modelPath: String, ctx: Int, threads: Int, helperAddrs: List<String>, mmproj: String? = null): List<String> {
+    fun host(plan: Plan, modelPath: String, ctx: Int, threads: Int, helperAddrs: List<String>, mmproj: String? = null,
+             tuning: Tuning? = null): List<String> {
         require(helperAddrs.size == plan.helpers.size) { "one address per helper" }
         val a = mutableListOf(
             "-m", modelPath, "-c", "$ctx", "-t", "$threads",
             "--jinja", "--fit", "off", "--reasoning", "off",
             "-np", "1",   // one conversation slot: every message reuses the cached history
-            "-ctk", "q8_0", "-ctv", "q8_0", "-fa", "on",
+            "-ctk", tuning?.ctk ?: "q8_0", "-ctv", tuning?.ctv ?: "q8_0", "-fa", tuning?.fa ?: "on",
             // Logical batch = the default physical batch (512), so compute is chunked as before; the server
-            // then reports prompt progress every 512 tokens instead of once per 2048.
-            "-b", "512",
+            // then reports prompt progress every 512 tokens instead of once per 2048. A Mesh Compiler capsule
+            // sets the batch sizes it was measured with.
+            "-b", "${tuning?.b ?: 512}",
         )
+        tuning?.ub?.let { a += listOf("-ub", "$it") }
         if (mmproj != null) a += listOf("--mmproj", mmproj, "--no-mmproj-offload")
         if (!plan.split) {
             a += listOf("-ngl", "0")
