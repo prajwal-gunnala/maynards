@@ -69,6 +69,30 @@ fun StatsTab(stats: Stats) {
             Tile(Icons.Outlined.Timer, "First word", "%.1fs".format(rs.map { it.firstTokenMs }.average() / 1000), HelperPurple, Modifier.weight(1f))
         }
 
+        NBox(fill = HostGreen, pad = 13.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Label("SPIDER SENSE · RUN COMPARISON")
+                Text("Compare this phone's recorded single-device and split runs. Differences are observations, not proof that the network alone caused them.",
+                    fontSize = 12.sp, lineHeight = 17.sp, color = Ink)
+                rs.groupBy { it.model }.toSortedMap().forEach { (model, runs) ->
+                    val solo = runs.filter { it.devices == 1 }
+                    val split = runs.filter { it.devices > 1 }
+                    if (solo.isNotEmpty() || split.isNotEmpty()) {
+                        val soloAvg = solo.map { it.tokPerSec }.average().takeIf { solo.isNotEmpty() }
+                        val splitAvg = split.map { it.tokPerSec }.average().takeIf { split.isNotEmpty() }
+                        Text(model, fontWeight = FontWeight.Black, fontSize = 13.sp, color = Ink)
+                        Mono("Single ${soloAvg?.let { "%.2f tok/s · n=${solo.size}".format(it) } ?: "not measured"}  |  " +
+                            "Split ${splitAvg?.let { "%.2f tok/s · n=${split.size}".format(it) } ?: "not measured"}", 10)
+                        if (soloAvg != null && splitAvg != null) {
+                            val pct = (splitAvg / soloAvg - 1.0) * 100.0
+                            Mono("Observed split change ${if (pct >= 0) "+" else ""}%.1f%% decode · compare prompt rate and route below".format(pct), 10, Muted)
+                        }
+                    }
+                }
+                Mono("KV estimate: q8 cache budget for 4,096 context. It is an estimate; runtime allocation is not currently sampled.", 10, Muted)
+            }
+        }
+
         NBox(pad = 14.dp) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Label("Speed, last ${minOf(rs.size, 16)} answers")
@@ -131,7 +155,8 @@ private fun Row(r: Record) {
                     overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 Text("%.1f tok/s".format(r.tokPerSec), fontWeight = FontWeight.Black, fontSize = 14.sp, color = Ink)
             }
-            Mono("${TIME.format(Date(r.at))} · ${r.layout} · first word %.1fs · ${r.tokens} tok".format(r.firstTokenMs / 1000.0), 10, Muted)
+            Mono("${TIME.format(Date(r.at))} · ${r.layout} · first %.1fs · ${r.tokens} tok".format(r.firstTokenMs / 1000.0), 10, Muted)
+            Mono("prefill ${if (r.promptTokPerSec > 0) "%.1f tok/s".format(r.promptTokPerSec) else "unknown"} · ${r.link} · estimated KV ${if (r.kvBytes > 0) "%.2f GB".format(r.kvBytes / 1e9) else "unknown"}", 9, Muted)
         }
     }
 }

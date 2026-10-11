@@ -2,6 +2,7 @@ package ai.maynards.mesh.mesh
 
 import ai.maynards.mesh.engine.Net
 import ai.maynards.mesh.engine.Specs
+import ai.maynards.mesh.brain.LocalApiKey
 import android.content.Context
 import org.webrtc.DataChannel
 import org.webrtc.PeerConnection
@@ -39,6 +40,10 @@ data class Peer(
     val rttMs: Double = -1.0,  // median of the last 10 pings (Wi-Fi spikes would skew an average)
     val rttWorstMs: Double = -1.0,
     val rpcProxyAddress: String? = null,
+    val linkKind: String = "network",
+    val rpcEvent: String = "",
+    val rpcSequence: Long = 0,
+    val rpcEventAtMs: Long = 0,
     val models: Map<String, Long> = emptyMap(),  // model files this device offers (laptops), name -> bytes
     val filesPort: Int = 0,
 ) {
@@ -52,6 +57,7 @@ data class Peer(
 class MeshHost(private val ctx: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val prefs = ctx.getSharedPreferences("mesh-host", Context.MODE_PRIVATE)
+    val apiKey: String = LocalApiKey.get(ctx)
     private val conns = ConcurrentHashMap<String, Wire>()
     private var server: ServerSocket? = null
     private var acceptJob: Job? = null
@@ -89,7 +95,15 @@ class MeshHost(private val ctx: Context) {
     private val _events = MutableSharedFlow<Pair<String, JSONObject>>(extraBufferCapacity = 32)
     val events: SharedFlow<Pair<String, JSONObject>> = _events
 
-    fun invite(): Invite = Invite(meshId, Net.addresses().map { it.ip }, CONTROL_PORT, _token.value)
+    /**
+     * Local pairing can be constrained to one interface selected by the owner.
+     * Null keeps the existing automatic address preference and fallback behavior.
+     */
+    fun invite(hostIp: String? = null): Invite {
+        val addresses = Net.addresses()
+        val selected = if (hostIp == null) addresses else addresses.filter { it.ip == hostIp }
+        return Invite(meshId, selected.map { it.ip }, CONTROL_PORT, _token.value)
+    }
 
     /** Creates a public pairing invite; the backend coordinates peers but never sees RPC bytes. */
     fun createRemoteInvite(serviceUrl: String, forceRelay: Boolean = false): Invite {
@@ -354,11 +368,18 @@ class MeshHost(private val ctx: Context) {
         }
 
         conns.put(id, wire)?.close()                          // a reconnect replaces the old link
-        wire.send(msg("welcome", "secret" to secret, "host" to android.os.Build.MODEL, "mesh" to meshId))
+        val welcome = msg("welcome", "secret" to secret, "host" to android.os.Build.MODEL, "mesh" to meshId)
+        if (specs.kind == "laptop") welcome.put("api_key", apiKey)
+        wire.send(welcome)
         val offered = hello.optJSONArray("models")?.let { a ->
             (0 until a.length()).associate { a.getJSONObject(it).getString("file") to a.getJSONObject(it).getLong("bytes") }
         } ?: emptyMap()
-        _peers.update { it + (id to Peer(id, specs, peerAddress, rpcProxyAddress = rpcProxyAddress,
+        val linkKind = when {
+            rpcProxyAddress != null -> "WebRTC"
+            sock == null -> "WebRTC"
+            else -> Net.addresses().firstOrNull { it.ip == sock.localAddress.hostAddress }?.kind ?: "network"
+        }
+        _peers.update { it + (id to Peer(id, specs, peerAddress, rpcProxyAddress = rpcProxyAddress, linkKind = linkKind,
             models = offered, filesPort = hello.optInt("files_port"))) }
         // 60 s, matching the Helper: a phone busy loading several GB of layers can be quiet for
         // a while, and treating that as a dead link ended runs mid-load
@@ -386,6 +407,16 @@ class MeshHost(private val ctx: Context) {
                         // iQOO over Wi-Fi: 103 ms median at idle, 17.6 ms with steady traffic)
                         val best = rtts.min()
                         _peers.update { p -> p[id]?.let { p + (id to it.copy(rttMs = best, rttWorstMs = rtts.max())) } ?: p }
+                    }
+                    "activity" -> {
+                        val event = m.optString("event").take(32)
+                        val sequence = m.optLong("sequence").coerceAtLeast(0)
+                        if (event in setOf("graph_compute", "graph_recompute")) {
+                            _peers.update { p -> p[id]?.let { peer ->
+                                if (sequence > peer.rpcSequence) p + (id to peer.copy(
+                                    rpcEvent = event, rpcSequence = sequence, rpcEventAtMs = System.currentTimeMillis())) else p
+                            } ?: p }
+                        }
                     }
                     else -> _events.tryEmit(id to m)
                 }

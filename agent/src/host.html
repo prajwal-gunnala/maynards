@@ -737,11 +737,13 @@ function card(o) {
                `${gb(num(s.freeBytes) / 1e9)} / ${gb(total / 1e9)} GB`, num(s.freeBytes) / total, 'var(--info)')}
       ${meter('Offered for models' + (cap ? ` (capped ${gb(cap)} GB)` : ''), gb(o.usable) + ' GB', num(o.usable) * 1e9 / total, 'var(--ok)')}
       ${st ? meter('Layers kept on the device', `${st.done}/${st.total} · ${gb(num(st.bytes) / 1e9)} GB`, num(st.done) / num(st.total, 1), 'var(--helper)') : ''}
+      ${!o.laptop && o.rpc_event ? `<div class="row" style="margin:10px 0 4px; gap:7px; color:${num(o.rpc_event_age_s, 999) < 3 ? 'var(--ok)' : 'var(--quiet)'}">
+        <span class="mono" style="font-size:11.5px">RPC ${esc(o.rpc_event)} observed · #${num(o.rpc_sequence)} · ${num(o.rpc_event_age_s, 0).toFixed(1)} s ago</span></div>` : ''}
       <div class="kv" style="margin-top:4px">
         <span class="k">Heat</span><span class="v" style="color:${heatColor(s.heat, s.temp_c)}">${heatText(s.heat, s.temp_c)}</span>
         <span class="k">Battery</span><span class="v">${num(s.battery, -1) >= 0 ? s.battery + '%' : '–'}${s.charging ? ' charging' : ''}</span>
         <span class="k">Link</span><span class="v">${o.laptop ? 'host' :
-          (o.rtt_ms != null ? num(o.rtt_ms).toFixed(1) + ' ms' + (o.rtt_worst_ms != null ? ` · worst ${num(o.rtt_worst_ms).toFixed(0)}` : '') : 'measuring…')}</span>
+          `${esc(o.link || 'network')} · ${o.rtt_ms != null ? num(o.rtt_ms).toFixed(1) + ' ms' + (o.rtt_worst_ms != null ? ` · worst ${num(o.rtt_worst_ms).toFixed(0)}` : '') : 'measuring…'}`}</span>
         <span class="k">Holding</span><span class="v">${layersOf(o.id) || '–'}</span>
         ${o.addr ? `<span class="k">Address</span><span class="v">${esc(o.addr)}</span>` : ''}
       </div>
@@ -759,7 +761,8 @@ function renderDevices() {
   $('devices').innerHTML =
     card({ id: 'laptop', name: S.laptop.specs.name || 'This laptop', specs: S.laptop.specs, usable: S.laptop.usable_gb, laptop: true }) +
     S.peers.map(p => card({ id: p.id, name: p.name || p.id, specs: p.specs, usable: p.usable_gb,
-                            addr: p.addr, rtt_ms: p.rtt_ms, rtt_worst_ms: p.rtt_worst_ms, store: p.store })).join('');
+                            addr: p.addr, link: p.link, rtt_ms: p.rtt_ms, rtt_worst_ms: p.rtt_worst_ms, store: p.store,
+                            rpc_event: p.rpc_event, rpc_sequence: p.rpc_sequence, rpc_event_age_s: p.rpc_event_age_s })).join('');
   document.querySelectorAll('[data-forget]').forEach(b => b.onclick = () =>
     act(post('/api/forget', { id: b.dataset.forget }), 'removing the device'));
   document.querySelectorAll('[data-cap]').forEach(i => i.onchange = () => {

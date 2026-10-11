@@ -57,6 +57,7 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
     val store by client.store.state.collectAsState()
     var scanError by remember { mutableStateOf("") }
     var held by remember { mutableLongStateOf(0L) }
+    var senseNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
     // a phone that joined before rejoins by itself (its secret is saved), no rescan needed
     LaunchedEffect(Unit) {
         if (link.state == Link.State.IDLE) client.savedInvite?.let { MeshService.start(ctx, "Helper joined"); client.join(it) }
@@ -65,6 +66,15 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
         while (eng.status == Status.RUNNING) { held = engine.heldBytes(); delay(2000) }
         held = 0
     }
+    LaunchedEffect(eng.rpcEventAtMs, eng.status) {
+        while (eng.status == Status.RUNNING && eng.rpcEventAtMs > 0 &&
+            System.currentTimeMillis() - eng.rpcEventAtMs < 2_000) {
+            senseNow = System.currentTimeMillis()
+            delay(200)
+        }
+        senseNow = System.currentTimeMillis()
+    }
+    val helperComputing = eng.rpcEventAtMs > 0 && senseNow - eng.rpcEventAtMs in 0..2_000
 
     val scan = rememberLauncherForActivityResult(ScanContract()) { r ->
         val invite = r.contents?.let(Invite::parse)
@@ -152,32 +162,78 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
             }
         }
 
-        if (link.state == Link.State.JOINED && mesh.devices.isNotEmpty()) {
-            // the whole mesh, as the Host sees it
-            NBox(fill = Paper) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Title("${mesh.devices.size} devices", 24)
-                        Spacer(Modifier.width(10.dp))
-                        Sticker(when (mesh.status) { "ready" -> "running"; "starting", "loading" -> "loading"; "failed" -> "stopped"; else -> "idle" },
-                            when (mesh.status) { "ready" -> HostGreen; "starting", "loading" -> Tight; "failed" -> Danger; else -> Paper })
-                    }
-                    if (mesh.model.isNotBlank()) Mono(mesh.model + (mesh.tps?.let { " · last answer %.1f tok/s".format(it) } ?: ""), 12)
-                    MeshWeb(
-                        mesh.devices.map { d ->
-                            WebNode(d.name.substringBefore(" (").take(14), if (d.role == "host") HostGreen else HelperPurple, isHost = d.role == "host",
-                                note = listOfNotNull(d.layers.takeIf { it.isNotBlank() }?.let { "L$it" }, d.rttMs?.let { "%.0f ms".format(it) }.takeIf { d.role != "host" }).joinToString(" · "))
+        NBox(fill = Paper) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Title("Connection map", 20)
+                    Spacer(Modifier.width(10.dp))
+                    Sticker(
+                        when {
+                            link.state == Link.State.JOINED && helperComputing -> "computing"
+                            link.state == Link.State.JOINED -> "joined"
+                            link.state == Link.State.CONNECTING -> "connecting"
+                            else -> "waiting"
                         },
-                        Modifier.fillMaxWidth().aspectRatio(1.3f),
+                        when {
+                            link.state == Link.State.JOINED && helperComputing -> Yellow
+                            link.state == Link.State.JOINED -> HostGreen
+                            link.state == Link.State.FAILED -> Danger
+                            else -> Paper
+                        },
                     )
-                    mesh.devices.forEach { d ->
-                        Mono((if (d.role == "host") "💻 " else "📱 ") + d.name + (if (d.layers.isNotBlank()) " · layers ${d.layers}" else ""), 11, Ink)
-                    }
                 }
-            }
-        } else {
-            NBox(pad = 8.dp) {
-                MeshWeb(listOf(WebNode("This phone", HelperPurple, isHost = true)), Modifier.fillMaxWidth().aspectRatio(1.6f))
+                Text(
+                    when {
+                        link.state == Link.State.JOINED -> "Host is at the center. This Helper is attached on a spoke."
+                        link.state == Link.State.CONNECTING -> "Connecting this Helper to the Host."
+                        else -> "This phone is the Helper. The Host appears at the center after pairing."
+                    },
+                    fontSize = 12.sp, lineHeight = 17.sp, color = Muted,
+                )
+                val route = when (link.transport) {
+                    "wifi" -> "Wi-Fi · local TCP"
+                    "usb" -> "USB tether · local TCP"
+                    "hotspot" -> "Phone hotspot · local TCP"
+                    "tailscale" -> "Tailscale · local TCP"
+                    "WebRTC" -> "WebRTC DataChannel"
+                    "TCP" -> "Local TCP"
+                    else -> "Waiting for a link"
+                }
+                val hostNode = WebNode(
+                    link.hostName.ifBlank { "Host" },
+                    if (link.state == Link.State.JOINED) HostGreen else Faint,
+                    isHost = true,
+                    note = if (link.state == Link.State.JOINED) "host" else "waiting",
+                )
+                val helperNode = WebNode(
+                    "This phone",
+                    HelperPurple,
+                    note = when {
+                        helperComputing -> "RPC work"
+                        link.state == Link.State.JOINED && link.layers.isNotBlank() -> "L${link.layers}"
+                        link.state == Link.State.JOINED -> route.substringBefore(" ·")
+                        else -> "Helper"
+                    },
+                )
+                MeshWeb(
+                    listOf(hostNode, helperNode),
+                    Modifier.fillMaxWidth().aspectRatio(1.35f),
+                    lineColor = if (link.state == Link.State.JOINED) Term.copy(alpha = 0.55f) else Muted.copy(alpha = 0.25f),
+                    busy = helperComputing,
+                )
+                if (link.state == Link.State.JOINED) {
+                    Mono("PATH · $route", 10, Term)
+                    if (link.transport != "WebRTC" && link.localIp.isNotBlank()) {
+                        Mono("THIS HELPER ${link.localIp}  →  HOST ${link.hostIp}", 10, Muted)
+                    }
+                    if (link.layers.isNotBlank()) Mono("ASSIGNED LAYERS · ${link.layers}", 10, Ink)
+                    if (helperComputing) Mono("HELPER RPC · ${eng.rpcEvent} observed · event ${eng.rpcSequence}", 10, Term)
+                } else {
+                    Mono("No model work is flowing until the Host assigns layers.", 10, Muted)
+                }
+                if (mesh.devices.isNotEmpty() && mesh.devices.size > 2) {
+                    Mono("Host reports ${mesh.devices.size} devices in this mesh.", 10, Muted)
+                }
             }
         }
         if (store.total > 0 || store.bytes > 0) {
@@ -189,6 +245,17 @@ fun HelperScreen(engine: Engine, client: MeshClient, onChangeRole: () -> Unit) {
                     if (store.total > 0) Mono("${store.model.removeSuffix(".gguf").take(34)} · ${store.done}/${store.total}" +
                         if (store.working) " · saving…" else if (store.done == store.total) " · ready" else "", 11, Ink)
                     NButton("Clear", fill = Paper) { client.store.clear() }
+                }
+            }
+        }
+        if (eng.status == Status.RUNNING) {
+            NBox(fill = if (eng.rpcSequence > 0) Yellow else Paper, pad = 11.dp) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Label("THIS DEVICE'S WORK")
+                    Mono(if (eng.rpcSequence > 0)
+                        "Native RPC ${eng.rpcEvent} observed · event ${eng.rpcSequence}. This is the Helper's own engine log."
+                    else "RPC server is listening. Waiting for a graph command from the Host.", 11)
+                    Mono("Assigned layers ${link.layers.ifBlank { "not assigned" }} · ${link.model.ifBlank { "model not loaded" }}", 10, Muted)
                 }
             }
         }

@@ -22,12 +22,14 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use std::{env, fs, thread};
 
 pub const API_PORT: u16 = 8080;
 const FILES_PORT: u16 = 8088;
 const RPC_PORTS: [u16; 5] = [50052, 50062, 50070, 50080, 50100];
+static RPC_ACTIVITY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// The one wording used to review a change, whether it is asked for from this terminal, from the
 /// pre-commit hook, or by a phone over the link.
@@ -119,6 +121,9 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
     if welcome["t"] != "welcome" {
         return Err(format!("refused: {}", welcome["reason"].as_str().unwrap_or("?")));
     }
+    if let Some(key) = welcome["api_key"].as_str().filter(|key| !key.is_empty()) {
+        write_secret(&config_dir().join("last-api-key"), key)?;
+    }
     let _ = fs::write(secret_file, welcome["secret"].as_str().unwrap_or(""));
     println!("joined {} ({host_ip}) as a helper", welcome["host"].as_str().unwrap_or("Host"));
 
@@ -137,7 +142,7 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
             "run" => {
                 stop(&mut engine);
                 println!("holding layers {}", m["layers"].as_str().unwrap_or("?"));
-                match start_helper(&my_ip) {
+                match start_helper(&my_ip, out.clone()) {
                     Ok((child, addr)) => {
                         engine = Some(child);
                         // behind NAT (an emulator Host) the Host must be told a different address
@@ -171,6 +176,17 @@ fn session(hosts: &[String], port: u16, invite: &Value, secret_file: &std::path:
     result
 }
 
+fn write_secret(path: &std::path::Path, value: &str) -> Res<()> {
+    fs::write(path, value).map_err(|e| format!("cannot store API key: {e}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("cannot protect API key file: {e}"))?;
+    }
+    Ok(())
+}
+
 fn next(lines: &mut std::io::Lines<BufReader<TcpStream>>) -> Res<Option<Value>> {
     match lines.next() {
         None => Ok(None),
@@ -185,13 +201,14 @@ fn send(out: &Arc<Mutex<TcpStream>>, v: Value) -> Res<()> {
 }
 
 /// Start ggml-rpc-server on the link address; try a few ports in case one is taken.
-fn start_helper(bind: &str) -> Res<(Child, String)> {
+fn start_helper(bind: &str, control: Arc<Mutex<TcpStream>>) -> Res<(Child, String)> {
     let bin = env::var("MESH_RPC_SERVER").unwrap_or_else(|_| "ggml-rpc-server".into());
     let threads = thread::available_parallelism().map(|n| n.get()).unwrap_or(4).saturating_sub(2).max(2);
     for port in RPC_PORTS {
         let mut cmd = Command::new(&bin);
         cmd.args(["-H", bind, "-p", &port.to_string(), "-t", &threads.to_string(), "-c"])
-            .stdout(Stdio::null()).stderr(Stdio::null());
+            .env("GGML_RPC_DEBUG", "1")
+            .stdout(Stdio::null()).stderr(Stdio::piped());
         // if this agent dies, the kernel stops the engine too, so no layers are left behind
         unsafe {
             use std::os::unix::process::CommandExt;
@@ -199,6 +216,21 @@ fn start_helper(bind: &str) -> Res<(Child, String)> {
         }
         let mut child = cmd
             .spawn().map_err(|e| format!("cannot start {bin}: {e} (set MESH_RPC_SERVER)"))?;
+        if let Some(stderr) = child.stderr.take() {
+            let reporter = control.clone();
+            thread::spawn(move || {
+                for line in BufReader::new(stderr).lines().flatten() {
+                    let event = if line.contains("graph_recompute") { "graph_recompute" }
+                        else if line.contains("graph_compute") { "graph_compute" } else { "" };
+                    if !event.is_empty() {
+                        let sequence = RPC_ACTIVITY_SEQUENCE.fetch_add(1, Ordering::Relaxed) + 1;
+                        let message = json!({"t": "activity", "event": event, "sequence": sequence});
+                        let _ = send(&reporter, message);
+                        eprintln!("Helper RPC {event} observed · event {sequence}");
+                    }
+                }
+            });
+        }
         let addr = format!("{bind}:{port}");
         for _ in 0..30 {
             let sa = match addr.parse::<std::net::SocketAddr>() {
@@ -718,8 +750,10 @@ fn ask(host: &str, question: &str) -> Res<String> {
         "messages": [{"role": "user", "content": question}],
         "stream": true, "max_tokens": 1024,
     }).to_string();
+    let key_path = if host == "127.0.0.1" || host == "localhost" { "api-key" } else { "last-api-key" };
+    let api_key = fs::read_to_string(config_dir().join(key_path)).unwrap_or_default();
     let mut s = TcpStream::connect((host, API_PORT)).map_err(|e| format!("cannot reach {host}:{API_PORT}: {e}"))?;
-    write!(s, "POST /v1/chat/completions HTTP/1.1\r\nHost: {host}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+    write!(s, "POST /v1/chat/completions HTTP/1.1\r\nHost: {host}\r\nAuthorization: Bearer {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", api_key.trim(), body.len())
         .map_err(|e| e.to_string())?;
     let mut r = BufReader::new(s);
     let mut status = String::new();

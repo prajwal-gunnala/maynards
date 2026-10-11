@@ -56,6 +56,7 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
 
     /** The OpenAI-compatible API, on every address of this phone. */
     val endpoint = "http://127.0.0.1:$API_PORT"
+    val apiKey = host.apiKey
 
     fun run(plan: Plan, ctx: Int = 4096) {
         stop()
@@ -107,7 +108,7 @@ class Runner(private val host: MeshHost, private val engine: Engine, private val
             // 3. start the model on this phone
             step("Loading ${plan.model.name}", RunState.Status.LOADING)
             val threads = (Runtime.getRuntime().availableProcessors() - 2).coerceAtLeast(2)
-            engine.startHost(EngineArgs.host(plan, shelf.path(plan.model), ctx, threads, addrs, shelf.projector(plan.model)?.path), "0.0.0.0", API_PORT).join()
+            engine.startHost(EngineArgs.host(plan, shelf.path(plan.model), ctx, threads, addrs, shelf.projector(plan.model)?.path), "0.0.0.0", API_PORT, apiKey).join()
             while (true) {
                 if (engine.state.value.status == EngineState.Status.FAILED) return@launch fail("Engine stopped: ${engine.state.value.log.lastOrNull() ?: ""}")
                 if (healthy()) break

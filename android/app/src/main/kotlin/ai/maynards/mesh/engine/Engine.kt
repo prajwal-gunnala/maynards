@@ -19,6 +19,10 @@ data class EngineState(
     val status: Status = Status.IDLE,
     val address: String = "",      // ip:port it listens on
     val log: List<String> = emptyList(),
+    /** Native RPC debug events observed in this process; this is command evidence, not kernel timing. */
+    val rpcEvent: String = "",
+    val rpcSequence: Long = 0,
+    val rpcEventAtMs: Long = 0,
 ) {
     enum class Status { IDLE, STARTING, RUNNING, FAILED }
 }
@@ -54,10 +58,10 @@ class Engine(private val ctx: Context) {
     } }
 
     /** Host: load the model and serve the OpenAI-compatible API. */
-    fun startHost(args: List<String>, bind: String, port: Int) = scope.launch { gate.withLock {
+    fun startHost(args: List<String>, bind: String, port: Int, apiKey: String? = null) = scope.launch { gate.withLock {
         stop()
         val cmd = listOf(bin("libmesh_server.so")) + args + listOf("--host", bind, "--port", "$port")
-        if (launch(cmd)) update { it.copy(status = EngineState.Status.RUNNING, address = "$bind:$port") }
+        if (launch(cmd, if (apiKey.isNullOrBlank()) emptyMap() else mapOf("LLAMA_API_KEY" to apiKey))) update { it.copy(status = EngineState.Status.RUNNING, address = "$bind:$port") }
         else update { it.copy(status = EngineState.Status.FAILED) }
     } }
 
@@ -82,7 +86,7 @@ class Engine(private val ctx: Context) {
         }.getOrDefault(0)
     }
 
-    private fun launch(cmd: List<String>): Boolean {
+    private fun launch(cmd: List<String>, extraEnv: Map<String, String> = emptyMap()): Boolean {
         log("$ ${cmd.joinToString(" ") { it.substringAfterLast('/') }}")
         update { it.copy(status = EngineState.Status.STARTING) }
         return runCatching {
@@ -91,6 +95,7 @@ class Engine(private val ctx: Context) {
             pb.environment()["HOME"] = ctx.filesDir.path
             pb.environment()["LLAMA_CACHE"] = File(ctx.filesDir, "cache").path  // helper's layer cache
             pb.environment()["GGML_RPC_DEBUG"] = "1"
+            extraEnv.forEach { (key, value) -> pb.environment()[key] = value }
             val p = pb.start()
             proc = p
             scope.launch {
@@ -121,7 +126,17 @@ class Engine(private val ctx: Context) {
 
     private fun log(line: String) {
         android.util.Log.i("MeshEngine", line)
-        update { it.copy(log = (it.log + line).takeLast(60)) }
+        val event = when {
+            line.contains("graph_recompute", ignoreCase = true) -> "graph_recompute"
+            line.contains("graph_compute", ignoreCase = true) -> "graph_compute"
+            else -> ""
+        }
+        update { old -> old.copy(
+            log = (old.log + line).takeLast(60),
+            rpcEvent = event.ifBlank { old.rpcEvent },
+            rpcSequence = old.rpcSequence + if (event.isNotBlank()) 1 else 0,
+            rpcEventAtMs = if (event.isNotBlank()) System.currentTimeMillis() else old.rpcEventAtMs,
+        ) }
     }
 
     private fun update(f: (EngineState) -> EngineState) {

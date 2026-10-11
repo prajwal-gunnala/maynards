@@ -3,6 +3,7 @@ package ai.maynards.mesh.mesh
 import ai.maynards.mesh.brain.LayerStore
 import ai.maynards.mesh.engine.Engine
 import ai.maynards.mesh.engine.EngineState
+import ai.maynards.mesh.engine.Net
 import ai.maynards.mesh.engine.Specs
 import android.content.Context
 import okhttp3.WebSocket
@@ -38,6 +39,9 @@ data class Link(
     val state: State = State.IDLE,
     val hostName: String = "",
     val hostIp: String = "",
+    /** Actual local interface used by the connected socket, or WebRTC for remote sessions. */
+    val transport: String = "",
+    val localIp: String = "",
     val layers: String = "",   // which part of the model this phone holds, e.g. "25-48"
     val model: String = "",
     val error: String = "",
@@ -144,14 +148,33 @@ class MeshClient(private val ctx: Context, private val engine: Engine) {
             w.close(); return
         }
         prefs.edit().putString(secretKey, first.getString("secret")).apply()
-        _link.value = Link(Link.State.JOINED, first.optString("host"), hostIp)
+        val transport = if (remote) "WebRTC" else
+            Net.addresses().firstOrNull { it.ip == engineBind }?.kind ?: "TCP"
+        _link.value = Link(
+            state = Link.State.JOINED,
+            hostName = first.optString("host"),
+            hostIp = hostIp,
+            transport = transport,
+            localIp = engineBind.takeUnless { remote || it == "127.0.0.1" }.orEmpty(),
+        )
 
         val reporter = scope.launch {
+            var lastRpcSequence = engine.state.value.rpcSequence
+            val eventReporter = launch {
+                engine.state.collect { state ->
+                    if (state.rpcSequence > lastRpcSequence && state.rpcEvent.isNotBlank()) {
+                        lastRpcSequence = state.rpcSequence
+                        runCatching { w.send(msg("activity", "event" to state.rpcEvent, "sequence" to state.rpcSequence)) }
+                            .onFailure { w.close() }
+                    }
+                }
+            }
             while (isActive) {
                 delay(2_000)
                 val running = engine.state.value.let { if (it.status == EngineState.Status.RUNNING) it.address else "" }
                 runCatching { w.send(msg("specs", "specs" to Specs.read(ctx).toJson(), "engine" to running, "store" to store.state.value.json())) }.onFailure { w.close() }
             }
+            eventReporter.cancel()
         }
         try {
             while (true) {

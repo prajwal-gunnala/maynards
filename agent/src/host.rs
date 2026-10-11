@@ -31,6 +31,9 @@ struct Peer {
     store: Value,             // layers the phone keeps on its own storage: {model, done, total, working, bytes}
     seen: Instant,            // when this device last told us anything: on a flaky link its numbers go stale
     link: &'static str,       // "USB cable", "Wi-Fi" or "network": the laptop interface the phone joined on
+    rpc_event: String,
+    rpc_sequence: u64,
+    rpc_seen: Option<Instant>,
 }
 
 #[derive(Clone, Default)]
@@ -483,7 +486,7 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
     };
     send(&wire, json!({"t": "welcome", "secret": secret, "host": "laptop", "mesh": hub.mesh}))?;
     hub.say(format!("✓ {name} joined over {} ({peer_ip})", link_kind(&my_ip)));
-    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null, seen: Instant::now(), link: link_kind(&my_ip) });
+    hub.peers.lock().unwrap().insert(id.clone(), Peer { name: name.clone(), addr: peer_ip.clone(), specs: hello["specs"].clone(), rtts: VecDeque::new(), wire: wire.clone(), engine: None, store: Value::Null, seen: Instant::now(), link: link_kind(&my_ip), rpc_event: String::new(), rpc_sequence: 0, rpc_seen: None });
     sock.set_read_timeout(Some(Duration::from_secs(60)))?;
     // models this laptop cannot hold alone will need helpers: each phone keeps their layers from its own copy,
     // so the engine asks for a layer by hash and nothing crosses the cable
@@ -512,6 +515,15 @@ fn serve_phone(sock: TcpStream, hub: Arc<Hub>) -> std::io::Result<()> {
                 p.seen = Instant::now();
                 p.rtts.push_back(now_ms().saturating_sub(m["at"].as_u64().unwrap_or(0)) as f64);
                 while p.rtts.len() > 10 { p.rtts.pop_front(); }
+            },
+            "activity" => if let Some(p) = hub.peers.lock().unwrap().get_mut(&id) {
+                let event = m["event"].as_str().unwrap_or("");
+                let sequence = m["sequence"].as_u64().unwrap_or(0);
+                if matches!(event, "graph_compute" | "graph_recompute") && sequence > p.rpc_sequence {
+                    p.rpc_event = event.to_string();
+                    p.rpc_sequence = sequence;
+                    p.rpc_seen = Some(Instant::now());
+                }
             },
             "ready" | "failed" => { hub.replies.lock().unwrap().insert(id.clone(), m); }
             _ => {}
@@ -1063,6 +1075,8 @@ fn state(hub: &Hub) -> Value {
         r.sort_by(|a, b| a.partial_cmp(b).unwrap());
         json!({"id": id, "name": p.name, "addr": p.addr, "specs": p.specs, "usable_gb": usable(&p.specs) / GB, "engine": p.engine, "store": p.store,
                "quiet_s": p.seen.elapsed().as_secs(),
+               "rpc_event": p.rpc_event, "rpc_sequence": p.rpc_sequence,
+               "rpc_event_age_s": p.rpc_seen.map(|at| at.elapsed().as_secs_f64()),
                "rtt_ms": r.get(r.len() / 2), "rtt_worst_ms": r.last(), "link": p.link})
     }).collect();
     let devs = devices(hub);
